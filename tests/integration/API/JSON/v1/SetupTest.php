@@ -8,6 +8,7 @@ use MailPoet\WP\Functions as WPFunctions;
 use Helper\WordPressHooks as WPHooksHelper;
 use MailPoet\API\JSON\Response as APIResponse;
 use MailPoet\Settings\SettingsController;
+use MailPoet\Subscription\Captcha;
 
 class SetupTest extends \MailPoetTest {
   function _before() {
@@ -28,6 +29,11 @@ class SetupTest extends \MailPoetTest {
     $settings = new SettingsController();
     $signup_confirmation = $settings->fetch('signup_confirmation.enabled');
     expect($signup_confirmation)->true();
+
+    $captcha = $settings->fetch('captcha');
+    expect($captcha['type'])->equals(Captcha::TYPE_BUILTIN);
+    expect($captcha['recaptcha_site_token'])->equals('');
+    expect($captcha['recaptcha_secret_token'])->equals('');
 
     $woocommerce_optin_on_checkout = $settings->fetch('woocommerce.optin_on_checkout');
     expect($woocommerce_optin_on_checkout['enabled'])->true();

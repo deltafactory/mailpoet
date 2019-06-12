@@ -23,6 +23,7 @@ use MailPoet\Settings\Pages;
 use MailPoet\Settings\SettingsController;
 use MailPoet\Settings\UserFlagsController;
 use MailPoet\Subscribers\ImportExport\ImportExportFactory;
+use MailPoet\Subscription\Captcha;
 use MailPoet\Tasks\Sending;
 use MailPoet\Tasks\State;
 use MailPoet\Util\License\Features\Subscribers as SubscribersFeature;
@@ -538,6 +539,7 @@ class Menu {
         'web' => Hosts::getWebHosts(),
         'smtp' => Hosts::getSMTPHosts(),
       ],
+      'built_in_captcha_supported' => (new Captcha)->isSupported()
     ];
 
     $data['is_new_user'] = $this->isNewUser();

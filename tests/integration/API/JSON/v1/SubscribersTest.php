@@ -20,6 +20,7 @@ use MailPoet\Models\Setting;
 use MailPoet\Models\SubscriberSegment;
 use MailPoet\Settings\SettingsController;
 use MailPoet\Subscribers\Source;
+use MailPoet\Subscription\Captcha;
 
 class SubscribersTest extends \MailPoetTest {
 
@@ -480,7 +481,7 @@ class SubscribersTest extends \MailPoetTest {
   }
 
   function testItCannotSubscribeWithoutCaptchaWhenEnabled() {
-    $this->settings->set('re_captcha', ['enabled' => true]);
+    $this->settings->set('captcha', ['type' => Captcha::TYPE_RECAPTCHA]);
     $response = $this->endpoint->subscribe([
       $this->obfuscatedEmail => 'toto@mailpoet.com',
       'form_id' => $this->form->id,
@@ -488,7 +489,7 @@ class SubscribersTest extends \MailPoetTest {
     ]);
     expect($response->status)->equals(APIResponse::STATUS_BAD_REQUEST);
     expect($response->errors[0]['message'])->equals('Please check the CAPTCHA.');
-    $this->settings->set('re_captcha', []);
+    $this->settings->set('captcha', []);
   }
 
   function testItCannotSubscribeWithoutMandatoryCustomField() {

@@ -31,6 +31,7 @@ class RequirementsChecker {
     '\Cron\CronExpression',
     '\Html2Text\Html2Text',
     '\csstidy',
+    '\Gregwar\Captcha\CaptchaBuilder'
   ];
 
   function __construct($display_error_notice = true) {

@@ -207,6 +207,7 @@ class Migrator {
       'unconfirmed_data longtext,',
       "source enum('form','imported','administrator','api','wordpress_user','woocommerce_user','woocommerce_checkout','unknown') DEFAULT 'unknown',",
       'count_confirmations int(11) unsigned NOT NULL DEFAULT 0,',
+      'woocommerce_last_added_to_cart_at timestamp NULL,',
       'PRIMARY KEY  (id),',
       'UNIQUE KEY email (email),',
       'KEY wp_user_id (wp_user_id),',

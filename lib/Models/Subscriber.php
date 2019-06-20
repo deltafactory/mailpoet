@@ -26,6 +26,7 @@ if (!defined('ABSPATH')) exit;
  * @property array $subscriptions
  * @property string $unconfirmed_data
  * @property int $is_woocommerce_user
+ * @property string|null $woocommerce_last_added_to_cart_at
  */
 
 class Subscriber extends Model {

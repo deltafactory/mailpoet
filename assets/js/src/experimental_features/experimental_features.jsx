@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import MailPoet from 'mailpoet';
+import { GlobalContext, useGlobalContextValue } from 'context/index.jsx';
+import Notices from 'notices/notices.jsx';
 
 const ExperimentalFeatures = () => {
   const [flags, setFlags] = useState(null);
+  const contextValue = useGlobalContextValue(window);
+  const showError = contextValue.notices.error;
 
   useEffect(() => {
     MailPoet.Ajax.post({
@@ -15,13 +19,13 @@ const ExperimentalFeatures = () => {
       setFlags(flagsMap);
     }).fail((response) => {
       if (response.errors.length > 0) {
-        MailPoet.Notice.error(
-          response.errors.map(error => error.message),
+        showError(
+          <>{response.errors.map((error) => <p>{error.message}</p>)}</>,
           { scroll: true }
         );
       }
     });
-  }, []);
+  }, [showError]);
 
   function handleChange(event) {
     const name = event.target.name;
@@ -38,11 +42,12 @@ const ExperimentalFeatures = () => {
       const flag = flags[name];
       flag.value = value;
       setFlags({ ...flags, [name]: flag });
-      MailPoet.Notice.success(`Feature '${name}' was ${value ? 'enabled' : 'disabled'}.`);
+      const message = `Feature '${name}' was ${value ? 'enabled' : 'disabled'}.`;
+      contextValue.notices.success(<p>{message}</p>);
     }).fail((response) => {
       if (response.errors.length > 0) {
-        MailPoet.Notice.error(
-          response.errors.map(error => error.message),
+        showError(
+          response.errors.map((error) => <p key={error.message}>{error.message}</p>),
           { scroll: true }
         );
       }
@@ -57,30 +62,37 @@ const ExperimentalFeatures = () => {
     return <p>There are no experimental features at the moment.</p>;
   }
 
-  return Object.values(flags).map((flag) => {
-    const id = `experimental-feature-${flag.name}`;
-    return (
-      <div key={flag.name}>
-        <label htmlFor={id}>
-          <input
-            id={id}
-            type="checkbox"
-            name={flag.name}
-            defaultChecked={flag.value}
-            onChange={handleChange}
-          />
-          {' '}
-          {flag.name}
-        </label>
-      </div>
-    );
-  });
+  return (
+    <GlobalContext.Provider value={contextValue}>
+      <>
+        <Notices />
+        { Object.values(flags).map((flag) => {
+          const id = `experimental-feature-${flag.name}`;
+          return (
+            <div key={flag.name}>
+              <label htmlFor={id}>
+                <input
+                  id={id}
+                  type="checkbox"
+                  name={flag.name}
+                  defaultChecked={flag.value}
+                  onChange={handleChange}
+                />
+                {' '}
+                {flag.name}
+              </label>
+            </div>
+          );
+        })}
+      </>
+    </GlobalContext.Provider>
+  );
 };
 
 const experimentalFeaturesContainer = document.getElementById('experimental_features_container');
 if (experimentalFeaturesContainer) {
   ReactDOM.render(
-    React.createElement(ExperimentalFeatures, {}),
+    <ExperimentalFeatures />,
     experimentalFeaturesContainer
   );
 }

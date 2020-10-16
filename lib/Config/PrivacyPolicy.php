@@ -3,18 +3,18 @@
 namespace MailPoet\Config;
 
 use MailPoet\Util\Helpers;
+use MailPoet\WooCommerce\Helper as WooCommerceHelper;
 use MailPoet\WP\Functions as WPFunctions;
 
 class PrivacyPolicy {
-
-  function init() {
+  public function init() {
     if (function_exists('wp_add_privacy_policy_content')) {
       wp_add_privacy_policy_content(__('MailPoet', 'mailpoet'), $this->getPrivacyPolicyContent());
     }
   }
 
-  function getPrivacyPolicyContent() {
-    return
+  public function getPrivacyPolicyContent() {
+    $content = (
       '<h2>' .
         WPFunctions::get()->__('MailPoet newsletter & emails', 'mailpoet') .
       '</h2>' .
@@ -36,7 +36,33 @@ class PrivacyPolicy {
       '</p>' .
       '<p>' .
         WPFunctions::get()->__('No identifiable information is otherwise tracked outside this website except for the email address.', 'mailpoet') .
-      '</p>';
+      '</p>'
+    );
+    $helper = new WooCommerceHelper();
+    if ($helper->isWooCommerceActive()) {
+      $content .= (
+        '<p> ' .
+        WPFunctions::get()->__('MailPoet creates and stores two cookies if you are using WooCommerce and MailPoet together. Those cookies are:', 'mailpoet') .
+        '</p>' .
+        '<p>' .
+        sprintf(WPFunctions::get()->__('Cookie name: %s', 'mailpoet'), 'mailpoet_revenue_tracking' ) .
+        '<br>' .
+        sprintf(WPFunctions::get()->__('Cookie expiry: %s days.', 'mailpoet'), WPFunctions::get()->numberFormatI18n(14) ) .
+        '<br>' .
+        WPFunctions::get()->__('Cookie description: The purpose of this cookie is to track which newsletter sent from your website has acquired a click-through and a subsequent purchase in your WooCommerce store.', 'mailpoet') .
+        '</p> ' .
+        '<p>' .
+        sprintf(WPFunctions::get()->__('Cookie name: %s', 'mailpoet'), 'mailpoet_abandoned_cart_tracking' ) .
+        '<br>' .
+        sprintf(WPFunctions::get()->__('Cookie expiry: %s days.', 'mailpoet'), WPFunctions::get()->numberFormatI18n(3650) ) .
+        '<br>' .
+        WPFunctions::get()->__('Cookie description: The purpose of this cookie is to track a user that has abandoned their cart in your WooCommerce store to then be able to send them an abandoned cart newsletter from MailPoet.', 'mailpoet') .
+        '<br>' .
+        '<br>' .
+        WPFunctions::get()->__('Note: User must be opted-in and a confirmed subscriber.', 'mailpoet') .
+        '</p>'
+      );
+    }
+    return $content;
   }
-
 }

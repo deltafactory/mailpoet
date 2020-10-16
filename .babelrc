@@ -1,14 +1,17 @@
 {
   "presets": [
+    "@babel/preset-typescript",
     "@babel/preset-react",
     "@babel/preset-env"
   ],
   "plugins": [
+    "babel-plugin-typescript-to-proptypes",
     "@babel/plugin-proposal-class-properties",
     [
-      "@babel/plugin-transform-runtime", {
+      "@babel/plugin-transform-runtime",
+      {
         "sourceType": "unambiguous",
-        "corejs": 2
+        "corejs": 3
       }
     ],
     "@babel/plugin-syntax-dynamic-import",

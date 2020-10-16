@@ -1,76 +1,89 @@
 <?php
+
 namespace MailPoet\Test\Cron\Workers\SendingQueue\Tasks;
 
 use Codeception\Stub;
 use Codeception\Stub\Expected;
 use MailPoet\Config\Populator;
 use MailPoet\Cron\Workers\SendingQueue\Tasks\Mailer as MailerTask;
+use MailPoet\Form\FormFactory;
+use MailPoet\Form\FormsRepository;
 use MailPoet\Mailer\Mailer;
-use MailPoet\Models\Setting;
 use MailPoet\Models\Subscriber;
+use MailPoet\Referrals\ReferralDetector;
 use MailPoet\Settings\SettingsController;
-
-if (!defined('ABSPATH')) exit;
+use MailPoet\Settings\SettingsRepository;
+use MailPoet\Subscription\Captcha;
+use MailPoet\WP\Functions as WPFunctions;
+use MailPoetVendor\Idiorm\ORM;
 
 class MailerTest extends \MailPoetTest {
   /** @var MailerTask */
-  public $mailer_task;
+  public $mailerTask;
   public $sender;
   /** @var SettingsController */
   private $settings;
 
-  function _before() {
+  public function _before() {
     parent::_before();
-    $wp_users = get_users();
-    wp_set_current_user($wp_users[0]->ID);
-    $populator = new Populator();
+    $wpUsers = get_users();
+    wp_set_current_user($wpUsers[0]->ID);
+    $this->settings = SettingsController::getInstance();
+    $referralDetector = new ReferralDetector(WPFunctions::get(), $this->settings);
+    $populator = new Populator(
+      $this->settings,
+      WPFunctions::get(),
+      new Captcha,
+      $referralDetector,
+      $this->diContainer->get(FormsRepository::class),
+      $this->diContainer->get(FormFactory::class)
+    );
     $populator->up();
-    $this->mailer_task = new MailerTask();
-    $this->settings = new SettingsController();
+    $this->mailerTask = new MailerTask();
     $this->sender = $this->settings->get('sender');
   }
 
-  function testConfiguresMailerWhenItConstructs() {
-    expect($this->mailer_task->mailer instanceof \MailPoet\Mailer\Mailer)->true();
+  public function testConfiguresMailerWhenItConstructs() {
+    expect($this->mailerTask->mailer instanceof \MailPoet\Mailer\Mailer)->true();
   }
 
-  function testItCanConfigureMailerWithSenderAndReplyToAddresses() {
+  public function testItCanConfigureMailerWithSenderAndReplyToAddresses() {
     $newsletter = new \stdClass();
 
     // when no sender/reply-to information is set, use the sender information
     // from Settings
-    $mailer = $this->mailer_task->configureMailer($newsletter);
+    $mailer = $this->mailerTask->configureMailer($newsletter);
     expect($mailer->sender['from_name'])->equals($this->sender['name']);
     expect($mailer->sender['from_email'])->equals($this->sender['address']);
-    expect($mailer->reply_to['reply_to_name'])->equals($this->sender['name']);
-    expect($mailer->reply_to['reply_to_email'])->equals($this->sender['address']);
-    $newsletter->sender_name = 'Sender';
-    $newsletter->sender_address = 'from@example.com';
-    $newsletter->reply_to_name = 'Reply-to';
-    $newsletter->reply_to_address = 'reply-to@example.com';
+    expect($mailer->replyTo['reply_to_name'])->equals($this->sender['name']);
+    expect($mailer->replyTo['reply_to_email'])->equals($this->sender['address']);
+    $newsletter->senderName = 'Sender';
+    $newsletter->senderAddress = 'from@example.com';
+    $newsletter->replyToName = 'Reply-to';
+    $newsletter->replyToAddress = 'reply-to@example.com';
 
     // when newsletter's sender/reply-to information is available, use that
     // to configure mailer
-    $mailer = $this->mailer_task->configureMailer($newsletter);
-    expect($mailer->sender['from_name'])->equals($newsletter->sender_name);
-    expect($mailer->sender['from_email'])->equals($newsletter->sender_address);
-    expect($mailer->reply_to['reply_to_name'])->equals($newsletter->reply_to_name);
-    expect($mailer->reply_to['reply_to_email'])->equals($newsletter->reply_to_address);
+    $mailer = $this->mailerTask->configureMailer($newsletter);
+    expect($mailer->sender['from_name'])->equals($newsletter->senderName);
+    expect($mailer->sender['from_email'])->equals($newsletter->senderAddress);
+    expect($mailer->replyTo['reply_to_name'])->equals($newsletter->replyToName);
+    expect($mailer->replyTo['reply_to_email'])->equals($newsletter->replyToAddress);
   }
 
-  function testItGetsMailerLog() {
-    $mailer_log = $this->mailer_task->getMailerLog();
-    expect(is_array($mailer_log))->true();
+  public function testItGetsMailerLog() {
+    $mailerLog = $this->mailerTask->getMailerLog();
+    expect(is_array($mailerLog))->true();
   }
 
-  function testItUpdatesMailerLogSentCount() {
-    $mailer_log = $this->mailer_task->getMailerLog();
-    expect($mailer_log['sent'])->equals(0);
-    $mailer_log = $this->mailer_task->updateSentCount();
-    expect($mailer_log['sent'])->equals(1);
+  public function testItUpdatesMailerLogSentCount() {
+    $mailerLog = $this->mailerTask->getMailerLog();
+    expect($mailerLog['sent'])->equals(0);
+    $mailerLog = $this->mailerTask->updateSentCount();
+    expect($mailerLog['sent'])->equals(1);
   }
 
-  function testItGetsProcessingMethod() {
+  public function testItGetsProcessingMethod() {
     // when using MailPoet method, newsletters should be processed in bulk
     $this->settings->set(
       Mailer::MAILER_CONFIG_SETTING_NAME,
@@ -79,8 +92,8 @@ class MailerTest extends \MailPoetTest {
         'mailpoet_api_key' => 'some_key',
       ]
     );
-    $mailer_task = new MailerTask();
-    expect($mailer_task->getProcessingMethod())->equals('bulk');
+    $mailerTask = new MailerTask();
+    expect($mailerTask->getProcessingMethod())->equals('bulk');
 
     // when using other methods, newsletters should be processed individually
     $this->settings->set(
@@ -89,22 +102,22 @@ class MailerTest extends \MailPoetTest {
         'method' => 'PHPMail',
       ]
     );
-    $mailer_task = new MailerTask();
-    expect($mailer_task->getProcessingMethod())->equals('individual');
+    $mailerTask = new MailerTask();
+    expect($mailerTask->getProcessingMethod())->equals('individual');
   }
 
-  function testItCanPrepareSubscriberForSending() {
+  public function testItCanPrepareSubscriberForSending() {
     $subscriber = Subscriber::create();
     $subscriber->email = 'test@example.com';
-    $subscriber->first_name = 'John';
-    $subscriber->last_name = 'Doe';
+    $subscriber->firstName = 'John';
+    $subscriber->lastName = 'Doe';
     $subscriber->save();
-    $prepared_subscriber = $this->mailer_task->prepareSubscriberForSending($subscriber);
-    expect($prepared_subscriber)->equals('John Doe <test@example.com>');
+    $preparedSubscriber = $this->mailerTask->prepareSubscriberForSending($subscriber);
+    expect($preparedSubscriber)->equals('John Doe <test@example.com>');
   }
 
-  function testItCanSend() {
-    $php_mail_class = 'MailPoet\Mailer\Methods\PHPMail';
+  public function testItCanSend() {
+    $phpMailClass = 'MailPoet\Mailer\Methods\PHPMail';
     $this->settings->set(
       Mailer::MAILER_CONFIG_SETTING_NAME,
       [
@@ -112,29 +125,29 @@ class MailerTest extends \MailPoetTest {
       ]
     );
     // mock mailer instance and ensure that send method is invoked
-    $mailer_task = new MailerTask(
+    $mailerTask = new MailerTask(
       (object)[
-        'mailer_instance' => Stub::make(
-          $php_mail_class,
+        'mailerInstance' => Stub::make(
+          $phpMailClass,
           ['send' => Expected::exactly(1, function() {
               return true;
           })],
           $this
         ),
-        'mailer_config' => [
+        'mailerConfig' => [
           'method' => null,
         ],
       ]
     );
     // mailer instance should be properly configured
-    expect($mailer_task->mailer->mailer_instance instanceof $php_mail_class)
+    expect($mailerTask->mailer->mailerInstance instanceof $phpMailClass)
       ->true();
     // send method should return true
-    expect($mailer_task->send('Newsletter', 'Subscriber'))->true();
+    expect($mailerTask->send('Newsletter', 'Subscriber'))->true();
   }
 
-  function _after() {
-    \ORM::raw_execute('TRUNCATE ' . Setting::$_table);
-    \ORM::raw_execute('TRUNCATE ' . Subscriber::$_table);
+  public function _after() {
+    $this->diContainer->get(SettingsRepository::class)->truncate();
+    ORM::raw_execute('TRUNCATE ' . Subscriber::$_table);
   }
 }

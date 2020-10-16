@@ -1,104 +1,121 @@
 <?php
+
 namespace MailPoet\Test\Settings;
 
 use Codeception\Stub;
-use MailPoet\Models\UserFlag;
+use MailPoet\Entities\UserFlagEntity;
 use MailPoet\Settings\UserFlagsController;
+use MailPoet\Settings\UserFlagsRepository;
 use MailPoet\WP\Functions as WPFunctions;
 
 class UserFlagsControllerTest extends \MailPoetTest {
 
   /** @var UserFlagsController */
-  private $user_flags;
+  private $userFlags;
+
+  /** @var UserFlagsRepository */
+  private $userFlagsRepository;
 
   /** @var int */
-  private $current_user_id;
+  private $currentUserId;
 
-  function _before() {
+  public function _before() {
     parent::_before();
-    UserFlag::deleteMany();
+    $this->cleanup();
 
-    $current_user_id = 1;
-    $other_user_id = 2;
+    $currentUserId = 1;
+    $otherUserId = 2;
+
     WPFunctions::set(Stub::make(new WPFunctions, [
-      'getCurrentUserId' => $current_user_id,
+      'getCurrentUserId' => $currentUserId,
     ]));
-    $this->current_user_id = $current_user_id;
-    $this->user_flags = Stub::make(new UserFlagsController(), [
+    $this->currentUserId = $currentUserId;
+    $this->userFlagsRepository = $this->diContainer->get(UserFlagsRepository::class);
+    $this->userFlags = Stub::make(UserFlagsController::class, [
+      'userFlagsRepository' => $this->userFlagsRepository,
       'defaults' => [
         'flag_1' => 'default_value_1',
         'flag_2' => 'default_value_2',
         'flag_3' => 'default_value_3',
       ],
     ]);
-    UserFlag::createOrUpdate([
-      'user_id' => $this->current_user_id,
-      'name' => 'flag_1',
-      'value' => 'value_1',
-    ]);
-    UserFlag::createOrUpdate([
-      'user_id' => $this->current_user_id,
-      'name' => 'flag_3',
-      'value' => 'value_3',
-    ]);
-    UserFlag::createOrUpdate([
-      'user_id' => $other_user_id,
-      'name' => 'flag_1',
-      'value' => 'other_value_1',
-    ]);
-    UserFlag::createOrUpdate([
-      'user_id' => $other_user_id,
-      'name' => 'flag_2',
-      'value' => 'other_value_2',
-    ]);
+
+    $this->createUserFlag($this->currentUserId, 'flag_1', 'value_1');
+    $this->createUserFlag($this->currentUserId, 'flag_3', 'value_3');
+    $this->createUserFlag($otherUserId, 'flag_1', 'other_value_1');
+    $this->createUserFlag($otherUserId, 'flag_2', 'other_value_2');
   }
 
-  function testItGetsFlagsOfCurrentUser() {
-    expect($this->user_flags->get('flag_1'))->equals('value_1');
-    expect($this->user_flags->get('flag_2'))->equals('default_value_2');
-    expect($this->user_flags->getAll())->equals([
+  public function testItGetsFlagsOfCurrentUser() {
+    expect($this->userFlags->get('flag_1'))->equals('value_1');
+    expect($this->userFlags->get('flag_2'))->equals('default_value_2');
+    expect($this->userFlags->getAll())->equals([
       'flag_1' => 'value_1',
       'flag_2' => 'default_value_2',
       'flag_3' => 'value_3',
     ]);
   }
 
-  function testItLoadsDataOnlyOnceWhenNeeded() {
-    UserFlag::createOrUpdate([
-      'user_id' => $this->current_user_id,
+  public function testItLoadsDataOnlyOnceWhenNeeded() {
+    $this->updateUserFlag($this->currentUserId, 'flag_1', 'new_value_1');
+    expect($this->userFlags->get('flag_1'))->equals('new_value_1');
+    $this->updateUserFlag($this->currentUserId, 'flag_1', 'newer_value_1');
+    expect($this->userFlags->get('flag_1'))->equals('new_value_1');
+  }
+
+  public function testItSetsNewFlagValue() {
+    expect($this->userFlags->get('flag_1'))->equals('value_1');
+    $this->userFlags->set('flag_1', 'updated_value');
+    expect($this->userFlags->get('flag_1'))->equals('updated_value');
+    $flag = $this->userFlagsRepository->findOneBy([
+      'userId' => $this->currentUserId,
       'name' => 'flag_1',
-      'value' => 'new_value_1',
     ]);
-    expect($this->user_flags->get('flag_1'))->equals('new_value_1');
-    UserFlag::createOrUpdate([
-      'user_id' => $this->current_user_id,
+    expect($flag->getValue())->equals('updated_value');
+  }
+
+  public function testItDeletesAFlag() {
+    expect($this->userFlags->get('flag_1'))->equals('value_1');
+    $this->userFlags->delete('flag_1');
+    expect($this->userFlags->get('flag_1'))->equals('default_value_1');
+    $flag = $this->userFlagsRepository->findOneBy([
+      'userId' => $this->currentUserId,
       'name' => 'flag_1',
-      'value' => 'newer_value_1',
     ]);
-    expect($this->user_flags->get('flag_1'))->equals('new_value_1');
+    expect($flag)->null();
   }
 
-  function testItSetsNewFlagValue() {
-    expect($this->user_flags->get('flag_1'))->equals('value_1');
-    $this->user_flags->set('flag_1', 'updated_value');
-    expect($this->user_flags->get('flag_1'))->equals('updated_value');
-    $flag = UserFlag::where('user_id', $this->current_user_id)
-      ->where('name', 'flag_1')
-      ->findOne();
-    expect($flag->value)->equals('updated_value');
-  }
-
-  function testItDeletesAFlag() {
-    expect($this->user_flags->get('flag_1'))->equals('value_1');
-    $this->user_flags->delete('flag_1');
-    expect($this->user_flags->get('flag_1'))->equals('default_value_1');
-    $flag = UserFlag::where('user_id', $this->current_user_id)
-      ->where('name', 'flag_1')
-      ->findOne();
-    expect($flag)->equals(false);
-  }
-
-  function _after() {
+  public function _after() {
+    $this->cleanup();
     WPFunctions::set(new WPFunctions);
+  }
+
+  private function createUserFlag($userId, $name, $value) {
+    $flag = new UserFlagEntity();
+    $flag->setUserId($userId);
+    $flag->setName($name);
+    $flag->setValue($value);
+    $this->userFlagsRepository->persist($flag);
+    $this->userFlagsRepository->flush();
+    return $flag;
+  }
+
+  private function updateUserFlag($userId, $name, $value) {
+    $flag = $this->userFlagsRepository->findOneBy([
+      'userId' => $userId,
+      'name' => $name,
+    ]);
+    if (!$flag) {
+      throw new \Exception();
+    }
+
+    $flag->setValue($value);
+    $this->userFlagsRepository->flush();
+    return $flag;
+  }
+
+  private function cleanup() {
+    $tableName = $this->entityManager->getClassMetadata(UserFlagEntity::class)->getTableName();
+    $this->connection->executeUpdate("TRUNCATE $tableName");
   }
 }

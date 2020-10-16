@@ -3,11 +3,15 @@ import PropTypes from 'prop-types';
 import MailPoet from 'mailpoet';
 import { Link } from 'react-router-dom';
 import classNames from 'classnames';
+import Checkbox from 'common/form/checkbox/checkbox.tsx';
 
 class ListingItem extends React.Component {
-  state = {
-    expanded: false,
-  };
+  constructor(props) {
+    super(props);
+    this.state = {
+      expanded: false,
+    };
+  }
 
   handleSelectItem = (e) => {
     this.props.onSelectItem(
@@ -31,7 +35,7 @@ class ListingItem extends React.Component {
   };
 
   handleToggleItem = () => {
-    this.setState(prevState => ({
+    this.setState((prevState) => ({
       expanded: !prevState.expanded,
     }));
   };
@@ -41,18 +45,18 @@ class ListingItem extends React.Component {
 
     if (this.props.is_selectable === true) {
       checkbox = (
-        <th className="mailpoet-check-column" scope="row">
+        <th className="mailpoet-listing-check-column" scope="row">
           <label className="screen-reader-text" htmlFor={`listing-row-checkbox-${this.props.item.id}`}>
             {
               `Select ${this.props.item[this.props.columns[0].name]}`
             }
           </label>
-          <input
-            type="checkbox"
+          <Checkbox
             value={this.props.item.id}
             checked={
               this.props.item.selected || this.props.selection === 'all'
             }
+            onCheck={() => {}}
             onChange={this.handleSelectItem}
             disabled={this.props.selection === 'all'}
             id={`listing-row-checkbox-${this.props.item.id}`}
@@ -67,7 +71,7 @@ class ListingItem extends React.Component {
     if (customActions.length > 0) {
       let isFirst = true;
       itemActions = customActions
-        .filter(action => action.display === undefined || action.display(this.props.item))
+        .filter((action) => action.display === undefined || action.display(this.props.item))
         .map((action, index) => {
           let customAction = null;
 
@@ -77,8 +81,11 @@ class ListingItem extends React.Component {
                 {(!isFirst) ? ' | ' : ''}
                 <a
                   type="button"
-                  href="javascript:;"
-                  onClick={() => this.handleTrashItem(this.props.item.id)}
+                  href="#"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    this.handleTrashItem(this.props.item.id);
+                  }}
                 >
                   {MailPoet.I18n.t('moveToTrash')}
                 </a>
@@ -111,7 +118,7 @@ class ListingItem extends React.Component {
                 className={action.name}
               >
                 {(!isFirst) ? ' | ' : ''}
-                { action.link(this.props.item) }
+                { action.link(this.props.item, this.props.location) }
               </span>
             );
           } else {
@@ -122,12 +129,13 @@ class ListingItem extends React.Component {
               >
                 {(!isFirst) ? ' | ' : ''}
                 <a
-                  href="javascript:;"
-                  onClick={
-                    (action.onClick !== undefined)
-                      ? () => action.onClick(this.props.item, this.props.onRefreshItems)
-                      : false
-                  }
+                  href="#"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    if (action.onClick !== undefined) {
+                      action.onClick(this.props.item, this.props.onRefreshItems);
+                    }
+                  }}
                 >
                   { action.label }
                 </a>
@@ -144,7 +152,15 @@ class ListingItem extends React.Component {
     } else {
       itemActions = (
         <span className="edit">
-          <Link to={`/edit/${this.props.item.id}`}>{MailPoet.I18n.t('edit')}</Link>
+          <Link to={{
+            pathname: `/edit/${this.props.item.id}`,
+            state: {
+              backUrl: this.props.location?.pathname,
+            },
+          }}
+          >
+            {MailPoet.I18n.t('edit')}
+          </Link>
         </span>
       );
     }
@@ -157,8 +173,11 @@ class ListingItem extends React.Component {
           <div className="row-actions">
             <span>
               <a
-                href="javascript:;"
-                onClick={() => this.handleRestoreItem(this.props.item.id)}
+                href="#"
+                onClick={(event) => {
+                  event.preventDefault();
+                  this.handleRestoreItem(this.props.item.id);
+                }}
               >
                 {MailPoet.I18n.t('restore')}
               </a>
@@ -167,8 +186,11 @@ class ListingItem extends React.Component {
             <span className="delete">
               <a
                 className="submitdelete"
-                href="javascript:;"
-                onClick={() => this.handleDeleteItem(this.props.item.id)}
+                href="#"
+                onClick={(event) => {
+                  event.preventDefault();
+                  this.handleDeleteItem(this.props.item.id);
+                }}
               >
                 {MailPoet.I18n.t('deletePermanently')}
               </a>
@@ -228,6 +250,13 @@ ListingItem.propTypes = {
   onRefreshItems: PropTypes.func.isRequired,
   onRenderItem: PropTypes.func.isRequired,
   group: PropTypes.string.isRequired,
+  location: PropTypes.shape({
+    pathname: PropTypes.string,
+  }),
+};
+
+ListingItem.defaultProps = {
+  location: undefined,
 };
 
 export default ListingItem;

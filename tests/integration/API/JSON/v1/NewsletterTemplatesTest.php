@@ -1,133 +1,142 @@
 <?php
+
 namespace MailPoet\Test\API\JSON\v1;
 
 use MailPoet\API\JSON\Response as APIResponse;
 use MailPoet\API\JSON\v1\NewsletterTemplates;
-use MailPoet\Models\NewsletterTemplate;
+use MailPoet\Entities\NewsletterEntity;
+use MailPoet\Entities\NewsletterTemplateEntity;
+use MailPoet\NewsletterTemplates\NewsletterTemplatesRepository;
 
 class NewsletterTemplatesTest extends \MailPoetTest {
-  function _before() {
+  /** @var NewsletterTemplatesRepository */
+  private $newsletterTemplatesRepository;
+
+  public function _before() {
     parent::_before();
-    NewsletterTemplate::deleteMany();
-    NewsletterTemplate::createOrUpdate([
-      'name' => 'Template #1',
-      'body' => '{"key1": "value1"}',
-    ]);
+    $this->truncateEntity(NewsletterEntity::class);
+    $this->truncateEntity(NewsletterTemplateEntity::class);
+    $this->newsletterTemplatesRepository = $this->diContainer->get(NewsletterTemplatesRepository::class);
 
-    NewsletterTemplate::createOrUpdate([
-      'name' => 'Template #2',
-      'newsletter_id' => 1,
-      'body' => '{"key2": "value2"}',
-    ]);
+    $template1 = new NewsletterTemplateEntity('Template #1');
+    $template1->setBody(['key1' => 'value1']);
+    $this->entityManager->persist($template1);
+
+    $template2 = new NewsletterTemplateEntity('Template #2');
+    $template2->setBody(['key2' => 'value2']);
+    $template2->setNewsletter($this->entityManager->getReference(NewsletterEntity::class, 1));
+    $this->entityManager->persist($template2);
+
+    $this->entityManager->flush();
   }
 
-  function testItCanGetANewsletterTemplate() {
-    $template = NewsletterTemplate::where('name', 'Template #1')->findOne();
+  public function testItCanGetANewsletterTemplate() {
+    $template = $this->newsletterTemplatesRepository->findOneBy(['name' => 'Template #1']);
+    assert($template instanceof NewsletterTemplateEntity);
 
-    $router = new NewsletterTemplates();
-    $response = $router->get(/* missing id */);
+    $endpoint = $this->diContainer->get(NewsletterTemplates::class);
+    $response = $endpoint->get(/* missing id */);
     expect($response->status)->equals(APIResponse::STATUS_NOT_FOUND);
     expect($response->errors[0]['message'])
       ->equals('This template does not exist.');
 
-    $response = $router->get(['id' => 'not_an_id']);
+    $response = $endpoint->get(['id' => 'not_an_id']);
     expect($response->status)->equals(APIResponse::STATUS_NOT_FOUND);
     expect($response->errors[0]['message'])
       ->equals('This template does not exist.');
 
-    $response = $router->get(['id' => $template->id]);
+    $response = $endpoint->get(['id' => $template->getId()]);
     expect($response->status)->equals(APIResponse::STATUS_OK);
-    expect($response->data)->equals(
-      $template->asArray()
-    );
+    expect($response->data['name'])->same('Template #1');
+    expect($response->data['body'])->same(['key1' => 'value1']);
   }
 
-  function testItCanGetAllNewsletterTemplates() {
-    $templates = NewsletterTemplate::count();
+  public function testItCanGetAllNewsletterTemplates() {
+    $templates = $this->newsletterTemplatesRepository->findAll();
 
-    $router = new NewsletterTemplates();
-    $response = $router->getAll();
+    $endpoint = $this->diContainer->get(NewsletterTemplates::class);
+    $response = $endpoint->getAll();
     expect($response->status)->equals(APIResponse::STATUS_OK);
-    expect($response->data)->count($templates);
+    expect($response->data)->count(count($templates));
   }
 
-  function testItCanSaveANewTemplate() {
-    $template_data = [
+  public function testItCanSaveANewTemplate() {
+    $templateData = [
       'name' => 'Template #3',
       'body' => '{"key3": "value3"}',
     ];
 
-    $router = new NewsletterTemplates();
-    $response = $router->save($template_data);
+    $endpoint = $this->diContainer->get(NewsletterTemplates::class);
+    $response = $endpoint->save($templateData);
     expect($response->status)->equals(APIResponse::STATUS_OK);
-    expect($response->data)->equals(
-      NewsletterTemplate::findOne($response->data['id'])->asArray()
-    );
+    expect($response->data['name'])->same('Template #3');
+    expect($response->data['body'])->same(['key3' => 'value3']);
   }
 
-  function testItCanSaveANewTemplateAssociatedWithANewsletter() {
-    $template_data = [
-      'newsletter_id' => 2,
+  public function testItCanSaveANewTemplateAssociatedWithANewsletter() {
+    $newsletter = new NewsletterEntity();
+    $newsletter->setSubject('Newsletter subject');
+    $newsletter->setType(NewsletterEntity::TYPE_STANDARD);
+    $this->entityManager->persist($newsletter);
+    $this->entityManager->flush();
+
+    $templateData = [
+      'newsletter_id' => $newsletter->getId(),
       'name' => 'Template #3',
       'body' => '{"key3": "value3"}',
     ];
 
-    $router = new NewsletterTemplates();
-    $response = $router->save($template_data);
+    $endpoint = $this->diContainer->get(NewsletterTemplates::class);
+    $response = $endpoint->save($templateData);
     expect($response->status)->equals(APIResponse::STATUS_OK);
-    expect($response->data)->equals(
-      NewsletterTemplate::findOne($response->data['id'])->asArray()
-    );
+    expect($response->data['name'])->same('Template #3');
+    expect($response->data['body'])->same(['key3' => 'value3']);
+    expect($response->data['newsletter_id'])->same($newsletter->getId());
   }
 
-  function testItCanUpdateTemplateAssociatedWithANewsletter() {
-    $template_data = [
-      'newsletter_id' => '1',
+  public function testItCanUpdateTemplateAssociatedWithANewsletter() {
+    $newsletter = new NewsletterEntity();
+    $newsletter->setSubject('Newsletter subject');
+    $newsletter->setType(NewsletterEntity::TYPE_STANDARD);
+    $this->entityManager->persist($newsletter);
+    $this->entityManager->flush();
+
+    $templateData = [
+      'newsletter_id' => $newsletter->getId(),
       'name' => 'Template #2',
       'body' => '{"key3": "value3"}',
     ];
 
-    $template_id = NewsletterTemplate::whereEqual('newsletter_id', 1)->findOne()->id;
-
-    $router = new NewsletterTemplates();
-    $response = $router->save($template_data);
+    $endpoint = $this->diContainer->get(NewsletterTemplates::class);
+    $response = $endpoint->save($templateData);
     expect($response->status)->equals(APIResponse::STATUS_OK);
 
-    $template_data['body'] = json_decode($template_data['body'], true);
+    $templateData['body'] = json_decode($templateData['body'], true);
 
-    $normalize = function($array) {
-      $result = [];
-      foreach ($array as $key => $value) {
-        if (in_array($key, ['newsletter_id', 'name', 'body'])) {
-          $result[$key] = $value;
-        }
-      }
-      return $result;
-    };
-
-    expect($normalize($response->data))->equals($template_data);
-    $template = NewsletterTemplate::findOne($template_id)->asArray();
-    expect($normalize($template))->equals($template_data);
+    expect($response->data['name'])->same('Template #2');
+    expect($response->data['body'])->same(['key3' => 'value3']);
+    expect($response->data['newsletter_id'])->same($newsletter->getId());
   }
 
-  function testItCanDeleteANewsletterTemplate() {
-    $template = NewsletterTemplate::where('name', 'Template #2')->findOne();
-    expect($template->deleted_at)->null();
-
-    $router = new NewsletterTemplates();
-    $response = $router->delete(/* missing id */);
+  public function testItCanDeleteANewsletterTemplate() {
+    $endpoint = $this->diContainer->get(NewsletterTemplates::class);
+    $response = $endpoint->delete(/* missing id */);
     expect($response->status)->equals(APIResponse::STATUS_NOT_FOUND);
     expect($response->errors[0]['message'])
       ->equals('This template does not exist.');
 
-    $response = $router->delete(['id' => $template->id]);
+    $template = $this->newsletterTemplatesRepository->findOneBy(['name' => 'Template #1']);
+    assert($template instanceof NewsletterTemplateEntity);
+    $templateId = $template->getId();
+    $response = $endpoint->delete(['id' => $template->getId()]);
     expect($response->status)->equals(APIResponse::STATUS_OK);
 
-    $deleted_template = NewsletterTemplate::findOne($template->id);
-    expect($deleted_template)->false();
+    $deletedTemplate = $this->newsletterTemplatesRepository->findOneById($templateId);
+    expect($deletedTemplate)->null();
   }
 
-  function _after() {
-    NewsletterTemplate::deleteMany();
+  public function _after() {
+    $this->truncateEntity(NewsletterEntity::class);
+    $this->truncateEntity(NewsletterTemplateEntity::class);
   }
 }

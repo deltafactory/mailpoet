@@ -2,30 +2,37 @@
 
 namespace MailPoet\Tasks;
 
-use Carbon\Carbon;
 use MailPoet\Models\ScheduledTask;
 use MailPoet\Models\ScheduledTaskSubscriber;
 use MailPoet\Models\SendingQueue;
-use function MailPoet\Util\array_column;
+use MailPoet\Util\Helpers;
 use MailPoet\WP\Functions as WPFunctions;
-
-if (!defined('ABSPATH')) exit;
+use MailPoetVendor\Carbon\Carbon;
 
 /**
  * A facade class containing all necessary models to work with a sending queue
  * @property string|null $status
- * @property int $task_id
+ * @property int $taskId
  * @property int $id
+ * @property int $newsletterId
+ * @property string $newsletterRenderedSubject
+ * @property string|array $newsletterRenderedBody
+ * @property bool $nonExistentColumn
  */
 class Sending {
   const TASK_TYPE = 'sending';
   const RESULT_BATCH_SIZE = 5;
 
+  /** @var ScheduledTask */
   private $task;
-  private $queue;
-  private $task_subscribers;
 
-  private $queue_fields = [
+  /** @var SendingQueue */
+  private $queue;
+
+  /** @var Subscribers */
+  private $taskSubscribers;
+
+  private $queueFields = [
     'id',
     'task_id',
     'newsletter_id',
@@ -37,21 +44,22 @@ class Sending {
     'meta',
   ];
 
-  private $common_fields = [
+  private $commonFields = [
     'created_at',
     'updated_at',
     'deleted_at',
   ];
 
   private function __construct(ScheduledTask $task = null, SendingQueue $queue = null) {
-    if (is_null($task) && is_null($queue)) {
+    if (!$task instanceof ScheduledTask) {
       $task = ScheduledTask::create();
       $task->type = self::TASK_TYPE;
       $task->save();
-
+    }
+    if (!$queue instanceof SendingQueue) {
       $queue = SendingQueue::create();
-      $queue->newsletter_id = 0;
-      $queue->task_id = $task->id;
+      $queue->newsletterId = 0;
+      $queue->taskId = $task->id;
       $queue->save();
     }
 
@@ -61,38 +69,47 @@ class Sending {
 
     $this->task = $task;
     $this->queue = $queue;
-    $this->task_subscribers = new Subscribers($task);
+    $this->taskSubscribers = new Subscribers($task);
   }
 
-  static function create(ScheduledTask $task = null, SendingQueue $queue = null) {
+  public static function create(ScheduledTask $task = null, SendingQueue $queue = null) {
     return new self($task, $queue);
   }
 
-  static function createManyFromTasks($tasks) {
+  public static function createManyFromTasks($tasks) {
     if (empty($tasks)) {
       return [];
     }
 
-    $tasks_ids = array_map(function($task) {
+    $tasksIds = array_map(function($task) {
       return $task->id;
     }, $tasks);
 
-    $queues = SendingQueue::whereIn('task_id', $tasks_ids)->findMany();
-    $queues_index = [];
+    $queues = SendingQueue::whereIn('task_id', $tasksIds)->findMany();
+    $queuesIndex = [];
     foreach ($queues as $queue) {
-      $queues_index[$queue->task_id] = $queue;
+      $queuesIndex[$queue->taskId] = $queue;
     }
 
     $result = [];
     foreach ($tasks as $task) {
-      if (!empty($queues_index[$task->id])) {
-        $result[] = self::create($task, $queues_index[$task->id]);
+      if (!empty($queuesIndex[$task->id])) {
+        $result[] = self::create($task, $queuesIndex[$task->id]);
       }
     }
     return $result;
   }
 
-  static function createFromQueue(SendingQueue $queue) {
+  public static function createFromScheduledTask(ScheduledTask $task) {
+    $queue = SendingQueue::where('task_id', $task->id)->findOne();
+    if (!$queue) {
+      return false;
+    }
+
+    return self::create($task, $queue);
+  }
+
+  public static function createFromQueue(SendingQueue $queue) {
     $task = $queue->task()->findOne();
     if (!$task) {
       return false;
@@ -101,11 +118,11 @@ class Sending {
     return self::create($task, $queue);
   }
 
-  static function getByNewsletterId($newsletter_id) {
-    $queue = SendingQueue::where('newsletter_id', $newsletter_id)
+  public static function getByNewsletterId($newsletterId) {
+    $queue = SendingQueue::where('newsletter_id', $newsletterId)
       ->orderByDesc('updated_at')
       ->findOne();
-    if (!$queue) {
+    if (!$queue instanceof SendingQueue) {
       return false;
     }
 
@@ -115,19 +132,19 @@ class Sending {
   public function asArray() {
     $queue = array_intersect_key(
       $this->queue->asArray(),
-      array_flip($this->queue_fields)
+      array_flip($this->queueFields)
     );
     $task = $this->task->asArray();
     return array_merge($task, $queue);
   }
 
   public function getErrors() {
-    $queue_errors = $this->queue->getErrors();
-    $task_errors = $this->task->getErrors();
-    if (empty($queue_errors) && empty($task_errors)) {
+    $queueErrors = $this->queue->getErrors();
+    $taskErrors = $this->task->getErrors();
+    if (empty($queueErrors) && empty($taskErrors)) {
       return false;
     }
-    return array_merge((array)$queue_errors, (array)$task_errors);
+    return array_merge((array)$queueErrors, (array)$taskErrors);
   }
 
   public function save() {
@@ -137,7 +154,7 @@ class Sending {
   }
 
   public function delete() {
-    $this->task_subscribers->removeAllSubscribers();
+    $this->taskSubscribers->removeAllSubscribers();
     $this->task->delete();
     $this->queue->delete();
   }
@@ -151,11 +168,11 @@ class Sending {
   }
 
   public function taskSubscribers() {
-    return $this->task_subscribers;
+    return $this->taskSubscribers;
   }
 
   public function getSubscribers($processed = null) {
-    $subscribers = $this->task_subscribers->getSubscribers();
+    $subscribers = $this->taskSubscribers->getSubscribers();
     if (!is_null($processed)) {
       $status = ($processed) ? ScheduledTaskSubscriber::STATUS_PROCESSED : ScheduledTaskSubscriber::STATUS_UNPROCESSED;
       $subscribers->where('processed', $status);
@@ -164,35 +181,35 @@ class Sending {
     return array_column($subscribers, 'subscriber_id');
   }
 
-  public function setSubscribers(array $subscriber_ids) {
-    $this->task_subscribers->setSubscribers($subscriber_ids);
+  public function setSubscribers(array $subscriberIds) {
+    $this->taskSubscribers->setSubscribers($subscriberIds);
     $this->updateCount();
   }
 
-  public function removeSubscribers(array $subscriber_ids) {
-    $this->task_subscribers->removeSubscribers($subscriber_ids);
+  public function removeSubscribers(array $subscriberIds) {
+    $this->taskSubscribers->removeSubscribers($subscriberIds);
     $this->updateCount();
   }
 
   public function removeAllSubscribers() {
-    $this->task_subscribers->removeAllSubscribers();
+    $this->taskSubscribers->removeAllSubscribers();
     $this->updateCount();
   }
 
-  public function updateProcessedSubscribers(array $processed_subscribers) {
-    $this->task_subscribers->updateProcessedSubscribers($processed_subscribers);
+  public function updateProcessedSubscribers(array $processedSubscribers) {
+    $this->taskSubscribers->updateProcessedSubscribers($processedSubscribers);
     return $this->updateCount()->getErrors() === false;
   }
 
-  public function saveSubscriberError($subcriber_id, $error_message) {
-    $this->task_subscribers->saveSubscriberError($subcriber_id, $error_message);
+  public function saveSubscriberError($subcriberId, $errorMessage) {
+    $this->taskSubscribers->saveSubscriberError($subcriberId, $errorMessage);
     return $this->updateCount()->getErrors() === false;
   }
 
-  function updateCount() {
-    $this->queue->count_processed = ScheduledTaskSubscriber::getProcessedCount($this->task->id);
-    $this->queue->count_to_process = ScheduledTaskSubscriber::getUnprocessedCount($this->task->id);
-    $this->queue->count_total = $this->queue->count_processed + $this->queue->count_to_process;
+  public function updateCount() {
+    $this->queue->countProcessed = ScheduledTaskSubscriber::getProcessedCount($this->task->id);
+    $this->queue->countToProcess = ScheduledTaskSubscriber::getUnprocessedCount($this->task->id);
+    $this->queue->countTotal = $this->queue->countProcessed + $this->queue->countToProcess;
     return $this->queue->save();
   }
 
@@ -206,7 +223,12 @@ class Sending {
     return $this->queue->validate() && $this->task->validate();
   }
 
+  public function getMeta() {
+    return $this->queue->getMeta();
+  }
+
   public function __isset($prop) {
+    $prop = Helpers::camelCaseToUnderscore($prop);
     if ($this->isQueueProperty($prop)) {
       return isset($this->queue->$prop);
     } else {
@@ -215,6 +237,7 @@ class Sending {
   }
 
   public function __get($prop) {
+    $prop = Helpers::camelCaseToUnderscore($prop);
     if ($this->isQueueProperty($prop)) {
       return $this->queue->$prop;
     } else {
@@ -223,6 +246,7 @@ class Sending {
   }
 
   public function __set($prop, $value) {
+    $prop = Helpers::camelCaseToUnderscore($prop);
     if ($this->isCommonProperty($prop)) {
       $this->queue->$prop = $value;
       $this->task->$prop = $value;
@@ -242,14 +266,14 @@ class Sending {
   }
 
   private function isQueueProperty($prop) {
-    return in_array($prop, $this->queue_fields);
+    return in_array($prop, $this->queueFields);
   }
 
   private function isCommonProperty($prop) {
-    return in_array($prop, $this->common_fields);
+    return in_array($prop, $this->commonFields);
   }
 
-  static function getScheduledQueues($amount = self::RESULT_BATCH_SIZE) {
+  public static function getScheduledQueues($amount = self::RESULT_BATCH_SIZE) {
     $wp = new WPFunctions();
     $tasks = ScheduledTask::tableAlias('tasks')
       ->select('tasks.*')
@@ -264,7 +288,7 @@ class Sending {
     return static::createManyFromTasks($tasks);
   }
 
-  static function getRunningQueues($amount = self::RESULT_BATCH_SIZE) {
+  public static function getRunningQueues($amount = self::RESULT_BATCH_SIZE) {
     $tasks = ScheduledTask::orderByAsc('priority')
       ->orderByAsc('updated_at')
       ->whereNull('deleted_at')

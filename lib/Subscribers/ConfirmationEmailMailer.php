@@ -4,12 +4,12 @@ namespace MailPoet\Subscribers;
 
 use Html2Text\Html2Text;
 use MailPoet\Mailer\Mailer;
-use MailPoet\Mailer\MailerError;
+use MailPoet\Mailer\MetaInfo;
 use MailPoet\Models\Subscriber;
 use MailPoet\Services\AuthorizedEmailsController;
 use MailPoet\Services\Bridge;
 use MailPoet\Settings\SettingsController;
-use MailPoet\Subscription\Url;
+use MailPoet\Subscription\SubscriptionUrlFactory;
 use MailPoet\Util\Helpers;
 use MailPoet\WP\Functions as WPFunctions;
 
@@ -17,7 +17,7 @@ class ConfirmationEmailMailer {
 
   const MAX_CONFIRMATION_EMAILS = 3;
 
-  /** @var Mailer|null */
+  /** @var Mailer */
   private $mailer;
 
   /** @var WPFunctions */
@@ -26,58 +26,68 @@ class ConfirmationEmailMailer {
   /** @var SettingsController */
   private $settings;
 
-  /**
-   * @param Mailer|null $mailer
-   */
-  function __construct($mailer = null, WPFunctions $wp = null) {
-    if ($mailer) {
-      $this->mailer = $mailer;
-    }
-    if ($wp) {
-      $this->wp = $wp;
-    } else {
-      $this->wp = new WPFunctions;
-    }
-    $this->settings = new SettingsController();
+  /** @var MetaInfo */
+  private $mailerMetaInfo;
+
+  /** @var SubscriptionUrlFactory */
+  private $subscriptionUrlFactory;
+
+  /** @var array Cache for confirmation emails sent within a request */
+  private $sentEmails = [];
+
+  public function __construct(Mailer $mailer, WPFunctions $wp, SettingsController $settings, SubscriptionUrlFactory $subscriptionUrlFactory) {
+    $this->mailer = $mailer;
+    $this->wp = $wp;
+    $this->settings = $settings;
+    $this->mailerMetaInfo = new MetaInfo;
+    $this->subscriptionUrlFactory = $subscriptionUrlFactory;
   }
 
-  function sendConfirmationEmail(Subscriber $subscriber) {
-    $signup_confirmation = $this->settings->get('signup_confirmation');
+  /**
+   * Use this method if you want to make sure the confirmation email
+   * is not sent multiple times within a single request
+   * e.g. if sending confirmation emails from hooks
+   */
+  public function sendConfirmationEmailOnce(Subscriber $subscriber): bool {
+    if (isset($this->sentEmails[$subscriber->id])) {
+      return true;
+    }
+    return $this->sendConfirmationEmail($subscriber);
+  }
 
-    if ((bool)$signup_confirmation['enabled'] === false) {
+  public function sendConfirmationEmail(Subscriber $subscriber) {
+    $signupConfirmation = $this->settings->get('signup_confirmation');
+    if ((bool)$signupConfirmation['enabled'] === false) {
+      return false;
+    }
+    if (!$this->wp->isUserLoggedIn() && $subscriber->countConfirmations >= self::MAX_CONFIRMATION_EMAILS) {
       return false;
     }
 
-    $subscriber->count_confirmations++;
-    $subscriber->save();
-    if (!$this->wp->isUserLoggedIn() && $subscriber->count_confirmations > self::MAX_CONFIRMATION_EMAILS) {
-      return false;
-    }
-
-    $authorization_emails_validation = $this->settings->get(AuthorizedEmailsController::AUTHORIZED_EMAIL_ADDRESSES_ERROR_SETTING);
-    $unauthorized_confirmation_email = isset($authorization_emails_validation['invalid_confirmation_address']);
-    if (Bridge::isMPSendingServiceEnabled() && $unauthorized_confirmation_email) {
+    $authorizationEmailsValidation = $this->settings->get(AuthorizedEmailsController::AUTHORIZED_EMAIL_ADDRESSES_ERROR_SETTING);
+    $unauthorizedSenderEmail = isset($authorizationEmailsValidation['invalid_sender_address']);
+    if (Bridge::isMPSendingServiceEnabled() && $unauthorizedSenderEmail) {
       return false;
     }
 
     $segments = $subscriber->segments()->findMany();
-    $segment_names = array_map(function($segment) {
+    $segmentNames = array_map(function($segment) {
       return $segment->name;
     }, $segments);
 
-    $body = nl2br($signup_confirmation['body']);
+    $body = nl2br($signupConfirmation['body']);
 
     // replace list of segments shortcode
     $body = str_replace(
       '[lists_to_confirm]',
-      '<strong>' . join(', ', $segment_names) . '</strong>',
+      '<strong>' . join(', ', $segmentNames) . '</strong>',
       $body
     );
 
     // replace activation link
     $body = Helpers::replaceLinkTags(
       $body,
-      Url::getConfirmationUrl($subscriber),
+      $this->subscriptionUrlFactory->getConfirmationUrl($subscriber),
       ['target' => '_blank'],
       'activation_link'
     );
@@ -87,44 +97,33 @@ class ConfirmationEmailMailer {
 
     // build email data
     $email = [
-      'subject' => $signup_confirmation['subject'],
+      'subject' => $signupConfirmation['subject'],
       'body' => [
         'html' => $body,
         'text' => $text,
       ],
     ];
 
-    // set from
-    $from = (
-      !empty($signup_confirmation['from'])
-      && !empty($signup_confirmation['from']['address'])
-    ) ? $signup_confirmation['from']
-      : false;
-
-    // set reply to
-    $reply_to = (
-      !empty($signup_confirmation['reply_to'])
-      && !empty($signup_confirmation['reply_to']['address'])
-    ) ? $signup_confirmation['reply_to']
-      : false;
-
     // send email
     try {
-      if (!$this->mailer) {
-        $this->mailer = new Mailer(false, $from, $reply_to);
-      }
-      $this->mailer->getSenderNameAndAddress($from);
-      $this->mailer->getReplyToNameAndAddress($reply_to);
-      $result = $this->mailer->send($email, $subscriber);
+      $extraParams = [
+        'meta' => $this->mailerMetaInfo->getConfirmationMetaInfo($subscriber),
+      ];
+      $result = $this->mailer->send($email, $subscriber, $extraParams);
       if ($result['response'] === false) {
-        $subscriber->setError($result['error'] instanceof MailerError ? $result['error']->getMessage() : 'Unknown Error.');
+        $subscriber->setError(__('Something went wrong with your subscription. Please contact the website owner.', 'mailpoet'));
         return false;
       };
+
+      if (!$this->wp->isUserLoggedIn()) {
+        $subscriber->countConfirmations++;
+        $subscriber->save();
+      }
+      $this->sentEmails[$subscriber->id] = true;
       return true;
     } catch (\Exception $e) {
-      $subscriber->setError($e->getMessage());
+      $subscriber->setError(__('Something went wrong with your subscription. Please contact the website owner.', 'mailpoet'));
       return false;
     }
   }
-
 }

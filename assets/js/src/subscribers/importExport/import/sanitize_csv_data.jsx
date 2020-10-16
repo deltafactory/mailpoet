@@ -3,7 +3,7 @@
 import jQuery from 'jquery';
 import _ from 'underscore';
 
-const isRoleEmail = email => window.roleBasedEmails.findIndex(element => email.startsWith(`${element}@`)) >= 0;
+const isRoleEmail = (email) => window.roleBasedEmails.findIndex((element) => email.startsWith(`${element}@`)) >= 0;
 
 const detectAndCleanupEmail = (emailString) => {
   let test;
@@ -53,7 +53,7 @@ function sanitizeCSVData(csvData) {
   let rowData;
   let rowColumnCount;
   Object.keys(csvData).forEach((rowCount) => {
-    rowData = csvData[rowCount].map(el => el.trim());
+    rowData = csvData[rowCount].map((el) => el.trim());
     rowColumnCount = rowData.length;
     // set the number of row elements based on the first non-empty row
     if (columnCount === null) {
@@ -122,9 +122,9 @@ function sanitizeCSVData(csvData) {
       ) ? processedSubscribers.shift() : null,
       subscribers: processedSubscribers,
       subscribersCount: processedSubscribers.length,
-      duplicate: duplicateEmails,
-      invalid: invalidEmails,
-      role: roleEmails,
+      duplicate: _.uniq(duplicateEmails),
+      invalid: _.uniq(invalidEmails),
+      role: _.uniq(roleEmails),
     };
   }
   return null;

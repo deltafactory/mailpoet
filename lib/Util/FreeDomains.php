@@ -1,4 +1,5 @@
 <?php
+
 namespace MailPoet\Util;
 
 class FreeDomains {
@@ -52,10 +53,9 @@ class FreeDomains {
     'yahoo.com.br', 'hotmail.com.br', 'outlook.com.br', 'uol.com.br', 'bol.com.br', 'terra.com.br', 'ig.com.br', 'itelefonica.com.br', 'r7.com', 'zipmail.com.br', 'globo.com', 'globomail.com', 'oi.com.br',
   ];
 
-  function isEmailOnFreeDomain($email) {
-    $email_parts = explode('@', $email);
-    $domain = end($email_parts);
+  public function isEmailOnFreeDomain($email) {
+    $emailParts = explode('@', $email);
+    $domain = end($emailParts);
     return in_array($domain, self::FREE_DOMAINS);
   }
-
 }

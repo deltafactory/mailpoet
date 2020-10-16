@@ -1,7 +1,8 @@
 const webpack = require('webpack');
 const webpackManifestPlugin = require('webpack-manifest-plugin');
-const webpackCleanPlugin = require('clean-webpack-plugin');
+const { CleanWebpackPlugin } = require('clean-webpack-plugin');
 const webpackTerserPlugin = require('terser-webpack-plugin');
+const webpackCopyPlugin = require('copy-webpack-plugin');
 const path = require('path');
 const globalPrefix = 'MailPoetLib';
 const PRODUCTION_ENV = process.env.NODE_ENV === 'production';
@@ -39,6 +40,7 @@ const baseConfig = {
       'node_modules',
       'assets/js/src',
     ],
+    extensions: ['.js', '.jsx', '.ts', '.tsx'],
     alias: {
       'handlebars': 'handlebars/dist/handlebars.js',
       'backbone.marionette': 'backbone.marionette/lib/backbone.marionette',
@@ -51,21 +53,18 @@ const baseConfig = {
       'papaparse': 'papaparse/papaparse.min.js',
       'html2canvas': 'html2canvas/dist/html2canvas.js',
       'asyncqueue': 'vendor/jquery.asyncqueue.js',
-      'intro.js': 'intro.js/intro.js',
     },
   },
   node: {
     fs: 'empty'
   },
   plugins: [
-    new webpackCleanPlugin([
-      './assets/dist/js/*',
-    ]),
+    new CleanWebpackPlugin(),
   ],
   module: {
     rules: [
       {
-        test: /\.jsx?$/,
+        test: /\.(j|t)sx?$/,
         exclude: /(node_modules|src\/vendor)/,
         loader: 'babel-loader',
       },
@@ -117,79 +116,9 @@ const baseConfig = {
         ],
       },
       {
-        test: /form.jsx/i,
-        use: [
-          'expose-loader?' + globalPrefix + '.Form',
-          'babel-loader'
-        ]
-      },
-      {
-        include: path.resolve(__dirname, 'assets/js/src/newsletters/listings/mixins.jsx'),
-        use: [
-          'expose-loader?' + globalPrefix + '.NewslettersListingsMixins',
-          'babel-loader',
-        ]
-      },
-      {
-        include: path.resolve(__dirname, 'assets/js/src/newsletters/listings/tabs.jsx'),
-        use: [
-          'expose-loader?' + globalPrefix + '.NewslettersListingsTabs',
-          'babel-loader',
-        ]
-      },
-      {
-        include: path.resolve(__dirname, 'assets/js/src/newsletters/listings/heading.jsx'),
-        use: [
-          'expose-loader?' + globalPrefix + '.NewslettersListingsHeading',
-          'babel-loader',
-        ]
-      },
-      {
-        include: path.resolve(__dirname, 'assets/js/src/announcements/feature_announcement.jsx'),
-        use: [
-          'expose-loader?' + globalPrefix + '.FeatureAnnouncement',
-          'babel-loader',
-        ]
-      },
-      {
-        include: path.resolve(__dirname, 'assets/js/src/form/fields/selection.jsx'),
-        use: [
-          'expose-loader?' + globalPrefix + '.FormFieldSelection',
-          'babel-loader',
-        ]
-      },
-      {
-        include: path.resolve(__dirname, 'assets/js/src/form/fields/text.jsx'),
-        use: [
-          'expose-loader?' + globalPrefix + '.FormFieldText',
-          'babel-loader',
-        ]
-      },
-      {
-        include: path.resolve(__dirname, 'assets/js/src/newsletters/scheduling/common.jsx'),
-        use: [
-          'expose-loader?' + globalPrefix + '.NewsletterSchedulingCommonOptions',
-          'babel-loader',
-        ]
-      },
-      {
         include: path.resolve(__dirname, 'assets/js/src/newsletters/badges/stats.jsx'),
         use: [
           'expose-loader?' + globalPrefix + '.StatsBadge',
-          'babel-loader',
-        ]
-      },
-      {
-        include: path.resolve(__dirname, 'assets/js/src/newsletters/breadcrumb.jsx'),
-        use: [
-          'expose-loader?' + globalPrefix + '.NewsletterCreationBreadcrumb',
-          'babel-loader',
-        ]
-      },
-      {
-        include: path.resolve(__dirname, 'assets/js/src/newsletters/types/automatic_emails/events_list.jsx'),
-        use: [
-          'expose-loader?' + globalPrefix + '.AutomaticEmailEventsList',
           'babel-loader',
         ]
       },
@@ -201,9 +130,9 @@ const baseConfig = {
         ]
       },
       {
-        include: path.resolve(__dirname, 'assets/js/src/newsletters/types/automatic_emails/breadcrumb.jsx'),
+        include: path.resolve(__dirname, 'assets/js/src/common/index.ts'),
         use: [
-          'expose-loader?' + globalPrefix + '.AutomaticEmailsBreadcrumb',
+          'expose-loader?' + globalPrefix + '.Common',
           'babel-loader',
         ]
       },
@@ -220,10 +149,6 @@ const baseConfig = {
         loader: 'expose-loader?Handlebars',
       },
       {
-        include: /html2canvas.js$/,
-        loader: 'expose-loader?html2canvas',
-      },
-      {
         include: require.resolve('velocity-animate'),
         loader: 'imports-loader?jQuery=jquery',
       },
@@ -233,6 +158,30 @@ const baseConfig = {
           'expose-loader?' + globalPrefix + '.ClassNames',
           'babel-loader',
         ]
+      },
+      {
+        test: /node_modules\/tinymce/,
+        loader: 'string-replace-loader',
+        options: {
+          // prefix TinyMCE to avoid conflicts with other plugins
+          multiple: [
+            {
+              search: 'window\\.tinymce',
+              replace: 'window.mailpoetTinymce',
+              flags: 'g',
+            },
+            {
+              search: 'tinymce\\.util',
+              replace: 'window.mailpoetTinymce.util',
+              flags: 'g',
+            },
+            {
+              search: 'resolve\\(\'tinymce',
+              replace: 'resolve(\'mailpoetTinymce',
+              flags: 'g',
+            },
+          ],
+        },
       },
     ]
   }
@@ -252,23 +201,25 @@ const adminConfig = {
       'prop-types',
       'classnames',
       'help-tooltip.jsx',
-      'form/form.jsx',
       'listing/listing.jsx',
+      'common/index.ts',
       'newsletters/badges/stats.jsx',
-      'newsletters/breadcrumb.jsx',
-      'newsletters/listings/tabs.jsx',
-      'newsletters/listings/mixins.jsx',
-      'newsletters/listings/heading.jsx',
-      'announcements/feature_announcement.jsx',
-      'announcements/free_plan_announcement.jsx',
-      'newsletters/types/automatic_emails/events_list.jsx',
-      'newsletters/types/automatic_emails/breadcrumb.jsx',
-      'newsletters/types/welcome/scheduling.jsx',
     ],
     admin: 'webpack_admin_index.jsx',
-    form_editor: 'form_editor/webpack_index.jsx',
     newsletter_editor: 'newsletter_editor/webpack_index.jsx',
   },
+  plugins: [
+    ...baseConfig.plugins,
+
+    new webpackCopyPlugin({
+      patterns: [
+        {
+          from: 'node_modules/tinymce/skins/ui/oxide',
+          to: 'skins/ui/oxide'
+        },
+      ],
+    }),
+  ],
   optimization: {
     runtimeChunk: {
       name: 'vendor',
@@ -292,14 +243,14 @@ const adminConfig = {
               return true;
             }
 
-            // add admin/form_editor/newsletter_editor shared modules
+            // add admin/form_editor_legacy/newsletter_editor shared modules
             const filteredChunks = chunks.filter((chunk) => {
-              return ['admin', 'form_editor', 'newsletter_editor'].includes(chunk.name);
+              return ['admin', 'newsletter_editor'].includes(chunk.name);
             });
             return filteredChunks.length > 1;
           },
           enforce: true,
-          chunks: (chunk) => ['admin_vendor', 'admin', 'form_editor', 'newsletter_editor'].includes(chunk.name),
+          chunks: (chunk) => ['admin_vendor', 'admin', 'newsletter_editor'].includes(chunk.name),
           priority: 0,
         },
       }
@@ -307,7 +258,6 @@ const adminConfig = {
   },
   externals: {
     'jquery': 'jQuery',
-    'tinymce': 'tinymce'
   }
 };
 
@@ -345,7 +295,7 @@ const migratorConfig = {
   }
 };
 
-// Test config
+// Newsletter Editor Tests Config
 const testConfig = {
   name: 'test',
   entry: {
@@ -378,7 +328,7 @@ const testConfig = {
     ],
   },
   output: {
-    path: path.join(__dirname, 'tests/javascript/testBundles'),
+    path: path.join(__dirname, 'tests/javascript_newsletter_editor/testBundles'),
     filename: '[name].js',
   },
   plugins: [
@@ -394,7 +344,7 @@ const testConfig = {
     modules: [
       'node_modules',
       'assets/js/src',
-      'tests/javascript/newsletter_editor'
+      'tests/javascript_newsletter_editor/newsletter_editor'
     ],
     alias: {
       'sticky-kit': 'vendor/jquery.sticky-kit.js',
@@ -406,13 +356,54 @@ const testConfig = {
   },
   externals: {
     'jquery': 'jQuery',
-    'tinymce': 'tinymce',
     'interact': 'interact',
     'spectrum': 'spectrum',
-  }
+  },
 };
 
-module.exports = [adminConfig, publicConfig, migratorConfig, testConfig].map((config) => {
+// FormEditor config
+const formEditorConfig = {
+  name: 'form_editor',
+  entry: {
+    form_editor: 'form_editor/form_editor.jsx',
+  },
+  externals: {
+    'jquery': 'jQuery',
+    'mailpoet': 'MailPoet',
+  },
+};
+
+// Form preview config
+const formPreviewConfig = {
+  name: 'form_preview',
+  entry: {
+    form_preview: 'form_editor/form_preview.ts',
+  },
+  externals: {
+    'jquery': 'jQuery',
+  },
+};
+
+// Block config
+const postEditorBlock = {
+  name: 'post_editor_block',
+  entry: {
+    post_editor_block: 'post_editor_block/blocks.jsx',
+  },
+};
+
+// Settings config
+const settingsConfig = {
+  name: 'settings',
+  entry: {
+    settings: 'settings/index.tsx',
+  },
+  externals: {
+    'mailpoet': 'MailPoet',
+  },
+};
+
+module.exports = [adminConfig, publicConfig, migratorConfig, formEditorConfig, formPreviewConfig, testConfig, postEditorBlock, settingsConfig].map((config) => {
   if (config.name !== 'test') {
     config.plugins = config.plugins || [];
     config.plugins.push(

@@ -4,14 +4,15 @@ namespace MailPoet\API\JSON\v1;
 
 use MailPoet\API\JSON\Endpoint as APIEndpoint;
 use MailPoet\API\JSON\Error as APIError;
+use MailPoet\API\JSON\ResponseBuilders\SegmentsResponseBuilder;
 use MailPoet\Config\AccessControl;
+use MailPoet\Entities\SegmentEntity;
 use MailPoet\Listing;
 use MailPoet\Models\Segment;
+use MailPoet\Segments\SegmentsRepository;
 use MailPoet\Segments\WooCommerce;
 use MailPoet\Segments\WP;
 use MailPoet\WP\Functions as WPFunctions;
-
-if (!defined('ABSPATH')) exit;
 
 class Segments extends APIEndpoint {
   public $permissions = [
@@ -19,29 +20,39 @@ class Segments extends APIEndpoint {
   ];
 
   /** @var Listing\BulkActionController */
-  private $bulk_action;
+  private $bulkAction;
 
   /** @var Listing\Handler */
-  private $listing_handler;
+  private $listingHandler;
+
+  /** @var SegmentsRepository */
+  private $segmentsRepository;
+
+  /** @var SegmentsResponseBuilder */
+  private $segmentsResponseBuilder;
 
   /** @var WooCommerce */
-  private $woo_commerce_sync;
+  private $wooCommerceSync;
 
-  function __construct(
-    Listing\BulkActionController $bulk_action,
-    Listing\Handler $listing_handler,
-    WooCommerce $woo_commerce
+  public function __construct(
+    Listing\BulkActionController $bulkAction,
+    Listing\Handler $listingHandler,
+    SegmentsRepository $segmentsRepository,
+    SegmentsResponseBuilder $segmentsResponseBuilder,
+    WooCommerce $wooCommerce
   ) {
-    $this->bulk_action = $bulk_action;
-    $this->listing_handler = $listing_handler;
-    $this->woo_commerce_sync = $woo_commerce;
+    $this->bulkAction = $bulkAction;
+    $this->listingHandler = $listingHandler;
+    $this->wooCommerceSync = $wooCommerce;
+    $this->segmentsRepository = $segmentsRepository;
+    $this->segmentsResponseBuilder = $segmentsResponseBuilder;
   }
 
-  function get($data = []) {
+  public function get($data = []) {
     $id = (isset($data['id']) ? (int)$data['id'] : false);
-    $segment = Segment::findOne($id);
-    if ($segment instanceof Segment) {
-      return $this->successResponse($segment->asArray());
+    $segment = $this->segmentsRepository->findOneById($id);
+    if ($segment instanceof SegmentEntity) {
+      return $this->successResponse($this->segmentsResponseBuilder->build($segment));
     } else {
       return $this->errorResponse([
         APIError::NOT_FOUND => WPFunctions::get()->__('This list does not exist.', 'mailpoet'),
@@ -49,28 +60,29 @@ class Segments extends APIEndpoint {
     }
   }
 
-  function listing($data = []) {
-    $listing_data = $this->listing_handler->get('\MailPoet\Models\Segment', $data);
+  public function listing($data = []) {
+    $listingData = $this->listingHandler->get('\MailPoet\Models\Segment', $data);
 
     $data = [];
-    foreach ($listing_data['items'] as $segment) {
-      $segment->subscribers_url = WPFunctions::get()->adminUrl(
+    foreach ($listingData['items'] as $segment) {
+      $segment->subscribersUrl = WPFunctions::get()->adminUrl(
         'admin.php?page=mailpoet-subscribers#/filter[segment=' . $segment->id . ']'
       );
 
       $data[] = $segment
         ->withSubscribersCount()
+        ->withAutomatedEmailsSubjects()
         ->asArray();
     }
 
     return $this->successResponse($data, [
-      'count' => $listing_data['count'],
-      'filters' => $listing_data['filters'],
-      'groups' => $listing_data['groups'],
+      'count' => $listingData['count'],
+      'filters' => $listingData['filters'],
+      'groups' => $listingData['groups'],
     ]);
   }
 
-  function save($data = []) {
+  public function save($data = []) {
     $segment = Segment::createOrUpdate($data);
     $errors = $segment->getErrors();
 
@@ -85,7 +97,7 @@ class Segments extends APIEndpoint {
     }
   }
 
-  function restore($data = []) {
+  public function restore($data = []) {
     $id = (isset($data['id']) ? (int)$data['id'] : false);
     $segment = Segment::findOne($id);
     if ($segment instanceof Segment) {
@@ -103,7 +115,7 @@ class Segments extends APIEndpoint {
     }
   }
 
-  function trash($data = []) {
+  public function trash($data = []) {
     $id = (isset($data['id']) ? (int)$data['id'] : false);
     $segment = Segment::findOne($id);
     if ($segment instanceof Segment) {
@@ -121,7 +133,7 @@ class Segments extends APIEndpoint {
     }
   }
 
-  function delete($data = []) {
+  public function delete($data = []) {
     $id = (isset($data['id']) ? (int)$data['id'] : false);
     $segment = Segment::findOne($id);
     if ($segment instanceof Segment) {
@@ -134,7 +146,7 @@ class Segments extends APIEndpoint {
     }
   }
 
-  function duplicate($data = []) {
+  public function duplicate($data = []) {
     $id = (isset($data['id']) ? (int)$data['id'] : false);
     $segment = Segment::findOne($id);
 
@@ -162,10 +174,10 @@ class Segments extends APIEndpoint {
     }
   }
 
-  function synchronize($data) {
+  public function synchronize($data) {
     try {
       if ($data['type'] === Segment::TYPE_WC_USERS) {
-        $this->woo_commerce_sync->synchronizeCustomers();
+        $this->wooCommerceSync->synchronizeCustomers();
       } else {
         WP::synchronizeUsers();
       }
@@ -178,9 +190,9 @@ class Segments extends APIEndpoint {
     return $this->successResponse(null);
   }
 
-  function bulkAction($data = []) {
+  public function bulkAction($data = []) {
     try {
-      $meta = $this->bulk_action->apply('\MailPoet\Models\Segment', $data);
+      $meta = $this->bulkAction->apply('\MailPoet\Models\Segment', $data);
       return $this->successResponse(null, $meta);
     } catch (\Exception $e) {
       return $this->errorResponse([

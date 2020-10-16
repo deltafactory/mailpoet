@@ -13,15 +13,26 @@ class SenderField extends React.Component {
   }
 
   onChange(event) {
-    this.setState({ emailAddress: event.target.value });
-    this.props.onValueChange(event);
+    this.setState({ emailAddress: event.target.value.toLowerCase() });
+    this.props.onValueChange({
+      ...event,
+      target: {
+        ...event.target,
+        name: event.target.name,
+        value: event.target.value.toLowerCase(),
+      },
+    });
   }
 
   render() {
     return (
-      <React.Fragment>
+      <>
         <FormFieldText
-          {...this.props}
+          item={{
+            ...this.props.item,
+            sender_address: this.state.emailAddress,
+          }}
+          field={this.props.field}
           onValueChange={this.onChange}
         />
         <div className="regular-text">
@@ -30,12 +41,13 @@ class SenderField extends React.Component {
             mssActive={window.mailpoet_mss_active}
           />
         </div>
-      </React.Fragment>
+      </>
     );
   }
 }
 
 SenderField.propTypes = {
+  field: PropTypes.object.isRequired, // eslint-disable-line react/forbid-prop-types
   item: PropTypes.shape({
     sender_address: PropTypes.string.isRequired,
   }).isRequired,

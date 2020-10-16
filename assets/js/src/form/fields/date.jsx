@@ -1,6 +1,7 @@
 import React from 'react';
 import moment from 'moment';
 import PropTypes from 'prop-types';
+import Select from '../../common/form/select/select';
 
 function FormFieldDateYear(props) {
   const yearsRange = 100;
@@ -24,13 +25,14 @@ function FormFieldDateYear(props) {
     ));
   }
   return (
-    <select
+    <Select
+      isMinWidth
       name={`${props.name}[year]`}
       value={props.year}
       onChange={props.onValueChange}
     >
       { years }
-    </select>
+    </Select>
   );
 }
 
@@ -64,13 +66,14 @@ function FormFieldDateMonth(props) {
     ));
   }
   return (
-    <select
+    <Select
+      isMinWidth
       name={`${props.name}[month]`}
       value={props.month}
       onChange={props.onValueChange}
     >
       { months }
-    </select>
+    </Select>
   );
 }
 
@@ -106,13 +109,14 @@ function FormFieldDateDay(props) {
   }
 
   return (
-    <select
+    <Select
+      isMinWidth
       name={`${props.name}[day]`}
       value={props.day}
       onChange={props.onValueChange}
     >
       { days }
-    </select>
+    </Select>
   );
 }
 
@@ -239,7 +243,11 @@ class FormFieldDate extends React.Component {
     const monthNames = window.mailpoet_month_names || [];
     const dateFormats = window.mailpoet_date_formats || {};
     const dateType = this.props.field.params.date_type;
-    const dateSelects = dateFormats[dateType][0].split('/');
+    let dateFormat = dateFormats[dateType][0];
+    if (this.props.field.params.date_format) {
+      dateFormat = this.props.field.params.date_format;
+    }
+    const dateSelects = dateFormat.split('/');
 
     const fields = dateSelects.map((type) => {
       switch (type) {

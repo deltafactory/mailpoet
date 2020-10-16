@@ -1,9 +1,14 @@
-#!/bin/sh -e
+#!/bin/bash -e
 
 # Translations (npm ci & composer install need to be run before)
-echo '[BUILD] Generating translations'
-./do translations:build
-./do translations:pack
+# On CircleCI (when $CIRCLE_BRANCH is set) build them only on 'release' branch.
+mkdir -p lang
+if [[ -n ${CIRCLE_BRANCH} && ${CIRCLE_BRANCH} != 'release' ]]; then
+  echo '[BUILD] Skipping translations'
+else
+  echo '[BUILD] Generating translations'
+  ./do translations:pack
+fi
 
 plugin_name='mailpoet'
 
@@ -24,8 +29,16 @@ npm ci --prefer-offline
 
 # Dependency injection container cache.
 echo '[BUILD] Building DI Container cache'
-./composer.phar install
+./tools/vendor/composer.phar install
 ./do container:dump
+
+# Generate Doctrine metadata
+echo '[BUILD] Generating Doctrine Metadata'
+./do doctrine:generate-metadata
+
+# Generate Doctrine proxies
+echo '[BUILD] Generating Doctrine Proxies'
+./do doctrine:generate-proxies
 
 # Backup dev libraries
 echo '[BUILD] Backup dev dependencies'
@@ -39,11 +52,16 @@ fi
 # Production libraries.
 echo '[BUILD] Fetching production libraries'
 mkdir vendor-prefixed
-./composer.phar install --no-dev --prefer-dist --optimize-autoloader --no-scripts
+./tools/vendor/composer.phar install --no-dev --prefer-dist --optimize-autoloader --no-scripts
 
 echo '[BUILD] Fetching prefixed production libraries'
-./composer.phar install --prefer-dist --working-dir=./prefixer/
-./composer.phar dump-autoload
+./tools/vendor/composer.phar install --prefer-dist --working-dir=./prefixer/
+
+# Remove Doctrinne Annotations (no need since generated metadata are packed)
+# Should be removed before `dump-autoload` to not include the annotations classes on the autoloader.
+rm -rf vendor-prefixed/doctrine/annotations
+
+./tools/vendor/composer.phar dump-autoload
 
 # Copy release folders.
 echo '[BUILD] Copying release folders'
@@ -51,6 +69,7 @@ cp -Rf lang $plugin_name
 cp -RfL assets $plugin_name
 cp -Rf generated $plugin_name
 cp -Rf lib $plugin_name
+cp -Rf lib-3rd-party $plugin_name
 cp -Rf vendor $plugin_name
 cp -Rf vendor-prefixed $plugin_name
 cp -Rf views $plugin_name
@@ -78,46 +97,45 @@ find $findPreArgs $findDestinations -type f $findMidArgs -iregex ".*\/(readme|li
 find $findPreArgs $findDestinations -type f $findMidArgs -iregex ".*\/(\.editorconfig|\.git.*|\.travis.yml|\.php_cs.*)" -print0 | xargs -0 rm -f
 find $findPreArgs $findDestinations -type d $findMidArgs -iregex ".*\/(docs?|examples?|\.git)" -print0 | xargs -0 rm -rf
 
+# Remove all .gitignore files
+find $findPreArgs $plugin_name -type f $findMidArgs -iregex ".*\/\.gitignore" -print0 | xargs -0 rm -f
+
+# Remove Tracy panels
+rm -rf $plugin_name/lib/Tracy
+
 # Remove unit tests from 3rd party extensions
 echo '[BUILD] Removing unit tests from vendor libraries'
-rm -rf $plugin_name/vendor/cerdic/css-tidy/COPYING
-rm -rf $plugin_name/vendor/cerdic/css-tidy/NEWS
-rm -rf $plugin_name/vendor/cerdic/css-tidy/testing
+rm -rf $plugin_name/vendor-prefixed/cerdic/css-tidy/COPYING
+rm -rf $plugin_name/vendor-prefixed/cerdic/css-tidy/NEWS
+rm -rf $plugin_name/vendor-prefixed/cerdic/css-tidy/testing
 rm -rf $plugin_name/vendor/mtdowling/cron-expression/tests
-rm -rf $plugin_name/vendor/nesbot/Carbon/Laravel
+rm -rf $plugin_name/vendor-prefixed/nesbot/Carbon/Laravel
 rm -rf $plugin_name/vendor/phpmailer/phpmailer/test
-rm -rf $plugin_name/vendor/psr/log/Psr/Log/Test
-rm -rf $plugin_name/vendor/sabberworm/php-css-parser/tests
+rm -rf $plugin_name/vendor-prefixed/psr/log/Psr/Log/Test
+rm -rf $plugin_name/vendor-prefixed/sabberworm/php-css-parser/tests
 rm -rf $plugin_name/vendor/soundasleep/html2text/tests
-rm -rf $plugin_name/vendor/swiftmailer/swiftmailer/tests
-rm -rf $plugin_name/vendor/symfony/translation/Tests
-rm -rf $plugin_name/vendor/twig/twig/test
+rm -rf $plugin_name/vendor-prefixed/swiftmailer/swiftmailer/tests
+rm -rf $plugin_name/vendor-prefixed/symfony/translation/Tests
+rm -rf $plugin_name/vendor-prefixed/twig/twig/test
 
 # Remove risky files from 3rd party extensions
 echo '[BUILD] Removing risky and demo files from vendor libraries'
-rm -f $plugin_name/vendor/j4mie/idiorm/demo.php
-rm -f $plugin_name/vendor/cerdic/css-tidy/css_optimiser.php
-rm -f $plugin_name/assets/js/lib/tinymce/package.json
+rm -f $plugin_name/vendor-prefixed/cerdic/css-tidy/css_optimiser.php
+rm -rf $plugin_name/vendor-prefixed/gregwar/captcha/demo
+rm -rf $plugin_name/vendor-prefixed/gregwar/captcha/src/Gregwar/Captcha/Font/captcha4.ttf # big font
+rm -rf $plugin_name/vendor-prefixed/cerdic/css-tidy/bin
+rm -rf $plugin_name/vendor-prefixed/nesbot/carbon/bin
+rm -rf $plugin_name/vendor-prefixed/nesbot/carbon/src/Carbon/Laravel
+rm -f $plugin_name/vendor-prefixed/egulias/email-validator/psalm*.xml
 
-# Remove unused TinyMCE files
-echo '[BUILD] Removing unused TinyMCE files'
-rm -f $plugin_name/assets/js/lib/tinymce/bower.json
-rm -f $plugin_name/assets/js/lib/tinymce/changelog.txt
-rm -f $plugin_name/assets/js/lib/tinymce/composer.json
-rm -f $plugin_name/assets/js/lib/tinymce/jquery.tinymce.js
-rm -f $plugin_name/assets/js/lib/tinymce/license.txt
-rm -f $plugin_name/assets/js/lib/tinymce/package.json
-rm -f $plugin_name/assets/js/lib/tinymce/readme.md
-rm -f $plugin_name/assets/js/lib/tinymce/tinymce.js
-rm -f $plugin_name/assets/js/lib/tinymce/tinymce.jquery.js
-rm -f $plugin_name/assets/js/lib/tinymce/tinymce.jquery.min.js
-
-# Remove all TinyMCE plugins except code, link, lists, paste, textcolor, and colorpicker
-find $findPreArgs $plugin_name/assets/js/lib/tinymce/plugins -mindepth 1 -type d $findMidArgs -not -iregex ".*\/(code|link|lists|paste|textcolor|colorpicker)" -print0 | xargs -0 rm -rf
-
-# Remove all non-minimized TinyMCE plugin & theme files
-rm -rf $plugin_name/assets/js/lib/tinymce/plugins/*/plugin.js
-rm -rf $plugin_name/assets/js/lib/tinymce/themes/*/theme.js
+# Remove DI Container files
+echo '[BUILD] Removing DI Container development dependencies'
+rm -rf $plugin_name/vendor-prefixed/symfony/dependency-injection/Compiler
+rm -rf $plugin_name/vendor-prefixed/symfony/dependency-injection/Config
+rm -rf $plugin_name/vendor-prefixed/symfony/dependency-injection/Dumper
+rm -rf $plugin_name/vendor-prefixed/symfony/dependency-injection/Loader
+rm -rf $plugin_name/vendor-prefixed/symfony/dependency-injection/LazyProxy
+rm -rf $plugin_name/vendor-prefixed/symfony/dependency-injection/Extension
 
 # Copy release files.
 echo '[BUILD] Copying release files'
@@ -129,9 +147,22 @@ cp mailpoet_initializer.php $plugin_name
 cp readme.txt $plugin_name
 cp uninstall.php $plugin_name
 
-# Add index files if they don't exist to all folders
-echo '[BUILD] Adding index files to all project folders'
-find $plugin_name -type d -exec touch {}/index.php \;
+# Prefix all PHP files with "<?php if (!defined('ABSPATH')) exit; ?>"
+echo '[BUILD] Adding ABSPATH ensuring prefix to all PHP files (to avoid path disclosure)'
+php "$(dirname "$0")"/tasks/fix-full-path-disclosure.php $plugin_name
+
+# Add index.php files if they don't exist to all folders
+echo '[BUILD] Adding index.php files to all project folders (to avoid directory listing disclosure)'
+find $plugin_name -type d -print0 | while read -d $'\0' dir; do
+  if [ ! -f "$dir/Index.php" ]; then
+    touch "$dir/index.php"
+  fi
+done
+
+# Strip whitespaces and comments from PHP files in vendor and vendor prefixed folders
+echo '[BUILD] Strip whitespaces and comments from PHP files in vendor folder'
+php "$(dirname "$0")"/tasks/strip-whitespaces.php $plugin_name/vendor
+php "$(dirname "$0")"/tasks/strip-whitespaces.php $plugin_name/vendor-prefixed
 
 # Zip final release.
 echo '[BUILD] Creating final release zip'

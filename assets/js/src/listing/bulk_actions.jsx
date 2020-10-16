@@ -5,19 +5,16 @@ import PropTypes from 'prop-types';
 class ListingBulkActions extends React.Component {
   constructor(props) {
     super(props);
-    this.myRef = React.createRef();
     this.state = {
-      action: false,
       extra: false,
     };
     this.handleApplyAction = this.handleApplyAction.bind(this);
-    this.handleChangeAction = this.handleChangeAction.bind(this);
   }
 
-  getSelectedAction() {
-    const selectedAction = this.myRef.current.value;
+  getSelectedAction(actionName) {
+    const selectedAction = actionName;
     if (selectedAction.length > 0) {
-      const action = this.props.bulk_actions.filter(act => (act.name === selectedAction));
+      const action = this.props.bulk_actions.filter((act) => (act.name === selectedAction));
 
       if (action.length > 0) {
         return action[0];
@@ -26,12 +23,20 @@ class ListingBulkActions extends React.Component {
     return null;
   }
 
-  handleApplyAction(e) {
-    e.preventDefault();
-
-    const action = this.getSelectedAction();
+  handleApplyAction(actionName) {
+    const action = this.getSelectedAction(actionName);
 
     if (action === null) {
+      return;
+    }
+
+    // action on select callback
+    if (action.onSelect !== undefined && !this.state.extra) {
+      const submitModal = () => this.handleApplyAction(actionName);
+      const closeModal = () => this.setState({ extra: false });
+      this.setState({
+        extra: action.onSelect(submitModal, closeModal),
+      });
       return;
     }
 
@@ -43,7 +48,7 @@ class ListingBulkActions extends React.Component {
       ? action.getData()
       : {};
 
-    data.action = this.state.action;
+    data.action = action.name;
 
     let onSuccess = () => {};
     if (action.onSuccess !== undefined) {
@@ -58,24 +63,7 @@ class ListingBulkActions extends React.Component {
     }
 
     this.setState({
-      action: false,
       extra: false,
-    });
-  }
-
-  handleChangeAction(e) {
-    this.setState({
-      action: e.target.value,
-      extra: false,
-    }, () => {
-      const action = this.getSelectedAction();
-
-      // action on select callback
-      if (action !== null && action.onSelect !== undefined) {
-        this.setState({
-          extra: action.onSelect(e),
-        });
-      }
     });
   }
 
@@ -85,36 +73,25 @@ class ListingBulkActions extends React.Component {
     }
 
     return (
-      <div className="alignleft actions bulkactions">
-        <label
-          className="screen-reader-text"
-          htmlFor="bulk_actions"
-        >
+      <div className="mailpoet-listing-bulk-actions">
+        <span className="screen-reader-text">
           {MailPoet.I18n.t('selectBulkAction')}
-        </label>
+        </span>
 
-        <select
-          name="bulk_actions"
-          ref={this.myRef}
-          value={this.state.action}
-          onChange={this.handleChangeAction}
-        >
-          <option value="">{MailPoet.I18n.t('bulkActions')}</option>
-          { this.props.bulk_actions.map(action => (
-            <option
-              value={action.name}
+        <div>
+          { this.props.bulk_actions.map((action) => (
+            <a
+              href="#"
               key={`action-${action.name}`}
+              onClick={(e) => {
+                e.preventDefault();
+                return this.handleApplyAction(action.name);
+              }}
             >
               { action.label }
-            </option>
+            </a>
           )) }
-        </select>
-        <input
-          onClick={this.handleApplyAction}
-          type="submit"
-          value={MailPoet.I18n.t('apply')}
-          className="button action"
-        />
+        </div>
 
         { this.state.extra }
       </div>

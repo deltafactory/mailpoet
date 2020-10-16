@@ -2,9 +2,8 @@
 
 namespace MailPoet\Models;
 
+use MailPoet\Util\Helpers;
 use MailPoet\WP\Functions as WPFunctions;
-
-if (!defined('ABSPATH')) exit;
 
 /**
  * @method static array|string getConfig($key = null, $connection_name = self::DEFAULT_CONNECTION)
@@ -20,11 +19,11 @@ if (!defined('ABSPATH')) exit;
  * @method static array getQueryLog($connection_name = self::DEFAULT_CONNECTION)
  * @method array getConnectionNames()
  * @method $this useIdColumn($id_column)
- * @method $this|bool findOne($id=null)
- * @method static static|bool findOne($id=null)
+ * @method $this|false findOne($id=null)
+ * @method static static|false findOne($id=null)
  * @method array findMany()
  * @method static array findMany()
- * @method \IdiormResultSet findResultSet()
+ * @method \MailPoetVendor\Idiorm\IdiormResultSet findResultSet()
  * @method array findArray()
  * @method static array findArray()
  * @method $this forceAllDirty()
@@ -56,12 +55,14 @@ if (!defined('ABSPATH')) exit;
  * @method static $this whereNotEqual($column_name, $value=null)
  * @method $this whereIdIs($id)
  * @method $this whereAnyIs($values, $operator='=')
+ * @method static $this whereAnyIs($values, $operator='=')
  * @method $this whereIdIn($ids)
  * @method static static whereIdIn($ids)
  * @method $this whereLike($column_name, $value=null)
  * @method static $this whereLike($column_name, $value=null)
  * @method $this whereNotLike($column_name, $value=null)
  * @method $this whereGt($column_name, $value=null)
+ * @method static $this whereGt($column_name, $value=null)
  * @method static $this whereLt($column_name, $value=null)
  * @method $this whereGte($column_name, $value=null)
  * @method $this whereLte($column_name, $value=null)
@@ -70,12 +71,13 @@ if (!defined('ABSPATH')) exit;
  * @method $this whereNotIn($column_name, $values)
  * @method static $this whereNotIn($column_name, $values)
  * @method $this whereNull($column_name)
- * @method static $this whereNull($column_name)
+ * @method static static whereNull($column_name)
  * @method $this whereNotNull($column_name)
  * @method static $this whereNotNull($column_name)
  * @method $this whereRaw($clause, $parameters=array())
  * @method static $this whereRaw($clause, $parameters=array())
  * @method $this deleteMany()
+ * @method static $this deleteMany()
  * @method $this orderByDesc($column_name)
  * @method static $this orderByDesc($column_name)
  * @method $this orderByAsc($column_name)
@@ -101,6 +103,7 @@ if (!defined('ABSPATH')) exit;
  * @method bool setExpr($key, $value = null)
  * @method bool isDirty($key)
  * @method static static filter(...$args)
+ * @method array asArray(...$args)
  * @method $this hasMany($associated_class_name, $foreign_key_name=null, $foreign_key_name_in_current_models_table=null, $connection_name=null)
  * @method $this hasManyThrough($associated_class_name, $join_class_name=null, $key_to_base_table=null, $key_to_associated_table=null,  $key_in_base_table=null, $key_in_associated_table=null, $connection_name=null)
  * @method mixed hasOne($associated_class_name, $foreign_key_name=null, $foreign_key_name_in_current_models_table=null, $connection_name=null)
@@ -108,30 +111,47 @@ if (!defined('ABSPATH')) exit;
  * @method static $this|bool create($data=null)
  * @method int count()
  * @method static int count()
+ * @method int sum($column_name)
+ * @method int min($column_name)
+ * @method int max($column_name)
+ * @method int avg($column_name)
+ * @method static int sum($column_name)
+ * @method static int min($column_name)
+ * @method static int max($column_name)
+ * @method static int avg($column_name)
  * @method static static limit(int $limit)
  * @method static static distinct()
  * @method $this set(string|array $key, string|null $value = null)
  *
- * @property string|null $created_at
- * @property string|null $updated_at
+ * @property string|null $createdAt
+ * @property string|null $updatedAt
  * @property string|null $id
+ * @property string|null $first
+ * @property string|null $last
  */
 
-class Model extends \Sudzy\ValidModel {
+class Model extends \MailPoetVendor\Sudzy\ValidModel {
   const DUPLICATE_RECORD = 23000;
 
-  public static $_table;
-  protected $_errors;
-  protected $_new_record;
+  public static $_table; // phpcs:ignore PSR2.Classes.PropertyDeclaration
+  protected $_errors; // phpcs:ignore PSR2.Classes.PropertyDeclaration
+  protected $newRecord;
 
-  function __construct() {
+  public function __construct() {
     $this->_errors = [];
     $validator = new ModelValidator();
     parent::__construct($validator);
   }
 
-  static function create() {
-    return parent::create();
+  /**
+   * @return static
+   */
+  public static function create() {
+    $created = parent::create();
+    if (is_bool($created)) {
+      throw new \Exception('ORM is not initialised');
+    }
+    return $created;
   }
 
   /**
@@ -140,7 +160,7 @@ class Model extends \Sudzy\ValidModel {
    * given, it's used to transform `$data` before creating the new row.
    *
    * @param  array   $data
-   * @param  array|boolean $keys
+   * @param array|bool $keys
    * @param  callable|bool $onCreate
    * @return self
    */
@@ -180,7 +200,7 @@ class Model extends \Sudzy\ValidModel {
     return self::_createOrUpdate($data);
   }
 
-  function getErrors() {
+  public function getErrors() {
     if (empty($this->_errors)) {
       return false;
     } else {
@@ -188,31 +208,35 @@ class Model extends \Sudzy\ValidModel {
     }
   }
 
-  function setError($error = '', $error_code = null) {
-    if (!$error_code) {
-      $error_code = count($this->_errors);
+  public function setError($error = '', $errorCode = null) {
+    if (!$errorCode) {
+      $errorCode = count($this->_errors);
     }
     if (!empty($error)) {
       if (is_array($error)) {
         $this->_errors = array_merge($this->_errors, $error);
         $this->_errors = array_unique($this->_errors);
       } else {
-        $this->_errors[$error_code] = $error;
+        $this->_errors[$errorCode] = $error;
       }
     }
   }
 
-  function save() {
+  /**
+   * @return static
+   * @phpstan-ignore-next-line Our Model has incompatible return type with parent
+   */
+  public function save() {
     $this->setTimestamp();
-    $this->_new_record = $this->isNew();
+    $this->newRecord = $this->isNew();
     try {
       parent::save();
-    } catch (\Sudzy\ValidationException $e) {
+    } catch (\MailPoetVendor\Sudzy\ValidationException $e) {
       $this->setError($e->getValidationErrors());
     } catch (\PDOException $e) {
       switch ($e->getCode()) {
         case 23000:
-          preg_match("/for key \'(.*?)\'/i", $e->getMessage(), $matches);
+          preg_match("/for key '(?:.*\.)*(.*?)'/i", $e->getMessage(), $matches);
           if (isset($matches[1])) {
             $column = $matches[1];
             $this->setError(
@@ -233,17 +257,17 @@ class Model extends \Sudzy\ValidModel {
     return $this;
   }
 
-  function isNew() {
-    return (isset($this->_new_record)) ?
-      $this->_new_record :
+  public function isNew() {
+    return (isset($this->newRecord)) ?
+      $this->newRecord :
       parent::isNew();
   }
 
-  function trash() {
+  public function trash() {
     return $this->set_expr('deleted_at', 'NOW()')->save();
   }
 
-  static function bulkTrash($orm) {
+  public static function bulkTrash($orm) {
     $model = get_called_class();
     $count = self::bulkAction($orm, function($ids) use ($model) {
       $model::rawExecute(join(' ', [
@@ -256,7 +280,7 @@ class Model extends \Sudzy\ValidModel {
     return ['count' => $count];
   }
 
-  static function bulkDelete($orm) {
+  public static function bulkDelete($orm) {
     $model = get_called_class();
     $count = self::bulkAction($orm, function($ids) use ($model) {
       $model::whereIn('id', $ids)->deleteMany();
@@ -265,11 +289,11 @@ class Model extends \Sudzy\ValidModel {
     return ['count' => $count];
   }
 
-  function restore() {
+  public function restore() {
     return $this->set_expr('deleted_at', 'NULL')->save();
   }
 
-  static function bulkRestore($orm) {
+  public static function bulkRestore($orm) {
     $model = get_called_class();
     $count = self::bulkAction($orm, function($ids) use ($model) {
       $model::rawExecute(join(' ', [
@@ -282,7 +306,7 @@ class Model extends \Sudzy\ValidModel {
     return ['count' => $count];
   }
 
-  static function bulkAction($orm, $callback = false) {
+  public static function bulkAction($orm, $callback = false) {
     $total = $orm->count();
 
     if ($total === 0) return false;
@@ -305,16 +329,16 @@ class Model extends \Sudzy\ValidModel {
       ->rowCount();
   }
 
-  function duplicate($data = []) {
+  public function duplicate($data = []) {
     $model = get_called_class();
-    $model_data = array_merge($this->asArray(), $data);
-    unset($model_data['id']);
+    $modelData = array_merge($this->asArray(), $data);
+    unset($modelData['id']);
 
     $duplicate = $model::create();
-    $duplicate->hydrate($model_data);
+    $duplicate->hydrate($modelData);
     $duplicate->set_expr('created_at', 'NOW()');
     $duplicate->set_expr('updated_at', 'NOW()');
-    if (isset($model_data['deleted_at'])) {
+    if (isset($modelData['deleted_at'])) {
       $duplicate->set_expr('deleted_at', 'NULL');
     }
 
@@ -322,17 +346,17 @@ class Model extends \Sudzy\ValidModel {
     return $duplicate;
   }
 
-  function setTimestamp() {
-    if ($this->created_at === null) {
+  public function setTimestamp() {
+    if ($this->createdAt === null) {
       $this->set_expr('created_at', 'NOW()');
     }
   }
 
-  static function getPublished() {
+  public static function getPublished() {
     return static::whereNull('deleted_at');
   }
 
-  static function getTrashed() {
+  public static function getTrashed() {
     return static::whereNotNull('deleted_at');
   }
 
@@ -354,5 +378,24 @@ class Model extends \Sudzy\ValidModel {
     }
     $this->setError($this->getValidationErrors());
     return $success;
+  }
+
+  public function __get($name) {
+    $value = parent::__get($name);
+    if ($value !== null) {
+      return $value;
+    }
+    $name = Helpers::camelCaseToUnderscore($name);
+    return parent::__get($name);
+  }
+
+  public function __set($name, $value) {
+    $name = Helpers::camelCaseToUnderscore($name);
+    parent::__set($name, $value);
+  }
+
+  public function __isset($name) {
+    $name = Helpers::camelCaseToUnderscore($name);
+    return parent::__isset($name);
   }
 }

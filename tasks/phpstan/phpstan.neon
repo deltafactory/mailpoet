@@ -1,13 +1,47 @@
 parameters:
+  level: 8
   tmpDir: ../../temp/phpstan
-  bootstrap: bootstrap.php
+  bootstrapFiles:
+    - ../../vendor/autoload.php
+    - bootstrap.php
+  inferPrivatePropertyTypeFromConstructor: true
+  parallel:
+    processTimeout: 300.0
   ignoreErrors:
     - '#Function members_register_.+ not found#'
+    - '#Cannot assign offset .path. to array<string, int\|string>\|false.#' # bug https://github.com/phpstan/phpstan/issues/1791
     - '#MailPoet\\Premium\\DI\\ContainerConfigurator not found#' # this class is not available when premium is not active
-    - '#Call to an undefined method IdiormResultSet::set()#'
+    - '#Call to an undefined method MailPoetVendor\\Idiorm\\IdiormResultSet::set\(\)#'
     - '#Argument of an invalid type pQuery\\IQuery supplied for foreach, only iterables are supported#'
     - '#Parameter \#2 \$prefix of function http_build_query expects string, null given.#'
-    - '#Parameter \#1 \$function of function call_user_func_array expects callable(): mixed, .wc_.*. given.#'
+    - '#Parameter \#1 \$function of function call_user_func_array expects callable\(\): mixed, .wc_.*. given.#'
+    - '#Parameter \#1 \$reader of class MailPoetVendor\\Doctrine\\ORM\\Mapping\\Driver\\AnnotationDriver constructor expects MailPoetVendor\\Doctrine\\Common\\Annotations\\AnnotationReader, MailPoetVendor\\Doctrine\\Common\\Annotations\\CachedReader given#'
+    - '#Parameter \#3 \$type of method MailPoetVendor\\Doctrine\\DBAL\\Query\\QueryBuilder::setParameter\(\) expects string\|null, int given\.#' # Doctrine 2.5 has incorrect annotation https://github.com/doctrine/dbal/blob/2.5/lib/Doctrine/DBAL/Query/QueryBuilder.php#L267
+    - '/(with|has) no (return )?typehint specified/' # exclude level 6 errors
+    - # Primary keys ScheduledTaskSubscriberEntity of are foreign keys and foreign keys may be null because of missing related record
+      message: '#Property MailPoet\\Entities\\[a-zA-Z]+::\$[a-z]+ type mapping mismatch: property can contain MailPoet\\Entities\\[a-zA-Z]+\|null but database expects MailPoet\\Entities\\[a-zA-Z]+.#'
+      path: ../../lib/Entities/ScheduledTaskSubscriberEntity.php
+      count: 2
+
+   # Doctrine repository annotates return values as object|null, we override them to specific generics (T|null)
+    - '#Method MailPoet\\Doctrine\\Repository::findOneBy(Id)?\(\) should return T of object\|null but returns object\|null\.#'
   reportUnmatchedIgnoredErrors: false
   dynamicConstantNames:
     - WP_DEBUG
+    - MAILPOET_PREMIUM_INITIALIZED
+  doctrine:
+    objectManagerLoader: create-entity-manager.php
+
+  # exclude level 6 errors
+  checkGenericClassInNonGenericObjectType: false
+  checkMissingIterableValueType: false
+  checkMissingVarTagTypehint: false
+  checkMissingTypehints: false
+
+  # analysis of templates is extremely slow, let's skip them for now
+  excludes_analyse:
+    - ../../lib/Config/PopulatorData/Templates
+includes:
+  - vendor/phpstan/phpstan-doctrine/extension.neon
+  - vendor/phpstan/phpstan-doctrine/rules.neon
+  - phpstan-baseline.neon # https://medium.com/@ondrejmirtes/phpstans-baseline-feature-lets-you-hold-new-code-to-a-higher-standard-e77d815a5dff

@@ -1,10 +1,24 @@
 {
   "require": {
-    "php": ">=5.6",
-    "symfony/dependency-injection": "3.4.26",
+    "php": ">=7.1",
+    "cerdic/css-tidy": "^1.7",
+    "doctrine/common": "3.0.2",
+    "doctrine/dbal": "2.9.3",
+    "doctrine/orm": "2.7.3",
+    "gregwar/captcha": "^1.1",
     "monolog/monolog": "^1.23",
+    "nesbot/carbon": "1.39.1",
     "sabberworm/php-css-parser": "^8.1",
-    "twig/twig": "1.38.4"
+    "swiftmailer/swiftmailer": "6.2.3",
+    "symfony/dependency-injection": "3.4.43",
+    "symfony/polyfill-ctype": "1.18.1",
+    "symfony/polyfill-iconv": "1.18.1",
+    "symfony/polyfill-intl-idn": "1.18.1",
+    "symfony/polyfill-mbstring": "1.18.1",
+    "symfony/polyfill-intl-normalizer": "1.18.1",
+    "symfony/polyfill-php72": "1.18.1",
+    "symfony/validator": "3.4.43",
+    "twig/twig": "2.12.5"
   },
   "scripts": {
     "post-update-cmd": "@process",
@@ -12,14 +26,20 @@
     "process": [
       "rm -rf ../vendor-prefixed",
       "mkdir ../vendor-prefixed",
-      "../php-scoper.phar add-prefix",
+      "php -d memory_limit=2G ../tools/vendor/php-scoper.phar add-prefix",
       "mv ./build/* ../vendor-prefixed",
-      "php fix-twig.php"
+      "php fix-twig.php",
+      "php fix-doctrine.php",
+      "php fix-swiftmailer.php",
+      "php fix-validator.php",
+      "php fix-monolog.php",
+      "php fix-symfony-polyfill.php"
     ]
   },
   "config": {
     "platform": {
-      "php": "5.6"
-    }
+      "php": "7.1.0"
+    },
+    "sort-packages": true
   }
 }

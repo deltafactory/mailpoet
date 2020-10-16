@@ -2,51 +2,77 @@ import PropTypes from 'prop-types';
 import React from 'react';
 import MailPoet from 'mailpoet';
 import jQuery from 'jquery';
+import Button from '../../common/button/button';
+import Grid from '../../common/grid';
+import Heading from '../../common/typography/heading/heading';
+import Input from '../../common/form/input/input';
 
-const WelcomeWizardSenderStep = props => (
-  <div className="mailpoet_welcome_wizard_step_content">
-    <h1>{MailPoet.I18n.t('welcomeWizardLetsStartTitle')}</h1>
+const WelcomeWizardSenderStep = (props) => (
+  <>
+    <Heading level={1}>{MailPoet.I18n.t('welcomeWizardLetsStartTitle')}</Heading>
+
+    <div className="mailpoet-gap" />
     <p>{MailPoet.I18n.t('welcomeWizardSenderText')}</p>
+    <div className="mailpoet-gap" />
+
     <form
       id="mailpoet_sender_form"
-      className={props.loading ? 'mailpoet_sender_form_loading' : ''}
       onSubmit={(e) => {
         e.preventDefault();
         if (!jQuery('#mailpoet_sender_form').parsley().validate()) { return; }
         props.submit_sender();
       }}
     >
-      <label htmlFor="senderName">
-        {MailPoet.I18n.t('senderName')}
-        :
-        <input
-          name="senderName"
-          type="text"
-          placeholder="John Doe"
-          value={props.sender ? props.sender.name : ''}
-          data-parsley-required
-          onChange={e => props.update_sender({ name: e.target.value })}
-        />
-      </label>
-      <label htmlFor="senderAddress">
-        {MailPoet.I18n.t('senderAddress')}
-        :
-        <input
-          name="senderAddress"
-          type="text"
-          placeholder="john@doe.com"
-          value={props.sender ? props.sender.address : ''}
-          data-parsley-required
-          data-parsley-type="email"
-          onChange={e => props.update_sender({ address: e.target.value })}
-        />
-      </label>
-      <div className="mailpoet_welcome_wizard_step_controls">
-        <input className="button button-primary" type="submit" value={MailPoet.I18n.t('next')} />
-      </div>
-      <a onClick={props.finish} href="#finish" className="sender_form_small">{MailPoet.I18n.t('noThanksSkip')}</a>
+      <Grid.TwoColumns>
+        <label htmlFor="senderName">
+          <span className="mailpoet-wizard-label">{MailPoet.I18n.t('senderName')}</span>
+          <Input
+            isFullWidth
+            name="senderName"
+            type="text"
+            placeholder="John Doe"
+            value={props.sender ? props.sender.name : ''}
+            data-parsley-required
+            onChange={(e) => props.update_sender({ name: e.target.value })}
+          />
+        </label>
+
+        <label htmlFor="senderAddress">
+          <span className="mailpoet-wizard-label">{MailPoet.I18n.t('senderAddress')}</span>
+          <Input
+            isFullWidth
+            name="senderAddress"
+            type="text"
+            placeholder="john@doe.com"
+            value={props.sender ? props.sender.address : ''}
+            data-parsley-required
+            data-parsley-type="email"
+            onChange={(e) => props.update_sender({ address: e.target.value })}
+          />
+        </label>
+      </Grid.TwoColumns>
+
+      <div className="mailpoet-gap" />
+      <div className="mailpoet-gap" />
+
+      <Button
+        isFullWidth
+        type="submit"
+        withSpinner={props.loading}
+      >
+        {MailPoet.I18n.t('continue')}
+      </Button>
+      <Button
+        href="#finish"
+        isDisabled={props.loading}
+        isFullWidth
+        onClick={props.finish}
+        variant="link"
+      >
+        {MailPoet.I18n.t('finishLater')}
+      </Button>
     </form>
-  </div>
+  </>
 );
 
 WelcomeWizardSenderStep.propTypes = {

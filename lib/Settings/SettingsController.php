@@ -1,9 +1,9 @@
 <?php
+
 namespace MailPoet\Settings;
 
 use MailPoet\Cron\CronTrigger;
-use MailPoet\Models\Setting;
-use MailPoet\Util\Helpers;
+use MailPoet\DI\ContainerWrapper;
 use MailPoet\WP\Functions as WPFunctions;
 
 class SettingsController {
@@ -14,22 +14,31 @@ class SettingsController {
   const DEFAULT_SENDING_FREQUENCY_INTERVAL = 5; // in minutes
   const DEFAULT_DEACTIVATE_SUBSCRIBER_AFTER_INACTIVE_DAYS = 180;
 
-  private static $loaded = false;
+  private $loaded = false;
 
-  private static $settings = [];
+  private $settings = [];
 
   private $defaults = null;
 
-  function get($key, $default = null) {
+  /** @var SettingsRepository */
+  private $settingsRepository;
+
+  private static $instance;
+
+  public function __construct(SettingsRepository $settingsRepository) {
+    $this->settingsRepository = $settingsRepository;
+  }
+
+  public function get($key, $default = null) {
     $this->ensureLoaded();
-    $key_parts = explode('.', $key);
-    $setting = self::$settings;
+    $keyParts = explode('.', $key);
+    $setting = $this->settings;
     if ($default === null) {
-      $default = $this->getDefaultValue($key_parts);
+      $default = $this->getDefaultValue($keyParts);
     }
-    foreach ($key_parts as $key_part) {
-      if (is_array($setting) && array_key_exists($key_part, $setting)) {
-        $setting = $setting[$key_part];
+    foreach ($keyParts as $keyPart) {
+      if (is_array($setting) && array_key_exists($keyPart, $setting)) {
+        $setting = $setting[$keyPart];
       } else {
         return $default;
       }
@@ -40,7 +49,7 @@ class SettingsController {
     return $setting;
   }
 
-  function getAllDefaults() {
+  public function getAllDefaults() {
     if ($this->defaults === null) {
       $this->defaults = [
         'mta_group' => self::DEFAULT_SENDING_METHOD_GROUP,
@@ -57,7 +66,7 @@ class SettingsController {
         'signup_confirmation' => [
           'enabled' => true,
           'subject' => sprintf(__('Confirm your subscription to %1$s', 'mailpoet'), WPFunctions::get()->getOption('blogname')),
-          'body' => WPFunctions::get()->__("Hello,\n\nWelcome to our newsletter!\n\nPlease confirm your subscription to the list(s): [lists_to_confirm] by clicking the link below: \n\n[activation_link]Click here to confirm your subscription.[/activation_link]\n\nThank you,\n\nThe Team", 'mailpoet'),
+          'body' => WPFunctions::get()->__("Hello,\n\nWelcome to our newsletter!\n\nPlease confirm your subscription to our list by clicking the link below: \n\n[activation_link]I confirm my subscription![/activation_link]\n\nThank you,\n\nThe Team", 'mailpoet'),
         ],
         'tracking' => [
           'enabled' => true,
@@ -76,45 +85,53 @@ class SettingsController {
    * Fetches the value from DB and update in cache
    * This is required for sync settings between parallel processes e.g. cron
    */
-  function fetch($key, $default = null) {
+  public function fetch($key, $default = null) {
     $keys = explode('.', $key);
-    $main_key = $keys[0];
-    self::$settings[$main_key] = $this->fetchValue($main_key);
+    $mainKey = $keys[0];
+    $this->settings[$mainKey] = $this->fetchValue($mainKey);
     return $this->get($key, $default);
   }
 
-  function getAll() {
+  public function getAll() {
     $this->ensureLoaded();
-    return array_replace_recursive($this->getAllDefaults(), self::$settings);
+    return array_replace_recursive($this->getAllDefaults(), $this->settings);
   }
 
-  function set($key, $value) {
+  public function set($key, $value) {
     $this->ensureLoaded();
-    $key_parts = explode('.', $key);
-    $main_key = $key_parts[0];
-    $last_key = array_pop($key_parts);
-    $setting =& self::$settings;
-    foreach ($key_parts as $key_part) {
-      $setting =& $setting[$key_part];
+    $keyParts = explode('.', $key);
+    $mainKey = $keyParts[0];
+    $lastKey = array_pop($keyParts);
+    $setting =& $this->settings;
+    foreach ($keyParts as $keyPart) {
+      $setting =& $setting[$keyPart];
       if (!is_array($setting)) {
         $setting = [];
       }
     }
-    $setting[$last_key] = $value;
-    $this->saveValue($main_key, self::$settings[$main_key]);
+    $setting[$lastKey] = $value;
+    $this->settingsRepository->createOrUpdateByName($mainKey, $this->settings[$mainKey]);
   }
 
-  function delete($key) {
-    Setting::deleteValue($key);
-    unset(self::$settings[$key]);
+  public function delete($key) {
+    $setting = $this->settingsRepository->findOneByName($key);
+    if ($setting) {
+      $this->settingsRepository->remove($setting);
+      $this->settingsRepository->flush();
+    }
+    unset($this->settings[$key]);
   }
 
   private function ensureLoaded() {
-    if (self::$loaded) {
+    if ($this->loaded) {
       return;
     }
-    self::$settings = Setting::getAll() ?: [];
-    self::$loaded = true;
+
+    $this->settings = [];
+    foreach ($this->settingsRepository->findAll() as $setting) {
+      $this->settings[$setting->getName()] = $setting->getValue();
+    }
+    $this->loaded = true;
   }
 
   private function getDefaultValue($keys) {
@@ -130,37 +147,22 @@ class SettingsController {
   }
 
   private function fetchValue($key) {
-    $setting = Setting::where('name', $key)->findOne();
-    if (!$setting instanceof Setting) {
-      return null;
-    }
-    if (is_serialized($setting->value)) {
-      return unserialize($setting->value);
-    } else {
-      return $setting->value;
-    }
+    $setting = $this->settingsRepository->findOneByName($key);
+    return $setting ? $setting->getValue() : null;
   }
 
-  private function saveValue($key, $value) {
-    $value = Helpers::recursiveTrim($value);
-    if (is_array($value)) {
-      $value = serialize($value);
-    }
-
-    $setting = Setting::createOrUpdate([
-      'name' => $key,
-      'value' => $value,
-    ]);
-    return ($setting->id() > 0 && $setting->getErrors() === false);
+  public function resetCache() {
+    $this->settings = [];
+    $this->loaded = false;
   }
 
-  /**
-   * Temporary function for tests use only.
-   * It is needed until this is only instantiated in one place (DI Container)
-   * Once this is achieved we can make properties not static and remove this method
-   */
-  static function resetCache() {
-    self::$settings = [];
-    self::$loaded = false;
+  public static function setInstance($instance) {
+    self::$instance = $instance;
+  }
+
+  /** @return SettingsController */
+  public static function getInstance() {
+    if (isset(self::$instance)) return self::$instance;
+    return ContainerWrapper::getInstance()->get(SettingsController::class);
   }
 }

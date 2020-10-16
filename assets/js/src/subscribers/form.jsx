@@ -1,9 +1,11 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useHistory } from 'react-router-dom';
 import MailPoet from 'mailpoet';
+import moment from 'moment';
 import PropTypes from 'prop-types';
 import Form from 'form/form.jsx';
 import ReactStringReplace from 'react-string-replace';
+import SubscribersLimitNotice from 'notices/subscribers_limit_notice.jsx';
 
 const fields = [
   {
@@ -42,12 +44,6 @@ const fields = [
       inactive: MailPoet.I18n.t('inactive'),
       bounced: MailPoet.I18n.t('bounced'),
     },
-    filter: function filter(subscriber, value) {
-      if ((Number(subscriber.wp_user_id) > 0 || Number(subscriber.is_woocommerce_user) === 1) && value === 'unconfirmed') {
-        return false;
-      }
-      return true;
-    },
   },
   {
     name: 'segments',
@@ -64,14 +60,17 @@ const fields = [
       }
 
       return subscriber.subscriptions
-        .filter(subscription => subscription.status === 'subscribed')
-        .map(subscription => subscription.segment_id);
+        .filter((subscription) => subscription.status === 'subscribed')
+        .map((subscription) => subscription.segment_id);
     },
     filter: function filter(segment) {
       return (!segment.deleted_at && segment.type === 'default');
     },
     getLabel: function getLabel(segment) {
-      return `${segment.name} (${segment.subscribers})`;
+      return segment.name;
+    },
+    getCount: function getCount(segment) {
+      return segment.subscribers;
     },
     getSearchLabel: function getSearchLabel(segment, subscriber) {
       let label = '';
@@ -109,10 +108,9 @@ customFields.forEach((customField) => {
   };
   if (customField.params) {
     field.params = customField.params;
-  }
-
-  if (customField.params.values) {
-    field.values = customField.params.values;
+    if (customField.params.values) {
+      field.values = customField.params.values;
+    }
   }
 
   // add placeholders for selects (date, select)
@@ -162,48 +160,84 @@ function beforeFormContent(subscriber) {
               { match }
             </a>
           )
-        )
-        }
+        )}
       </p>
     );
   }
   return undefined;
 }
 
-function afterFormContent() {
+function afterFormContent(values) {
   return (
-    <p className="description">
-      <strong>
-        { MailPoet.I18n.t('tip') }
-      </strong>
-      {' '}
-      { MailPoet.I18n.t('customFieldsTip') }
-    </p>
+    <>
+      {values?.unsubscribes?.map((unsubscribe) => {
+        const date = moment(unsubscribe.createdAt.date).format('dddd MMMM Do YYYY [at] h:mm:ss a');
+        let message;
+        if (unsubscribe.source === 'admin') {
+          message = MailPoet.I18n.t('unsubscribedAdmin')
+            .replace('%$1d', date)
+            .replace('%$2d', unsubscribe.meta);
+        } else if (unsubscribe.source === 'manage') {
+          message = MailPoet.I18n.t('unsubscribedManage').replace('%$1d', date);
+        } else if (unsubscribe.source === 'newsletter') {
+          message = ReactStringReplace(
+            MailPoet.I18n.t('unsubscribedNewsletter').replace('%$1d', date),
+            /\[link\]/g,
+            (match, i) => (
+              <a
+                key={i}
+                href={`admin.php?page=mailpoet-newsletter-editor&id=${unsubscribe.newsletterId}`}
+              >
+                { unsubscribe.newsletterSubject }
+              </a>
+            )
+          );
+        } else {
+          message = MailPoet.I18n.t('unsubscribedUnknown').replace('%$1d', date);
+        }
+        return (
+          <p className="description" key={message}>
+            {message}
+          </p>
+        );
+      })}
+      <p className="description">
+        <strong>
+          { MailPoet.I18n.t('tip') }
+        </strong>
+        {' '}
+        { MailPoet.I18n.t('customFieldsTip') }
+      </p>
+    </>
   );
 }
 
-class SubscriberForm extends React.Component { // eslint-disable-line react/prefer-stateless-function, max-len
-  render() {
-    return (
-      <div>
-        <h1 className="title">
-          {MailPoet.I18n.t('subscriber')}
-          <Link className="page-title-action" to="/">{MailPoet.I18n.t('backToList')}</Link>
-        </h1>
+const SubscriberForm = ({ match }) => {
+  const location = useLocation();
+  const history = useHistory();
+  const backUrl = location.state?.backUrl || '/';
+  return (
+    <div>
+      <h1 className="title">
+        {MailPoet.I18n.t('subscriber')}
+        <Link className="page-title-action" to={backUrl}>{MailPoet.I18n.t('backToList')}</Link>
+      </h1>
 
-        <Form
-          automationId="subscriber_edit_form"
-          endpoint="subscribers"
-          fields={fields}
-          params={this.props.match.params}
-          messages={messages}
-          beforeFormContent={beforeFormContent}
-          afterFormContent={afterFormContent}
-        />
-      </div>
-    );
-  }
-}
+      <SubscribersLimitNotice />
+
+      <Form
+        automationId="subscriber_edit_form"
+        endpoint="subscribers"
+        fields={fields}
+        params={match.params}
+        messages={messages}
+        beforeFormContent={beforeFormContent}
+        afterFormContent={afterFormContent}
+        onSuccess={() => history.push(backUrl)}
+      />
+    </div>
+  );
+};
 
 SubscriberForm.propTypes = {
   match: PropTypes.shape({

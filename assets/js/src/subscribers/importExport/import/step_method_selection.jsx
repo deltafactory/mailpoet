@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { withRouter } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import MailPoet from 'mailpoet';
 import SelectMethod from './step_method_selection/select_import_method.jsx';
@@ -6,35 +7,40 @@ import MethodPaste from './step_method_selection/method_paste.jsx';
 import MethodUpload from './step_method_selection/method_upload.jsx';
 import MethodMailChimp from './step_method_selection/method_mailchimp.jsx';
 import processCsv from './step_method_selection/process_csv.jsx';
+import PreviousNextStepButtons from './previous_next_step_buttons';
 
-const SUBSCRIBERS_LIMIT_FOR_VALIDATION = 500;
-
-const getNextStepLink = (importData) => {
+const getNextStepLink = (importData, subscribersLimitForValidation, method) => {
   if (importData === undefined) {
     return 'step_data_manipulation';
   }
   if (importData.subscribersCount === undefined) {
     return 'step_data_manipulation';
   }
-  if (importData.subscribersCount < SUBSCRIBERS_LIMIT_FOR_VALIDATION) {
+  if (importData.subscribersCount < subscribersLimitForValidation) {
+    return 'step_data_manipulation';
+  }
+  if (method === 'mailchimp-method') {
     return 'step_data_manipulation';
   }
   return 'step_input_validation';
 };
 
 function StepMethodSelection({
-  navigate,
+  history,
+  setStepMethodSelectionData,
+  subscribersLimitForValidation,
 }) {
   const [method, setMethod] = useState(undefined);
   const [pastedCsvData, setPastedCsvData] = useState('');
   const [file, setFile] = useState(undefined);
 
   const finish = (parsedData) => {
-    window.importData.step_method_selection = parsedData;
-    navigate(
-      getNextStepLink(window.importData.step_method_selection),
-      { trigger: true }
-    );
+    setStepMethodSelectionData(parsedData);
+    history.push(getNextStepLink(parsedData, subscribersLimitForValidation, method));
+  };
+
+  const previousStep = () => {
+    history.push('/step_offer_clearout');
   };
 
   const processLocal = () => {
@@ -49,50 +55,57 @@ function StepMethodSelection({
   };
 
   return (
-    <>
+    <div className="mailpoet_method_selection_step">
       <SelectMethod
         activeMethod={method}
         onMethodChange={setMethod}
       />
-      { method === 'paste-method'
-        ? (
-          <MethodPaste
-            onValueChange={setPastedCsvData}
-            onFinish={processLocal}
-            canFinish={!!pastedCsvData.trim()}
-            data={pastedCsvData}
-          />
-        ) : null
-      }
-      { method === 'file-method'
-        ? (
-          <MethodUpload
-            onValueChange={setFile}
-            onFinish={processLocal}
-            canFinish={!!file}
-            data={file}
-          />
-        ) : null
-      }
-      { method === 'mailchimp-method'
-        ? (
-          <MethodMailChimp
-            onFinish={(data) => {
-              MailPoet.trackEvent('Subscribers import started', {
-                source: 'MailChimp',
-                'MailPoet Free version': window.mailpoet_version,
-              });
-              finish(data);
-            }}
-          />
-        ) : null
-      }
-    </>
+      { method === 'paste-method' && (
+      <MethodPaste
+        onPrevious={previousStep}
+        onValueChange={setPastedCsvData}
+        onFinish={processLocal}
+        canFinish={!!pastedCsvData.trim()}
+        data={pastedCsvData}
+      />
+      )}
+      { method === 'file-method' && (
+      <MethodUpload
+        onPrevious={previousStep}
+        onValueChange={setFile}
+        onFinish={processLocal}
+        canFinish={!!file}
+        data={file}
+      />
+      )}
+      { method === 'mailchimp-method' && (
+      <MethodMailChimp
+        onPrevious={previousStep}
+        onFinish={(data) => {
+          MailPoet.trackEvent('Subscribers import started', {
+            source: 'MailChimp',
+            'MailPoet Free version': window.mailpoet_version,
+          });
+          finish(data);
+        }}
+      />
+      )}
+      { method === undefined && (
+        <PreviousNextStepButtons
+          canGoNext={false}
+          onPreviousAction={previousStep}
+        />
+      )}
+    </div>
   );
 }
 
 StepMethodSelection.propTypes = {
-  navigate: PropTypes.func.isRequired,
+  history: PropTypes.shape({
+    push: PropTypes.func.isRequired,
+  }).isRequired,
+  setStepMethodSelectionData: PropTypes.func.isRequired,
+  subscribersLimitForValidation: PropTypes.number.isRequired,
 };
 
-export default StepMethodSelection;
+export default withRouter(StepMethodSelection);

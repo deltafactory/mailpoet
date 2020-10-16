@@ -6,23 +6,60 @@ use MailPoet\Test\DataFactories\Segment;
 use MailPoet\Test\DataFactories\Subscriber;
 
 class SubscriberCountShortcodeCest {
-  function createSubscriberCountPageWithShortcode(\AcceptanceTester $I) {
-    $I->wantTo('Create page with MP subscriber shortcode');
-    $segment_factory = new Segment();
-    $segment = $segment_factory->withName('SubscriberCount')->create();
-    $subscriber_factory = new Subscriber();
-    $subscriber_factory->withSegments([$segment])->create();
-    $pageTitle = 'OurSubscribers';
+
+  const ACTIVE_SUBSCRIBERS_COUNT = 5;
+  const INACTIVE_SUBSCRIBERS_COUNT = 2;
+  const UNCONFIRMED_SUBSCRIBERS_COUNT = 3;
+  const UNSUBSCRIBED_SUBSCRIBERS_COUNT = 6;
+  const SUBSCRIBER_LIST_NAME = 'Single Subscriber List';
+  const SUBSCRIBERS_LIST_NAME = 'Various Subscribers';
+
+  public function verifySubscribersShortcodeWithSegments(\AcceptanceTester $i) {
+    $i->wantTo('Create page with shortcode of one subscriber and segment');
+    $segmentFactory = new Segment();
+    $segment = $segmentFactory->withName(self::SUBSCRIBER_LIST_NAME)->create();
+    $subscriberFactory = new Subscriber();
+    $subscriberFactory->withSegments([$segment])->create();
+    $pageTitle = 'Subscribers Shortcode Page';
     $pageText = 'Your subscriber count is';
-    $pageContent = escapeshellarg("$pageText [mailpoet_subscribers_count segments=\"$segment->id\"]");
-    $I->cli("post create --allow-root --post_type=page --post_status=publish --post_title=$pageTitle --post_content=$pageContent");
-    $I->login();
-    $I->amOnPage('/wp-admin/edit.php?post_type=page');
-    $I->waitForText($pageTitle);
-    $I->click($pageTitle);
-    //see live page with shortcode output
-    $I->click('View Page');
-    $I->waitForText($pageTitle);
-    $I->waitForText("$pageText 1");
+    $pageContent = "$pageText [mailpoet_subscribers_count segments=\"$segment->id\"]";
+    $i->cli(['post', 'create', '--post_type=page', '--post_status=publish', "--post_title=$pageTitle", "--post_content=$pageContent"]);
+    $i->login();
+    $i->amOnPage('/wp-admin/edit.php?post_type=page');
+    $i->waitForText($pageTitle);
+    $i->clickItemRowActionByItemName($pageTitle, 'View');
+    $i->waitForText($pageTitle);
+    $i->waitForText("$pageText 1");
+  }
+
+  public function verifySubscribersShortcodeAllCounts(\AcceptanceTester $i) {
+    $i->wantTo('Create page with shortcode of all subscribers but different statuses');
+    $pageTitle = 'Subscribers Shortcode Page';
+    $pageText = 'Your subscriber count is';
+    $pageContent = "$pageText [mailpoet_subscribers_count]";
+    $i->cli(['post', 'create', '--post_type=page', '--post_status=publish', "--post_title=$pageTitle", "--post_content=$pageContent"]);
+    $this->prepareSubscribersData();
+    $i->login();
+    $i->amOnPage('/wp-admin/edit.php?post_type=page');
+    $i->waitForText($pageTitle);
+    $i->clickItemRowActionByItemName($pageTitle, 'View');
+    $i->waitForText($pageTitle);
+    $i->waitForText("$pageText 5");
+  }
+
+  private function prepareSubscribersData() {
+    $segment = (new Segment())->withName(self::SUBSCRIBERS_LIST_NAME)->create();
+    for ($i = 0; $i < self::ACTIVE_SUBSCRIBERS_COUNT; $i++) {
+      (new Subscriber())->withSegments([$segment])->create();
+    }
+    for ($i = 0; $i < self::INACTIVE_SUBSCRIBERS_COUNT; $i++) {
+      (new Subscriber())->withStatus('inactive')->withSegments([$segment])->create();
+    }
+    for ($i = 0; $i < self::UNCONFIRMED_SUBSCRIBERS_COUNT; $i++) {
+      (new Subscriber())->withStatus('unconfirmed')->withSegments([$segment])->create();
+    }
+    for ($i = 0; $i < self::UNSUBSCRIBED_SUBSCRIBERS_COUNT; $i++) {
+      (new Subscriber())->withStatus('unsubscribed')->withSegments([$segment])->create();
+    }
   }
 }

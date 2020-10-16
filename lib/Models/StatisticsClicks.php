@@ -1,32 +1,31 @@
 <?php
+
 namespace MailPoet\Models;
 
 use DateTimeInterface;
 
-if (!defined('ABSPATH')) exit;
-
 /**
- * @property int $newsletter_id
- * @property int $subscriber_id
- * @property int $queue_id
- * @property int $link_id
+ * @property int $newsletterId
+ * @property int $subscriberId
+ * @property int $queueId
+ * @property int $linkId
  * @property int $count
  */
 class StatisticsClicks extends Model {
-  public static $_table = MP_STATISTICS_CLICKS_TABLE;
+  public static $_table = MP_STATISTICS_CLICKS_TABLE; // phpcs:ignore PSR2.Classes.PropertyDeclaration
 
-  static function createOrUpdateClickCount($link_id, $subscriber_id, $newsletter_id, $queue_id) {
-    $statistics = self::where('link_id', $link_id)
-      ->where('subscriber_id', $subscriber_id)
-      ->where('newsletter_id', $newsletter_id)
-      ->where('queue_id', $queue_id)
+  public static function createOrUpdateClickCount($linkId, $subscriberId, $newsletterId, $queueId) {
+    $statistics = self::where('link_id', $linkId)
+      ->where('subscriber_id', $subscriberId)
+      ->where('newsletter_id', $newsletterId)
+      ->where('queue_id', $queueId)
       ->findOne();
-    if (!$statistics) {
+    if (!$statistics instanceof self) {
       $statistics = self::create();
-      $statistics->link_id = $link_id;
-      $statistics->subscriber_id = $subscriber_id;
-      $statistics->newsletter_id = $newsletter_id;
-      $statistics->queue_id = $queue_id;
+      $statistics->linkId = $linkId;
+      $statistics->subscriberId = $subscriberId;
+      $statistics->newsletterId = $newsletterId;
+      $statistics->queueId = $queueId;
       $statistics->count = 1;
     } else {
       $statistics->count++;
@@ -34,7 +33,7 @@ class StatisticsClicks extends Model {
     return $statistics->save();
   }
 
-  static function getAllForSubscriber(Subscriber $subscriber) {
+  public static function getAllForSubscriber(Subscriber $subscriber) {
     return static::tableAlias('clicks')
       ->select('clicks.id', 'id')
       ->select('newsletter_rendered_subject')
@@ -54,29 +53,23 @@ class StatisticsClicks extends Model {
       ->orderByAsc('url');
   }
 
-  static function findLatestPerNewsletterBySubscriber(Subscriber $subscriber, DateTimeInterface $before, $since_days_ago) {
+  public static function findLatestPerNewsletterBySubscriber(Subscriber $subscriber, DateTimeInterface $from, DateTimeInterface $to) {
     // subquery to find latest click IDs for each newsletter
     $table = self::$_table;
-    $latest_click_ids_per_newsletter_query = "
-      SELECT (
-        SELECT id
-        FROM $table
-        WHERE newsletter_id = c.newsletter_id
-        ORDER BY updated_at DESC
-        LIMIT 1
-      )
-      FROM $table c
-      WHERE c.subscriber_id = :subscriber_id
-      AND c.updated_at < :before
-      AND c.updated_at > DATE_SUB(NOW(), INTERVAL :since_days_ago DAY)
-      GROUP BY c.newsletter_id
+    $latestClickIdsPerNewsletterQuery = "
+      SELECT MAX(id)
+      FROM $table
+      WHERE subscriber_id = :subscriber_id
+      AND updated_at > :from
+      AND updated_at < :to
+      GROUP BY newsletter_id
     ";
 
     return static::tableAlias('clicks')
-      ->whereRaw("clicks.id IN ($latest_click_ids_per_newsletter_query)", [
+      ->whereRaw("clicks.id IN ($latestClickIdsPerNewsletterQuery)", [
         'subscriber_id' => $subscriber->id,
-        'before' => $before->format('Y-m-d H:i:s'),
-        'since_days_ago' => $since_days_ago,
+        'from' => $from->format('Y-m-d H:i:s'),
+        'to' => $to->format('Y-m-d H:i:s'),
       ])
       ->findMany();
   }

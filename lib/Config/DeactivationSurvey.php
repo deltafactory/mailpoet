@@ -2,7 +2,6 @@
 
 namespace MailPoet\Config;
 
-use MailPoet\WP\Notice;
 use MailPoet\WP\Functions as WPFunctions;
 
 class DeactivationSurvey {
@@ -25,10 +24,10 @@ class DeactivationSurvey {
       return false;
     }
     $screen = WPFunctions::get()->getCurrentScreen();
-    if (!is_object($screen)) {
+    if (is_null($screen)) {
       return false;
     }
-    return (in_array(get_current_screen()->id, ['plugins', 'plugins-network'], true));
+    return (in_array($screen->id, ['plugins', 'plugins-network'], true));
   }
 
   public function js() {
@@ -60,5 +59,4 @@ class DeactivationSurvey {
       // if the website fails to render we have other places to catch and display the error
     }
   }
-
 }

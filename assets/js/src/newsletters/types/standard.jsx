@@ -1,16 +1,11 @@
 import PropTypes from 'prop-types';
 import React from 'react';
 import MailPoet from 'mailpoet';
-import Breadcrumb from 'newsletters/breadcrumb.jsx';
+import ListingHeadingStepsRoute from 'newsletters/listings/heading_steps_route.jsx';
 import { withRouter } from 'react-router-dom';
+import { GlobalContext } from 'context/index.jsx';
 
 class NewsletterStandard extends React.Component {
-  static propTypes = {
-    history: PropTypes.shape({
-      push: PropTypes.func.isRequired,
-    }).isRequired,
-  };
-
   componentDidMount() {
     // No options for this type, create a newsletter upon mounting
     MailPoet.Ajax.post({
@@ -24,8 +19,8 @@ class NewsletterStandard extends React.Component {
       this.showTemplateSelection(response.data.id);
     }).fail((response) => {
       if (response.errors.length > 0) {
-        MailPoet.Notice.error(
-          response.errors.map(error => error.message),
+        this.context.notices.error(
+          response.errors.map((error) => <p key={error.message}>{error.message}</p>),
           { scroll: true }
         );
       }
@@ -39,11 +34,18 @@ class NewsletterStandard extends React.Component {
   render() {
     return (
       <div>
-        <h1>{MailPoet.I18n.t('regularNewsletterTypeTitle')}</h1>
-        <Breadcrumb step="type" />
+        <ListingHeadingStepsRoute emailType="standard" automationId="standard_newsletter_creation_heading" />
       </div>
     );
   }
 }
+
+NewsletterStandard.contextType = GlobalContext;
+
+NewsletterStandard.propTypes = {
+  history: PropTypes.shape({
+    push: PropTypes.func.isRequired,
+  }).isRequired,
+};
 
 export default withRouter(NewsletterStandard);

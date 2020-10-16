@@ -12,7 +12,7 @@ MailPoet done the right way.
 # Setup
 
 ## Requirements
-- PHP 5.6+
+- PHP 7.0
 - NodeJS
 - WordPress
 - Docker & Docker Compose
@@ -27,16 +27,6 @@ $ cd mailpoet
 # create the .env file
 $ cp .env.sample .env
 # change the values on .env file
-# download composer
-$ curl -sS https://getcomposer.org/installer | php
-$ chmod +x ./composer.phar
-# download a PHP-Scoper
-$ curl -sL https://github.com/humbug/php-scoper/releases/download/0.11.4/php-scoper.phar --output php-scoper.phar
-# needed for installation.
-$ mkdir -p vendor-prefixed
-$ chmod +x ./php-scoper.phar
-# install PHP dependencies
-$ ./composer.phar install
 # install all dependencies (PHP and JS)
 $ ./do install
 # compile JS and CSS files
@@ -108,6 +98,34 @@ $ ./do changelog:update  [--version-name=...] [--quiet] # Updates changelog in r
 
 $ ./do container:dump      # Generates DI container cache.
 ```
+
+# Storybook
+
+We use [Storybook.js](https://storybook.js.org/) to showcase our React components, which can be used throughout the plugin.
+
+## Usage
+
+Currently, we don't have Storybook published publicly, so developers need to run or build it locally.
+
+To run it locally (on `http://localhost:8083`) while watching the changes (recommended when developing new component), run
+
+```bash
+./do storybook:watch
+```
+
+To build the static version, which can be accessed via browser, run
+
+```bash
+./do storybook:build
+```
+
+which will create a `storybook-static` folder with all necessary files. Don't forget to rebuild it when new components are added.
+
+## Building new components
+
+- All stories should be located in `_stories` folder inside the component folder they belong to.
+- Run `./do storybook:watch` so all changes are automatically reflected in `http://localhost:8083`.
+- Examples are available in `assets/js/src/storybook_demo/_stories` folder.
 
 # Coding and Testing
 

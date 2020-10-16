@@ -2,11 +2,9 @@
 
 namespace MailPoet\Analytics;
 
-use Carbon\Carbon;
-use MailPoet\WP\Functions as WPFunctions;
 use MailPoet\Settings\SettingsController;
-
-if (!defined('ABSPATH')) exit;
+use MailPoet\WP\Functions as WPFunctions;
+use MailPoetVendor\Carbon\Carbon;
 
 class Analytics {
 
@@ -29,53 +27,53 @@ class Analytics {
     $this->wp = new WPFunctions;
   }
 
-  /** @return array */
-  function generateAnalytics() {
+  /** @return array|null */
+  public function generateAnalytics() {
     if ($this->shouldSend()) {
       $data = $this->wp->applyFilters(self::ANALYTICS_FILTER, $this->reporter->getData());
       $this->recordDataSent();
       return $data;
     }
+    return null;
   }
 
-  /** @return boolean */
-  function isEnabled() {
-    $analytics_settings = $this->settings->get('analytics', []);
-    return !empty($analytics_settings['enabled']) === true;
+  /** @return bool */
+  public function isEnabled() {
+    $analyticsSettings = $this->settings->get('analytics', []);
+    return !empty($analyticsSettings['enabled']) === true;
   }
 
-  static function setPublicId($new_public_id) {
-    $settings = new SettingsController();
-    $current_public_id = $settings->get('public_id');
-    if ($current_public_id !== $new_public_id) {
-      $settings->set('public_id', $new_public_id);
-      $settings->set('new_public_id', 'true');
+  public function setPublicId($newPublicId) {
+    $currentPublicId = $this->settings->get('public_id');
+    if ($currentPublicId !== $newPublicId) {
+      $this->settings->set('public_id', $newPublicId);
+      $this->settings->set('new_public_id', 'true');
       // Force user data to be resent
-      $settings->delete(Analytics::SETTINGS_LAST_SENT_KEY);
+      $this->settings->delete(Analytics::SETTINGS_LAST_SENT_KEY);
     }
   }
 
   /** @return string */
-  function getPublicId() {
-    $public_id = $this->settings->get('public_id', '');
+  public function getPublicId() {
+    $publicId = $this->settings->get('public_id', '');
     // if we didn't get the user public_id from the shop yet : we create one based on mixpanel distinct_id
-    if (empty($public_id) && !empty($_COOKIE['mixpanel_distinct_id'])) {
+    if (empty($publicId) && !empty($_COOKIE['mixpanel_distinct_id'])) {
       // the public id has to be diffent that mixpanel_distinct_id in order to be used on different browser
-      $mixpanel_distinct_id = md5($_COOKIE['mixpanel_distinct_id']);
-      $this->settings->set('public_id', $mixpanel_distinct_id);
+      $mixpanelDistinctId = md5($_COOKIE['mixpanel_distinct_id']);
+      $this->settings->set('public_id', $mixpanelDistinctId);
       $this->settings->set('new_public_id', 'true');
-      return $mixpanel_distinct_id;
+      return $mixpanelDistinctId;
     }
-    return $public_id;
+    return $publicId;
   }
 
   /**
    * Returns true if a the public_id was added and update new_public_id to false
-   * @return boolean
+   * @return bool
    */
-  function isPublicIdNew() {
-    $new_public_id = $this->settings->get('new_public_id');
-    if ($new_public_id === 'true') {
+  public function isPublicIdNew() {
+    $newPublicId = $this->settings->get('new_public_id');
+    if ($newPublicId === 'true') {
       $this->settings->set('new_public_id', 'false');
       return true;
     }
@@ -97,5 +95,4 @@ class Analytics {
   private function recordDataSent() {
     $this->settings->set(Analytics::SETTINGS_LAST_SENT_KEY, Carbon::now());
   }
-
 }

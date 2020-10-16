@@ -7,19 +7,12 @@ use MailPoet\Test\DataFactories\Newsletter;
 use MailPoet\Test\DataFactories\Segment;
 use MailPoet\Test\DataFactories\Settings;
 use MailPoet\Test\DataFactories\Subscriber;
-use PHPUnit_Framework_Assert as Asserts;
-
-require_once __DIR__ . '/../DataFactories/Form.php';
-require_once __DIR__ . '/../DataFactories/Newsletter.php';
-require_once __DIR__ . '/../DataFactories/Segment.php';
-require_once __DIR__ . '/../DataFactories/Settings.php';
-require_once __DIR__ . '/../DataFactories/Subscriber.php';
+use PHPUnit\Framework\Assert;
 
 class ReinstallFromScratchCest {
-
-  function reinstallFromScratch(\AcceptanceTester $I) {
-    $I->wantTo('Reinstall from scratch');
-    $I->login();
+  public function reinstallFromScratch(\AcceptanceTester $i) {
+    $i->wantTo('Reinstall from scratch');
+    $i->login();
 
     // Step 1 - create email, form, list and subscribers
     $newsletter = new Newsletter();
@@ -31,17 +24,16 @@ class ReinstallFromScratchCest {
     $subscriber = new Subscriber();
     $subscriber->create();
     // Create few WP users, which should be imported after reinstall
-    for ($i = 0; $i <= 5; $i++) {
-      wp_create_user('test' . $i, 'password', 'imported' . $i . '@from.wordpress');
+    for ($index = 0; $index <= 5; $index++) {
+      wp_create_user('test' . $index, 'password', 'imported' . $index . '@from.wordpress');
     }
 
     // Step 2 - reinstall from scratch
-    $I->amOnPage('/wp-admin/admin.php?page=mailpoet-settings#advanced');
-    $I->waitForElement('#mailpoet_reinstall');
-    $I->click('Reinstall now...');
-    $I->acceptPopup();
-    $I->waitForElement('#mailpoet_loading');
-    $I->waitForElementNotVisible('#mailpoet_loading');
+    $i->amOnPage('/wp-admin/admin.php?page=mailpoet-settings#advanced');
+    $i->waitForElement('[data-automation-id="reinstall-button"]');
+    $i->click('Reinstall now...');
+    $i->acceptPopup();
+    $i->waitForText('Welcome! Let’s get you started on the right foot.');
 
     // Step 3 - skip all tutorials, which could interfere with other tests
     $settings = new Settings();
@@ -49,29 +41,22 @@ class ReinstallFromScratchCest {
 
     // Step 4 - check if data are emptied and repopulated
     // Check emails
-    $I->amOnMailpoetPage('Emails');
-    $I->waitForText('Nothing here yet!');
-    $I->seeNumberOfElements('[data-automation-id^=listing_item_]', 0);
+    $i->amOnMailpoetPage('Emails');
+    $i->seeInCurrentUrl('#/new');
     // Check forms
-    $I->amOnMailpoetPage('Forms');
-    $I->waitForText('A GDPR friendly form', 30, '[data-automation-id="listing_item_1"]');
-    $I->seeNumberOfElements('[data-automation-id^=listing_item_]', 1);
+    $i->amOnMailpoetPage('Forms');
+    $i->waitForText('My First Form', 30, '[data-automation-id="listing_item_1"]');
+    $i->seeNumberOfElements('[data-automation-id^=listing_item_]', 1);
     // Check lists
-    $I->amOnMailpoetPage('Lists');
-    $I->waitForText('WordPress Users', 30, '[data-automation-id="listing_item_1"]');
-    $I->see('WooCommerce Customers', '[data-automation-id="listing_item_2"]');
-    $I->see('My First List', '[data-automation-id="listing_item_3"]');
-    $I->seeNumberOfElements('[data-automation-id^=listing_item_]', 3);
+    $i->amOnMailpoetPage('Lists');
+    $i->waitForText('WordPress Users', 30, '[data-automation-id="listing_item_1"]');
+    $i->see('Newsletter mailing list', '[data-automation-id="listing_item_3"]');
+    $i->seeNumberOfElements('[data-automation-id^=listing_item_]', 2);
     // Check subscribers
-    $I->amOnMailPoetPage('Subscribers');
-    $I->waitForText('admin', 30, '[data-automation-id="listing_item_1"]');
-    $wp_users_count = count_users();
-    $subscribers_count = (int)$I->grabTextFrom('.displaying-num');
-    Asserts::assertEquals($wp_users_count['total_users'], $subscribers_count);
-  }
-
-  function _after(\AcceptanceTester $I) {
-    $I->logOut(); // to force next test to login again, since DB will be repopulated again
-    $I->cli('db query < /wp-core/wp-content/plugins/mailpoet/tests/_data/acceptanceDump.sql --allow-root');
+    $i->amOnMailPoetPage('Subscribers');
+    $i->waitForText('admin', 30, '.mailpoet-listing-table');
+    $wpUsersCount = count_users();
+    $subscribersCount = (int)$i->grabTextFrom('.mailpoet-listing-pages-num');
+    Assert::assertEquals($wpUsersCount['total_users'], $subscribersCount);
   }
 }

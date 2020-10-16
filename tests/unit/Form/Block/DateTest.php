@@ -1,59 +1,108 @@
 <?php
+
 namespace MailPoet\Test\Form\Block;
 
+use MailPoet\Form\Block\BlockRendererHelper;
 use MailPoet\Form\Block\Date;
+use MailPoet\Form\BlockStylesRenderer;
+use MailPoet\Form\BlockWrapperRenderer;
+use MailPoet\Test\Form\HtmlParser;
+use MailPoetVendor\Carbon\Carbon;
+use PHPUnit\Framework\MockObject\MockObject;
+
+require_once __DIR__ . '/../HtmlParser.php';
 
 class DateTest extends \MailPoetUnitTest {
-  function testItCanConvertDateMonthYearFormatToDatetime() {
-    $date = [
-      'MM/DD/YYYY' => '05/10/2016',
-      'DD/MM/YYYY' => '10/05/2016',
-      'YYYY/MM/DD' => '2016/05/10',
-      'YYYY/DD/MM' => '2016/10/05',
-    ];
-    foreach ($date as $date_format => $date) {
-      expect(Date::convertDateToDatetime($date, $date_format))
-        ->equals('2016-05-10 00:00:00');
-    }
+  /** @var Date */
+  private $date;
+
+  /** @var MockObject & BlockRendererHelper */
+  private $baseMock;
+
+  /** @var MockObject & BlockWrapperRenderer */
+  private $wrapperMock;
+
+  /** @var MockObject & BlockStylesRenderer */
+  private $blockStylesRenderer;
+
+  /** @var HtmlParser */
+  private $htmlParser;
+
+  private $block = [
+    'type' => 'date',
+    'name' => 'Custom date',
+    'id' => '1',
+    'unique' => '1',
+    'static' => '0',
+    'params' => [
+      'label' => 'Date label',
+      'date_format' => 'MM/YYYY',
+      'date_type' => 'year_month',
+      'is_default_today' => '1',
+      'required' => '',
+    ],
+    'position' => '1',
+  ];
+
+  public function _before() {
+    parent::_before();
+    $this->blockStylesRenderer = $this->createMock(BlockStylesRenderer::class);
+    $this->blockStylesRenderer->method('renderForSelect')->willReturn('');
+    $this->baseMock = $this->createMock(BlockRendererHelper::class);
+    $this->wrapperMock = $this->createMock(BlockWrapperRenderer::class);
+    $this->wrapperMock->method('render')->will($this->returnArgument(1));
+    $this->date = new Date($this->baseMock, $this->blockStylesRenderer, $this->wrapperMock);
+    $this->htmlParser = new HtmlParser();
   }
 
-  function testItCanConvertMonthYearFormatToDatetime() {
-    $date = [
-      'MM/YYYY' => '05/2016',
-      'YYYY/MM' => '2016/05',
-    ];
-    foreach ($date as $date_format => $date) {
-      expect(Date::convertDATEToDatetime($date, $date_format))
-        ->equals('2016-05-01 00:00:00');
-    }
+  public function testItShouldRenderDateInput() {
+    $this->baseMock->expects($this->once())->method('renderLabel')->willReturn('<label></label>');
+    $this->baseMock->expects($this->once())->method('getFieldName')->willReturn('Field name');
+    $this->baseMock->expects($this->any())->method('getInputValidation')->willReturn(' validation="1" ');
+
+    $html = $this->date->render($this->block, []);
+    $mothsSelect = $this->htmlParser->getElementByXpath($html, "//select", 0);
+    $yearsSelect = $this->htmlParser->getElementByXpath($html, "//select", 1);
+    expect($mothsSelect->childNodes->length)->equals(13); // Months + placeholder
+    expect($yearsSelect->childNodes->length)->equals(101 + 1); // Years + placeholder
+
+    $date = Carbon::now();
+    $currentMonth = $date->format('F');
+    $currentYear = $date->format('Y');
+
+    $selectedMonth = $this->htmlParser->getElementByXpath($html, "//option[@selected='selected']", 0);
+    expect($selectedMonth->textContent)->equals($currentMonth);
+    $selectedYear = $this->htmlParser->getElementByXpath($html, "//option[@selected='selected']", 1);
+    expect($selectedYear->textContent)->equals($currentYear);
   }
 
-  function testItCanConvertMonthToDatetime() {
-    $current_year = date('Y');
-    expect(Date::convertDateToDatetime('05', 'MM'))
-      ->equals(sprintf('%s-05-01 00:00:00', $current_year));
-  }
+  public function testItShouldRenderYearMonthDayDateFormat() {
+    $this->baseMock->expects($this->once())->method('renderLabel')->willReturn('<label></label>');
+    $this->baseMock->expects($this->once())->method('getFieldName')->willReturn('Field name');
+    $this->baseMock->expects($this->any())->method('getInputValidation')->willReturn(' validation="1" ');
 
-  function testItCanConvertYearToDatetime() {
-    expect(Date::convertDateToDatetime('2016', 'YYYY'))
-      ->equals('2016-01-01 00:00:00');
-  }
+    $block = $this->block;
+    $block['params']['date_type'] = 'year_month_day';
+    $block['params']['date_format'] = 'MM/DD/YYYY';
 
-  function testItCanConvertDatetimeToDatetime() {
-    expect(Date::convertDateToDatetime('2016-05-10 00:00:00', 'datetime'))
-      ->equals('2016-05-10 00:00:00');
-  }
+    $html = $this->date->render($block, []);
+    $mothsSelect = $this->htmlParser->getElementByXpath($html, "//select", 0);
+    $daysSelect = $this->htmlParser->getElementByXpath($html, "//select", 1);
+    $yearsSelect = $this->htmlParser->getElementByXpath($html, "//select", 2);
+    expect($mothsSelect->childNodes->length)->equals(13); // Months + placeholder
+    expect($daysSelect->childNodes->length)->equals(32); // Days + placeholder
+    expect($yearsSelect->childNodes->length)->equals(101 + 1); // Years + placeholder
 
-  function testItCanClearDate() {
-    expect(Date::convertDateToDatetime('0/10/5', 'YYYY/MM/DD'))
-      ->equals(date('Y') . '-10-05 00:00:00');
-    expect(Date::convertDateToDatetime('0/0/5', 'YYYY/MM/DD'))
-      ->equals(date('Y') . '-' . date('m') . '-05 00:00:00');
-    expect(Date::convertDateToDatetime('0/0/0', 'YYYY/MM/DD'))
-      ->equals('');
-    expect(Date::convertDateToDatetime('0', 'YYYY'))
-      ->equals('');
-    expect(Date::convertDateToDatetime('0', 'MM'))
-      ->equals('');
+    $date = Carbon::now();
+    $currentMonth = $date->format('F');
+    $currentYear = $date->format('Y');
+    $currentDay = $date->format('d');
+
+    $selectedMonth = $this->htmlParser->getElementByXpath($html, "//option[@selected='selected']", 0);
+    expect($selectedMonth->textContent)->equals($currentMonth);
+    $selectedDay = $this->htmlParser->getElementByXpath($html, "//option[@selected='selected']", 1);
+    expect($selectedDay->textContent)->equals($currentDay);
+    $selectedYear = $this->htmlParser->getElementByXpath($html, "//option[@selected='selected']", 2);
+    expect($selectedYear->textContent)->equals($currentYear);
   }
 }

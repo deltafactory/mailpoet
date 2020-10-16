@@ -4,52 +4,129 @@ namespace MailPoet\API\JSON\v1;
 
 use MailPoet\API\JSON\Endpoint as APIEndpoint;
 use MailPoet\API\JSON\Error as APIError;
+use MailPoet\API\JSON\ResponseBuilders\FormsResponseBuilder;
 use MailPoet\Config\AccessControl;
-use MailPoet\Form\Renderer as FormRenderer;
+use MailPoet\Entities\FormEntity;
+use MailPoet\Form\DisplayFormInWPContent;
+use MailPoet\Form\FormFactory;
+use MailPoet\Form\FormsRepository;
+use MailPoet\Form\PreviewPage;
 use MailPoet\Form\Util;
 use MailPoet\Listing;
 use MailPoet\Models\Form;
 use MailPoet\Models\StatisticsForms;
+use MailPoet\Settings\UserFlagsController;
+use MailPoet\WP\Emoji;
 use MailPoet\WP\Functions as WPFunctions;
-
-if (!defined('ABSPATH')) exit;
 
 class Forms extends APIEndpoint {
 
-  /** @var Listing\BulkActionController */
-  private $bulk_action;
-
-  /** @var Listing\Handler */
-  private $listing_handler;
 
   public $permissions = [
     'global' => AccessControl::PERMISSION_MANAGE_FORMS,
   ];
 
-  function __construct(
-    Listing\BulkActionController $bulk_action,
-    Listing\Handler $listing_handler
+  /** @var Listing\BulkActionController */
+  private $bulkAction;
+
+  /** @var Listing\Handler */
+  private $listingHandler;
+
+  /** @var UserFlagsController */
+  private $userFlags;
+
+  /** @var FormFactory */
+  private $formFactory;
+
+  /** @var FormsResponseBuilder */
+  private $formsResponseBuilder;
+
+  /** @var WPFunctions */
+  private $wp;
+
+  /** @var FormsRepository */
+  private $formsRepository;
+
+  /** @var Emoji */
+  private $emoji;
+
+  public function __construct(
+    Listing\BulkActionController $bulkAction,
+    Listing\Handler $listingHandler,
+    UserFlagsController $userFlags,
+    FormFactory $formFactory,
+    FormsRepository $formsRepository,
+    FormsResponseBuilder $formsResponseBuilder,
+    WPFunctions $wp,
+    Emoji $emoji
   ) {
-    $this->bulk_action = $bulk_action;
-    $this->listing_handler = $listing_handler;
+    $this->bulkAction = $bulkAction;
+    $this->listingHandler = $listingHandler;
+    $this->userFlags = $userFlags;
+    $this->formFactory = $formFactory;
+    $this->wp = $wp;
+    $this->formsRepository = $formsRepository;
+    $this->formsResponseBuilder = $formsResponseBuilder;
+    $this->emoji = $emoji;
   }
 
-  function get($data = []) {
+  public function get($data = []) {
     $id = (isset($data['id']) ? (int)$data['id'] : false);
-    $form = Form::findOne($id);
-    if ($form instanceof Form) {
-      return $this->successResponse($form->asArray());
+    $form = $this->formsRepository->findOneById($id);
+    if ($form instanceof FormEntity) {
+      return $this->successResponse($this->formsResponseBuilder->build($form));
     }
     return $this->errorResponse([
       APIError::NOT_FOUND => WPFunctions::get()->__('This form does not exist.', 'mailpoet'),
     ]);
   }
 
-  function listing($data = []) {
-    $listing_data = $this->listing_handler->get('\MailPoet\Models\Form', $data);
+  public function setStatus($data = []) {
+    $status = (isset($data['status']) ? $data['status'] : null);
+
+    if (!$status) {
+      return $this->badRequest([
+        APIError::BAD_REQUEST  => __('You need to specify a status.', 'mailpoet'),
+      ]);
+    }
+
+    $id = (isset($data['id'])) ? (int)$data['id'] : false;
+    $form = $this->formsRepository->findOneById($id);
+
+    if (!$form instanceof FormEntity) {
+      return $this->errorResponse([
+        APIError::NOT_FOUND => __('This form does not exist.', 'mailpoet'),
+      ]);
+    }
+
+    if (!in_array($status, [FormEntity::STATUS_ENABLED, FormEntity::STATUS_DISABLED])) {
+      return $this->badRequest([
+        APIError::BAD_REQUEST  =>
+          sprintf(
+            __('Invalid status. Allowed values are (%1$s), you specified %2$s', 'mailpoet'),
+            join(', ', [FormEntity::STATUS_ENABLED, FormEntity::STATUS_DISABLED]),
+            $status
+          ),
+      ]);
+    }
+
+    $form->setStatus($status);
+    $this->formsRepository->flush();
+
+    $form = $this->formsRepository->findOneById($id);
+    if (!$form instanceof FormEntity) return $this->errorResponse();
+    return $this->successResponse(
+      $form->toArray()
+    );
+  }
+
+  public function listing($data = []) {
+    $data['sort_order'] = $data['sort_order'] ?? 'desc';
+    $data['sort_by'] = $data['sort_by'] ?? 'updated_at';
+    $listingData = $this->listingHandler->get('\MailPoet\Models\Form', $data);
 
     $data = [];
-    foreach ($listing_data['items'] as $form) {
+    foreach ($listingData['items'] as $form) {
       $form = $form->asArray();
 
       $form['signups'] = StatisticsForms::getTotalSignups($form['id']);
@@ -64,77 +141,34 @@ class Forms extends APIEndpoint {
     }
 
     return $this->successResponse($data, [
-      'count' => $listing_data['count'],
-      'filters' => $listing_data['filters'],
-      'groups' => $listing_data['groups'],
+      'count' => $listingData['count'],
+      'filters' => $listingData['filters'],
+      'groups' => $listingData['groups'],
     ]);
   }
 
-  function create() {
-    // create new form
-    $form_data = [
-      'name' => WPFunctions::get()->__('New form', 'mailpoet'),
-      'body' => [
-        [
-          'id' => 'email',
-          'name' => WPFunctions::get()->__('Email', 'mailpoet'),
-          'type' => 'text',
-          'static' => true,
-          'params' => [
-            'label' => WPFunctions::get()->__('Email', 'mailpoet'),
-            'required' => true,
-          ],
-        ],
-        [
-          'id' => 'submit',
-          'name' => WPFunctions::get()->__('Submit', 'mailpoet'),
-          'type' => 'submit',
-          'static' => true,
-          'params' => [
-            'label' => WPFunctions::get()->__('Subscribe!', 'mailpoet'),
-          ],
-        ],
-      ],
-      'settings' => [
-        'on_success' => 'message',
-        'success_message' => Form::getDefaultSuccessMessage(),
-        'segments' => null,
-        'segments_selected_by' => 'admin',
-      ],
-    ];
-
-    return $this->save($form_data);
-  }
-
-  function save($data = []) {
-    $form = Form::createOrUpdate($data);
-    $errors = $form->getErrors();
-
-    if (empty($errors)) {
-      $form = Form::findOne($form->id);
-      if(!$form instanceof Form) return $this->errorResponse();
-      return $this->successResponse($form->asArray());
+  public function create($data = []) {
+    if (isset($data['template-id'])) {
+      $formEntity = $this->formFactory->createFormFromTemplate($data['template-id']);
+    } else {
+      $formEntity = $this->formFactory->createEmptyForm();
     }
-    return $this->badRequest($errors);
+
+    $form = Form::findOne($formEntity->getId());
+    if(!$form instanceof Form) return $this->errorResponse();
+    return $this->successResponse($form->asArray());
   }
 
-  function previewEditor($data = []) {
-    // html
-    $html = FormRenderer::renderHTML($data);
-
-    // convert shortcodes
-    $html = WPFunctions::get()->doShortcode($html);
-
-    // styles
-    $css = new Util\Styles(FormRenderer::getStyles($data));
-
-    return $this->successResponse([
-      'html' => $html,
-      'css' => $css->render(),
-    ]);
+  public function previewEditor($data = []) {
+    $formId = $data['id'] ?? null;
+    if (!$formId) {
+      $this->badRequest();
+    }
+    $this->wp->setTransient(PreviewPage::PREVIEW_DATA_TRANSIENT_PREFIX . $formId, $data, PreviewPage::PREVIEW_DATA_EXPIRATION);
+    return $this->successResponse();
   }
 
-  function exportsEditor($data = []) {
+  public function exportsEditor($data = []) {
     $id = (isset($data['id']) ? (int)$data['id'] : false);
     $form = Form::findOne($id);
     if ($form instanceof Form) {
@@ -146,34 +180,37 @@ class Forms extends APIEndpoint {
     ]);
   }
 
-  function saveEditor($data = []) {
-    $form_id = (isset($data['id']) ? (int)$data['id'] : 0);
+  public function saveEditor($data = []) {
+    $formId = (isset($data['id']) ? (int)$data['id'] : 0);
     $name = (isset($data['name']) ? $data['name'] : WPFunctions::get()->__('New form', 'mailpoet'));
     $body = (isset($data['body']) ? $data['body'] : []);
     $settings = (isset($data['settings']) ? $data['settings'] : []);
     $styles = (isset($data['styles']) ? $data['styles'] : '');
+    $status = (isset($data['status']) ? $data['status'] : FormEntity::STATUS_ENABLED);
 
     // check if the form is used as a widget
-    $is_widget = false;
+    $isWidget = false;
     $widgets = WPFunctions::get()->getOption('widget_mailpoet_form');
     if (!empty($widgets)) {
       foreach ($widgets as $widget) {
-        if (isset($widget['form']) && (int)$widget['form'] === $form_id) {
-          $is_widget = true;
+        if (isset($widget['form']) && (int)$widget['form'] === $formId) {
+          $isWidget = true;
           break;
         }
       }
     }
 
+    WPFunctions::get()->deleteTransient(DisplayFormInWPContent::NO_FORM_TRANSIENT_KEY);
+
     // check if the user gets to pick his own lists
     // or if it's selected by the admin
-    $has_segment_selection = false;
-    $list_selection = [];
+    $hasSegmentSelection = false;
+    $listSelection = [];
     foreach ($body as $i => $block) {
       if ($block['type'] === 'segment') {
-        $has_segment_selection = true;
+        $hasSegmentSelection = true;
         if (!empty($block['params']['values'])) {
-          $list_selection = array_filter(
+          $listSelection = array_filter(
             array_map(function($segment) {
               return (isset($segment['id'])
                 ? $segment['id']
@@ -187,19 +224,24 @@ class Forms extends APIEndpoint {
     }
 
     // check list selection
-    if ($has_segment_selection === true) {
+    if ($hasSegmentSelection === true) {
       $settings['segments_selected_by'] = 'user';
-      $settings['segments'] = $list_selection;
+      $settings['segments'] = $listSelection;
     } else {
       $settings['segments_selected_by'] = 'admin';
     }
 
+    if ($body !== null) {
+      $body = $this->emoji->sanitizeEmojisInFormBody($body);
+    }
+
     $form = Form::createOrUpdate([
-      'id' => $form_id,
+      'id' => $formId,
       'name' => $name,
       'body' => $body,
       'settings' => $settings,
       'styles' => $styles,
+      'status' => $status,
     ]);
 
     $errors = $form->getErrors();
@@ -207,15 +249,19 @@ class Forms extends APIEndpoint {
     if (!empty($errors)) {
       return $this->badRequest($errors);
     }
+    if (isset($data['editor_version']) && $data['editor_version'] === "2") {
+      $this->userFlags->set('display_new_form_editor_nps_survey', true);
+    }
+
     $form = Form::findOne($form->id);
     if(!$form instanceof Form) return $this->errorResponse();
     return $this->successResponse(
       $form->asArray(),
-      ['is_widget' => $is_widget]
+      ['is_widget' => $isWidget]
     );
   }
 
-  function restore($data = []) {
+  public function restore($data = []) {
     $id = (isset($data['id']) ? (int)$data['id'] : false);
     $form = Form::findOne($id);
     if ($form instanceof Form) {
@@ -233,7 +279,7 @@ class Forms extends APIEndpoint {
     }
   }
 
-  function trash($data = []) {
+  public function trash($data = []) {
     $id = (isset($data['id']) ? (int)$data['id'] : false);
     $form = Form::findOne($id);
     if ($form instanceof Form) {
@@ -251,7 +297,7 @@ class Forms extends APIEndpoint {
     }
   }
 
-  function delete($data = []) {
+  public function delete($data = []) {
     $id = (isset($data['id']) ? (int)$data['id'] : false);
     $form = Form::findOne($id);
     if ($form instanceof Form) {
@@ -265,13 +311,14 @@ class Forms extends APIEndpoint {
     }
   }
 
-  function duplicate($data = []) {
+  public function duplicate($data = []) {
     $id = (isset($data['id']) ? (int)$data['id'] : false);
     $form = Form::findOne($id);
 
     if ($form instanceof Form) {
+      $formName = $form->name ? sprintf(__('Copy of %s', 'mailpoet'), $form->name) : '';
       $data = [
-        'name' => sprintf(__('Copy of %s', 'mailpoet'), $form->name),
+        'name' => $formName,
       ];
       $duplicate = $form->duplicate($data);
       $errors = $duplicate->getErrors();
@@ -293,9 +340,9 @@ class Forms extends APIEndpoint {
     }
   }
 
-  function bulkAction($data = []) {
+  public function bulkAction($data = []) {
     try {
-      $meta = $this->bulk_action->apply('\MailPoet\Models\Form', $data);
+      $meta = $this->bulkAction->apply('\MailPoet\Models\Form', $data);
       return $this->successResponse(null, $meta);
     } catch (\Exception $e) {
       return $this->errorResponse([

@@ -1,22 +1,20 @@
 <?php
+
 namespace MailPoet\Config\PopulatorData\Templates;
 
 use MailPoet\WP\Functions as WPFunctions;
-
-if (!defined('ABSPATH')) exit;
-
 
 class PieceOfCake {
 
   private $template_image_url;
   private $social_icon_url;
 
-  function __construct($assets_url) {
+  public function __construct($assets_url) {
      $this->template_image_url = 'https://ps.w.org/mailpoet/assets/newsletter-templates/piece_of_cake';
     $this->social_icon_url = $assets_url . '/img/newsletter_editor/social-icons';
   }
 
-  function get() {
+  public function get() {
     return [
       'name' => WPFunctions::get()->__("Piece of cake", 'mailpoet'),
       'categories' => json_encode(['standard', 'all']),
@@ -57,7 +55,7 @@ class PieceOfCake {
                 'blocks' => [
                   0 => [
                     'type' => 'header',
-                    'text' => '<p><strong>Open daily from 9am to 9pm |&nbsp;<a href="[link:newsletter_view_in_browser_url]">View Online</a></strong></p>',
+                    'text' => '<p><strong>Open daily from 9am to 9pm |&nbsp;<a href="[link:newsletter_view_in_browser_url]">' . WPFunctions::get()->__("View this in your browser.", 'mailpoet') . '</a></strong></p>',
                     'styles' => [
                       'block' => [
                         'backgroundColor' => '#ececeb',
@@ -366,7 +364,7 @@ class PieceOfCake {
                 'blocks' => [
                   0 => [
                     'type' => 'text',
-                    'text' => '<p style="text-align: right; line-height: 1.3;"><strong><a href="[link:subscription_unsubscribe_url]" style="color: #d42b2b; text-decoration: none; font-size: 12px; text-align: center;">Unsubscribe</a></strong></p>
+                    'text' => '<p style="text-align: right; line-height: 1.3;"><strong><a href="[link:subscription_unsubscribe_url]" style="color: #d42b2b; text-decoration: none; font-size: 12px; text-align: center;">' . WPFunctions::get()->__("Unsubscribe", 'mailpoet') . '</a></strong></p>
                       <p style="text-align: right; line-height: 1.3;"><strong><a href="[link:subscription_manage_url]" style="color: #d42b2b; text-decoration: none; font-size: 12px; text-align: center;">Manage&nbsp;Subscription</a></strong></p>',
                   ],
                 ],
@@ -444,5 +442,4 @@ class PieceOfCake {
   private function getThumbnail() {
     return $this->template_image_url . '/thumbnail.20190411-1500.jpg';
   }
-
 }

@@ -1,18 +1,26 @@
 <?php
+
 namespace MailPoet\Test\Mailer;
 
 use MailPoet\Mailer\Mailer;
-use MailPoet\Models\Setting;
 use MailPoet\Settings\SettingsController;
+use MailPoet\Settings\SettingsRepository;
 
 class MailerTest extends \MailPoetTest {
+  public $newsletter;
+  public $subscriber;
+  public $mailer;
+  public $returnPath;
+  public $replyTo;
+  public $sender;
+  public $availableMailerMethods;
 
   /** @var SettingsController */
   private $settings;
 
-  function _before() {
+  public function _before() {
     parent::_before();
-    $this->available_mailer_methods = [
+    $this->availableMailerMethods = [
       [
         'method' => 'AmazonSES',
         'region' => 'us-west-2',
@@ -44,11 +52,11 @@ class MailerTest extends \MailPoetTest {
       'name' => 'Sender',
       'address' => 'staff@mailinator.com',
     ];
-    $this->reply_to = [
+    $this->replyTo = [
       'name' => 'Reply To',
       'address' => 'staff@mailinator.com',
     ];
-    $this->return_path = 'bounce@test.com';
+    $this->returnPath = 'bounce@test.com';
     $this->mailer = [
       'method' => 'MailPoet',
       'mailpoet_api_key' => getenv('WP_TEST_MAILER_MAILPOET_API') ?
@@ -63,74 +71,72 @@ class MailerTest extends \MailPoetTest {
         'text' => 'TEXT body',
       ],
     ];
-    $this->settings = new SettingsController();
+    $this->settings = SettingsController::getInstance();
   }
 
-  function testItRequiresMailerMethod() {
+  public function testItRequiresMailerMethod() {
     // reset mta settings so that we have no default mailer
     $this->settings->set('mta', null);
     try {
       $mailer = new Mailer();
+      $mailer->init();
       $this->fail('Mailer did not throw an exception');
     } catch (\Exception $e) {
       expect($e->getMessage())->equals('Mailer is not configured.');
     }
   }
 
-  function testItRequiresSender() {
+  public function testItRequiresSender() {
     try {
-      $mailer = new Mailer($mailer = $this->mailer);
+      $mailer = new Mailer();
+      $mailer->init($mailer = $this->mailer);
       $this->fail('Mailer did not throw an exception');
     } catch (\Exception $e) {
       expect($e->getMessage())->equals('Sender name and email are not configured.');
     }
   }
 
-  function testItCanConstruct() {
-    $mailer = new Mailer($this->mailer, $this->sender, $this->reply_to, $this->return_path);
+  public function testItCanConstruct() {
+    $mailer = new Mailer();
+    $mailer->init($this->mailer, $this->sender, $this->replyTo, $this->returnPath);
     expect($mailer->sender['from_name'])->equals($this->sender['name']);
     expect($mailer->sender['from_email'])->equals($this->sender['address']);
-    expect($mailer->reply_to['reply_to_name'])->equals($this->reply_to['name']);
-    expect($mailer->reply_to['reply_to_email'])->equals($this->reply_to['address']);
-    expect($mailer->return_path)->equals($this->return_path);
+    expect($mailer->replyTo['reply_to_name'])->equals($this->replyTo['name']);
+    expect($mailer->replyTo['reply_to_email'])->equals($this->replyTo['address']);
+    expect($mailer->returnPath)->equals($this->returnPath);
   }
 
-  function testItCanBuildKnownMailerInstances() {
-    foreach ($this->available_mailer_methods as $method) {
-      $mailer = new Mailer($method, $this->sender);
-      $mailer->buildMailer();
-      expect(get_class($mailer->mailer_instance))
-        ->equals('MailPoet\Mailer\Methods\\' . $method['method']);
-    }
-  }
-
-  function testItThrowsUnknownMailerException() {
+  public function testItThrowsUnknownMailerException() {
     try {
-      $mailer = new Mailer(['method' => 'Unknown'], $this->sender);
+      $mailer = new Mailer();
+      $mailer->init(['method' => 'Unknown'], $this->sender);
       $this->fail('Mailer did not throw an exception');
     } catch (\Exception $e) {
       expect($e->getMessage())->equals('Mailing method does not exist.');
     }
   }
 
-  function testItSetsReplyToAddressWhenOnlyNameIsAvailable() {
-    $reply_to = ['name' => 'test'];
-    $mailer = new Mailer($this->mailer, $this->sender, $reply_to);
-    $reply_to = $mailer->getReplyToNameAndAddress();
-    expect($reply_to['reply_to_email'])->equals($this->sender['address']);
+  public function testItSetsReplyToAddressWhenOnlyNameIsAvailable() {
+    $replyTo = ['name' => 'test'];
+    $mailer = new Mailer();
+    $mailer->init($this->mailer, $this->sender, $replyTo);
+    $replyTo = $mailer->getReplyToNameAndAddress();
+    expect($replyTo['reply_to_email'])->equals($this->sender['address']);
   }
 
-  function testItGetsReturnPathAddress() {
-    $mailer = new Mailer($this->mailer, $this->sender, $this->reply_to);
-    $return_path = $mailer->getReturnPathAddress('bounce@test.com');
-    expect($return_path)->equals('bounce@test.com');
+  public function testItGetsReturnPathAddress() {
+    $mailer = new Mailer();
+    $mailer->init($this->mailer, $this->sender, $this->replyTo);
+    $returnPath = $mailer->getReturnPathAddress('bounce@test.com');
+    expect($returnPath)->equals('bounce@test.com');
     $this->settings->set('bounce', ['address' => 'settngs_bounce@test.com']);
-    $return_path = $mailer->getReturnPathAddress($return_path = false);
-    expect($return_path)->equals('settngs_bounce@test.com');
+    $returnPath = $mailer->getReturnPathAddress($returnPath = false);
+    expect($returnPath)->equals('settngs_bounce@test.com');
   }
 
-  function testItCanTransformSubscriber() {
-    $mailer = new Mailer($this->mailer, $this->sender, $this->reply_to);
+  public function testItCanTransformSubscriber() {
+    $mailer = new Mailer();
+    $mailer->init($this->mailer, $this->sender, $this->replyTo);
     expect($mailer->formatSubscriberNameAndEmailAddress('test@email.com'))
       ->equals('test@email.com');
     expect($mailer->formatSubscriberNameAndEmailAddress(
@@ -157,36 +163,45 @@ class MailerTest extends \MailPoetTest {
         'email' => 'test@email.com',
       ])
     )->equals('First Last <test@email.com>');
+    expect($mailer->formatSubscriberNameAndEmailAddress(
+      [
+        'full_name' => 'First Last',
+        'email' => 'test@email.com',
+      ])
+    )->equals('First Last <test@email.com>');
   }
 
-  function testItCanConvertNonASCIIEmailAddressString() {
-    $mailer = new Mailer($this->mailer, $this->sender, $this->reply_to);
+  public function testItCanConvertNonASCIIEmailAddressString() {
+    $mailer = new Mailer();
+    $mailer->init($this->mailer, $this->sender, $this->replyTo);
     expect($mailer->sender['from_name'])->equals($this->sender['name']);
-    expect($mailer->reply_to['reply_to_name'])->equals($this->reply_to['name']);
+    expect($mailer->replyTo['reply_to_name'])->equals($this->replyTo['name']);
     $sender = [
       'name' => 'Sender Außergewöhnlichen тест системы',
       'address' => 'staff@mailinator.com',
     ];
-    $reply_to = [
+    $replyTo = [
       'name' => 'Reply-To Außergewöhnlichen тест системы',
       'address' => 'staff@mailinator.com',
     ];
-    $mailer = new Mailer($this->mailer, $sender, $reply_to);
+    $mailer = new Mailer();
+    $mailer->init($this->mailer, $sender, $replyTo);
     expect($mailer->sender['from_name'])
       ->equals(sprintf('=?utf-8?B?%s?=', base64_encode($sender['name'])));
-    expect($mailer->reply_to['reply_to_name'])
-      ->equals(sprintf('=?utf-8?B?%s?=', base64_encode($reply_to['name'])));
+    expect($mailer->replyTo['reply_to_name'])
+      ->equals(sprintf('=?utf-8?B?%s?=', base64_encode($replyTo['name'])));
   }
 
-  function testItCanSend() {
-    if (getenv('WP_TEST_MAILER_ENABLE_SENDING') !== 'true') return;
+  public function testItCanSend() {
+    if (getenv('WP_TEST_MAILER_ENABLE_SENDING') !== 'true') $this->markTestSkipped();
     $this->sender['address'] = 'staff@mailpoet.com';
-    $mailer = new Mailer($this->mailer, $this->sender, $this->reply_to);
+    $mailer = new Mailer();
+    $mailer->init($this->mailer, $this->sender, $this->replyTo);
     $result = $mailer->send($this->newsletter, $this->subscriber);
     expect($result['response'])->true();
   }
 
-  function _after() {
-    \ORM::raw_execute('TRUNCATE ' . Setting::$_table);
+  public function _after() {
+    $this->diContainer->get(SettingsRepository::class)->truncate();
   }
 }

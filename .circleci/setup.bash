@@ -23,7 +23,7 @@ function setup {
 
 	# Set up WordPress
 	mysql -h 127.0.0.1 -u root -e "create database wordpress"
-	wp core download $wp_cli_wordpress_path $wp_cli_allow_root
+	wp core download $wp_cli_wordpress_path $wp_cli_allow_root --version=${2:-latest}
 
 	# Generate `wp-config.php` file with debugging enabled
 	echo "define(\"WP_DEBUG\", true);" | wp core config --dbname=wordpress --dbuser=root --dbhost=127.0.0.1 --extra-php $wp_cli_wordpress_path $wp_cli_allow_root
@@ -59,4 +59,11 @@ function setup {
 	else
 	    wp plugin activate mailpoet $wp_cli_wordpress_path $wp_cli_allow_root
 	fi
+
+  if [[ $CIRCLE_JOB == *"_with_premium_"* ]]; then
+    # Softlink MailPoet Premium to plugin path
+    ln -s ../../../mp3premium wordpress/wp-content/plugins/mailpoet-premium
+    # Activate MailPoet Premium
+    wp plugin activate mailpoet-premium --path=wordpress
+  fi
 }

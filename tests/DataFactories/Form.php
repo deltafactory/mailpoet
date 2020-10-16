@@ -2,8 +2,8 @@
 
 namespace MailPoet\Test\DataFactories;
 
-use Carbon\Carbon;
 use MailPoet\Models\Form as FormModel;
+use MailPoetVendor\Carbon\Carbon;
 
 class Form {
 
@@ -19,6 +19,7 @@ class Form {
         'segments' => [2],
         'segments_selected_by' => 'admin',
       ],
+      'status' => 'enabled',
       'created_at' => Carbon::now(),
       'updated_at' => Carbon::now(),
     ];
@@ -54,6 +55,20 @@ class Form {
     return $this;
   }
 
+  /**
+   * @return $this
+   */
+  public function withDisplayBelowPosts() {
+    $this->data['settings']['form_placement'] = [
+      'below_posts' => [
+        'enabled' => '1',
+        'pages' => ['all' => ''],
+        'posts' => ['all' => '1'],
+      ],
+    ];
+    return $this;
+  }
+
   /** @return \MailPoet\Models\Form */
   public function create() {
     return FormModel::createOrUpdate($this->data);
@@ -61,5 +76,14 @@ class Form {
 
   public function withDefaultSuccessMessage() {
     FormModel::updateSuccessMessages();
+  }
+
+  /**
+   * @return $this
+   */
+  public function withSuccessMessage(string $message) {
+    $this->data['settings']['on_success'] = 'message';
+    $this->data['settings']['success_message'] = $message;
+    return $this;
   }
 }

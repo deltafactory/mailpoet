@@ -1,5 +1,7 @@
 <?php
+
 namespace MailPoet\Subscription;
+
 use MailPoet\Settings\SettingsController;
 use MailPoet\Subscribers\SubscriberActions;
 use MailPoet\WP\Functions as WPFunctions;
@@ -10,17 +12,17 @@ class Registration {
   private $settings;
 
   /** @var SubscriberActions */
-  private $subscriber_actions;
+  private $subscriberActions;
 
-  function __construct(
+  public function __construct(
     SettingsController $settings,
-    SubscriberActions $subscriber_actions
+    SubscriberActions $subscriberActions
   ) {
     $this->settings = $settings;
-    $this->subscriber_actions = $subscriber_actions;
+    $this->subscriberActions = $subscriberActions;
   }
 
-  function extendForm() {
+  public function extendForm() {
     $label = $this->settings->get(
       'subscribe.on_register.label',
       WPFunctions::get()->__('Yes, please add me to your mailing list.', 'mailpoet')
@@ -38,7 +40,7 @@ class Registration {
     </p>';
   }
 
-  function onMultiSiteRegister($result) {
+  public function onMultiSiteRegister($result) {
     if (empty($result['errors']->errors)) {
       if (
         isset($_POST['mailpoet']['subscribe_on_register'])
@@ -53,10 +55,10 @@ class Registration {
     return $result;
   }
 
-  function onRegister(
+  public function onRegister(
     $errors,
-    $user_login,
-    $user_email = null
+    $userLogin,
+    $userEmail = null
   ) {
     if (
       empty($errors->errors)
@@ -64,27 +66,24 @@ class Registration {
       && (bool)$_POST['mailpoet']['subscribe_on_register'] === true
     ) {
       $this->subscribeNewUser(
-        $user_login,
-        $user_email
+        $userLogin,
+        $userEmail
       );
     }
     return $errors;
   }
 
   private function subscribeNewUser($name, $email) {
-    $segment_ids = $this->settings->get(
+    $segmentIds = $this->settings->get(
       'subscribe.on_register.segments',
       []
     );
-
-    if (!empty($segment_ids)) {
-      $this->subscriber_actions->subscribe(
-        [
-          'email' => $email,
-          'first_name' => $name,
-        ],
-        $segment_ids
-      );
-    }
+    $this->subscriberActions->subscribe(
+      [
+        'email' => $email,
+        'first_name' => $name,
+      ],
+      $segmentIds
+    );
   }
 }

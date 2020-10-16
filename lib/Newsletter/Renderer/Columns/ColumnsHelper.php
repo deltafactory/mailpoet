@@ -1,8 +1,9 @@
 <?php
+
 namespace MailPoet\Newsletter\Renderer\Columns;
 
 class ColumnsHelper {
-  static $columns_width = [
+  public static $columnsWidth = [
     1 => [660],
     2 => [330, 330],
     "1_2" => [220, 440],
@@ -10,35 +11,35 @@ class ColumnsHelper {
     3 => [220, 220, 220],
   ];
 
-  static $columns_class = [
+  public static $columnsClass = [
     1 => 'cols-one',
     2 => 'cols-two',
     3 => 'cols-three',
   ];
 
-  static $columns_alignment = [
+  public static $columnsAlignment = [
     1 => null,
     2 => 'left',
     3 => 'right',
   ];
 
   /** @return int[] */
-  static function columnWidth($columns_count, $columns_layout) {
-    if (isset(self::$columns_width[$columns_layout])) {
-      return self::$columns_width[$columns_layout];
+  public static function columnWidth($columnsCount, $columnsLayout) {
+    if (isset(self::$columnsWidth[$columnsLayout])) {
+      return self::$columnsWidth[$columnsLayout];
     }
-    return self::$columns_width[$columns_count];
+    return self::$columnsWidth[$columnsCount];
   }
 
-  static function columnClass($columns_count) {
-    return self::$columns_class[$columns_count];
+  public static function columnClass($columnsCount) {
+    return self::$columnsClass[$columnsCount];
   }
 
-  static function columnClasses() {
-    return self::$columns_class;
+  public static function columnClasses() {
+    return self::$columnsClass;
   }
 
-  static function columnAlignment($columns_count) {
-    return self::$columns_alignment[$columns_count];
+  public static function columnAlignment($columnsCount) {
+    return self::$columnsAlignment[$columnsCount];
   }
 }

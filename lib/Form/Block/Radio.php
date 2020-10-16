@@ -1,33 +1,50 @@
 <?php
+
 namespace MailPoet\Form\Block;
 
-if (!defined('ABSPATH')) exit;
+use MailPoet\Form\BlockWrapperRenderer;
+use MailPoet\WP\Functions as WPFunctions;
 
-class Radio extends Base {
+class Radio {
 
-  static function render($block) {
+  /** @var BlockRendererHelper */
+  private $rendererHelper;
+
+  /** @var WPFunctions */
+  private $wp;
+
+  /** @var BlockWrapperRenderer */
+  private $wrapper;
+
+  public function __construct(BlockRendererHelper $rendererHelper, BlockWrapperRenderer $wrapper, WPFunctions $wp) {
+    $this->rendererHelper = $rendererHelper;
+    $this->wrapper = $wrapper;
+    $this->wp = $wp;
+  }
+
+  public function render(array $block, array $formSettings): string {
     $html = '';
 
-    $field_name = 'data[' . static::getFieldName($block) . ']';
-    $field_validation = static::getInputValidation($block);
+    $fieldName = 'data[' . $this->rendererHelper->getFieldName($block) . ']';
+    $fieldValidation = $this->rendererHelper->getInputValidation($block);
 
-    $html .= '<p class="mailpoet_paragraph">';
-
-    $html .= static::renderLabel($block);
+    $html .= $this->rendererHelper->renderLabel($block, $formSettings);
 
     $options = (!empty($block['params']['values'])
       ? $block['params']['values']
       : []
     );
 
-    $selected_value = self::getFieldValue($block);
+    $selectedValue = $this->rendererHelper->getFieldValue($block);
 
     foreach ($options as $option) {
-      $html .= '<label class="mailpoet_radio_label">';
+      $html .= '<label class="mailpoet_radio_label" '
+        . $this->rendererHelper->renderFontStyle($formSettings)
+        . '>';
 
       $html .= '<input type="radio" class="mailpoet_radio" ';
 
-      $html .= 'name="' . $field_name . '" ';
+      $html .= 'name="' . $fieldName . '" ';
 
       if (is_array($option['value'])) {
         $value = key($option['value']);
@@ -37,25 +54,23 @@ class Radio extends Base {
         $label = $option['value'];
       }
 
-      $html .= 'value="' . esc_attr($value) . '" ';
+      $html .= 'value="' . $this->wp->escAttr($value) . '" ';
 
       $html .= (
         (
-          $selected_value === ''
+          $selectedValue === ''
           && isset($option['is_checked'])
           && $option['is_checked']
-        ) || ($selected_value === $value)
+        ) || ($selectedValue === $value)
       ) ? 'checked="checked"' : '';
 
-      $html .= $field_validation;
-      $html .= ' /> ' . esc_attr($label);
+      $html .= $fieldValidation;
+      $html .= ' /> ' . $this->wp->escAttr($label);
       $html .= '</label>';
     }
 
     $html .= '<span class="mailpoet_error_' . $block['id'] . '"></span>';
 
-    $html .= '</p>';
-
-    return $html;
+    return $this->wrapper->render($block, $html);
   }
 }

@@ -1,0 +1,40 @@
+.mailpoet-min-width {
+  width: min-content;
+}
+
+.mailpoet-vertical-middle {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.mailpoet-full-width {
+  width: 100%;
+}
+
+.mailpoet-gap {
+  display: block;
+  height: $grid-gap;
+  width: $grid-gap;
+}
+
+span.mailpoet-gap {
+  display: inline-block;
+}
+
+span.mailpoet-gap-half {
+  display: inline-block;
+  height: $grid-gap-half;
+  width: $grid-gap-half;
+}
+
+.mailpoet-gap-large {
+  display: block;
+  height: $grid-gap-large;
+  width: $grid-gap-large;
+}
+
+.mailpoet-disabled {
+  opacity: .5;
+  pointer-events: none;
+  touch-action: none;
+}

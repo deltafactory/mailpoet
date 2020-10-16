@@ -3,11 +3,11 @@
 namespace MailPoet\Newsletter\Shortcodes;
 
 use MailPoet\Models\CustomField;
+use MailPoet\Models\NewsletterLink;
 use MailPoet\WP\Functions as WPFunctions;
 
 class ShortcodesHelper {
-
-  static function getShortcodes() {
+  public static function getShortcodes() {
     $shortcodes = [
       WPFunctions::get()->__('Subscriber', 'mailpoet') => [
         [
@@ -82,7 +82,7 @@ class ShortcodesHelper {
           'text' => WPFunctions::get()->__('Unsubscribe link', 'mailpoet'),
           'shortcode' => sprintf(
             '<a target="_blank" href="%s">%s</a>',
-            '[link:subscription_unsubscribe_url]',
+            NewsletterLink::UNSUBSCRIBE_LINK_SHORT_CODE,
             WPFunctions::get()->__('Unsubscribe', 'mailpoet')
           ),
         ],
@@ -104,24 +104,24 @@ class ShortcodesHelper {
         ],
       ],
     ];
-    $custom_fields = self::getCustomFields();
-    if ($custom_fields) {
+    $customFields = self::getCustomFields();
+    if ($customFields) {
       $shortcodes[__('Subscriber', 'mailpoet')] = array_merge(
         $shortcodes[__('Subscriber', 'mailpoet')],
-        $custom_fields
+        $customFields
       );
     }
     return $shortcodes;
   }
 
-  static function getCustomFields() {
-    $custom_fields = CustomField::findMany();
-    if (!$custom_fields) return false;
-    return array_map(function($custom_field) {
+  public static function getCustomFields() {
+    $customFields = CustomField::findMany();
+    if (!$customFields) return false;
+    return array_map(function($customField) {
       return [
-        'text' => $custom_field->name,
-        'shortcode' => '[subscriber:cf_' . $custom_field->id . ']',
+        'text' => $customField->name,
+        'shortcode' => '[subscriber:cf_' . $customField->id . ']',
       ];
-    }, $custom_fields);
+    }, $customFields);
   }
 }

@@ -1,29 +1,32 @@
 <?php
+
 namespace MailPoet\Settings;
 
-use MailPoet\Models\UserFlag;
+use MailPoet\Entities\UserFlagEntity;
 use MailPoet\WP\Functions as WPFunctions;
 
 class UserFlagsController {
 
-  /**
-   * @var array|null
-   */
+  /** @var array|null */
   private $data = null;
-  
-  /**
-   * @var array
-   */
+
+  /** @var array */
   private $defaults;
 
-  function __construct() {
+  /** @var UserFlagsRepository */
+  private $userFlagsRepository;
+
+  public function __construct(UserFlagsRepository $userFlagsRepository) {
     $this->defaults = [
       'last_announcement_seen' => false,
       'editor_tutorial_seen' => false,
+      'display_new_form_editor_nps_survey' => false,
+      'transactional_emails_opt_in_notice_dismissed' => false,
     ];
+    $this->userFlagsRepository = $userFlagsRepository;
   }
 
-  function get($name) {
+  public function get($name) {
     $this->ensureLoaded();
     if (!isset($this->data[$name])) {
       return $this->defaults[$name];
@@ -31,39 +34,61 @@ class UserFlagsController {
     return $this->data[$name];
   }
 
-  function getAll() {
+  public function getAll() {
     $this->ensureLoaded();
-    return array_merge($this->defaults, $this->data);
+    $data = $this->data;
+    if (!is_array($data)) {
+      $data = [];
+    }
+    return array_merge($this->defaults, $data);
   }
 
-  function set($name, $value) {
-    $current_user_id = WPFunctions::get()->getCurrentUserId();
-    UserFlag::createOrUpdate([
-      'user_id' => $current_user_id,
+  public function set($name, $value) {
+    $currentUserId = WPFunctions::get()->getCurrentUserId();
+    $flag = $this->userFlagsRepository->findOneBy([
+      'userId' => $currentUserId,
       'name' => $name,
-      'value' => $value,
     ]);
+
+    if (!$flag) {
+      $flag = new UserFlagEntity();
+      $flag->setUserId($currentUserId);
+      $flag->setName($name);
+      $this->userFlagsRepository->persist($flag);
+    }
+    $flag->setValue($value);
+    $this->userFlagsRepository->flush();
+
     if ($this->isLoaded()) {
       $this->data[$name] = $value;
     }
   }
 
-  function delete($name) {
-    $current_user_id = WPFunctions::get()->getCurrentUserId();
-    UserFlag::where('user_id', $current_user_id)
-      ->where('name', $name)
-      ->deleteMany();
+  public function delete($name) {
+    $currentUserId = WPFunctions::get()->getCurrentUserId();
+    $flag = $this->userFlagsRepository->findOneBy([
+      'userId' => $currentUserId,
+      'name' => $name,
+    ]);
+
+    if (!$flag) {
+      return;
+    }
+
+    $this->userFlagsRepository->remove($flag);
+    $this->userFlagsRepository->flush();
+
     if ($this->isLoaded()) {
       unset($this->data[$name]);
     }
   }
 
   private function load() {
-    $current_user_id = WPFunctions::get()->getCurrentUserId();
-    $flags = UserFlag::where('user_id', $current_user_id)->findMany();
+    $currentUserId = WPFunctions::get()->getCurrentUserId();
+    $flags = $this->userFlagsRepository->findBy(['userId' => $currentUserId]);
     $this->data = [];
     foreach ($flags as $flag) {
-      $this->data[$flag->name] = $flag->value;
+      $this->data[$flag->getName()] = $flag->getValue();
     }
   }
 

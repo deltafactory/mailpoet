@@ -9,38 +9,39 @@ use MailPoet\Models\NewsletterOptionField;
 use MailPoet\Models\ScheduledTask;
 use MailPoet\Models\Segment;
 use MailPoet\Models\SendingQueue;
-use MailPoet\Models\Setting;
 use MailPoet\Models\Subscriber;
 use MailPoet\Models\SubscriberSegment;
 use MailPoet\Settings\SettingsController;
+use MailPoet\Settings\SettingsRepository;
+use MailPoetVendor\Idiorm\ORM;
 
 class SubscriberActionsTest extends \MailPoetTest {
 
   /** @var array */
-  private $test_data;
+  private $testData;
 
   /** @var SubscriberActions */
-  private $subscriber_actions;
+  private $subscriberActions;
 
   /** @var SettingsController */
   private $settings;
 
-  function _before() {
+  public function _before() {
     parent::_before();
-    $this->test_data = [
+    $this->testData = [
       'first_name' => 'John',
       'last_name' => 'Mailer',
       'email' => 'john@mailpoet.com',
     ];
-    $this->subscriber_actions = ContainerWrapper::getInstance()->get(SubscriberActions::class);
-    $this->settings = new SettingsController();
+    $this->subscriberActions = ContainerWrapper::getInstance()->get(SubscriberActions::class);
+    $this->settings = SettingsController::getInstance();
     $this->settings->set('sender', [
       'name' => 'John Doe',
       'address' => 'john.doe@example.com',
     ]);
   }
 
-  function testItCanSubscribe() {
+  public function testItCanSubscribe() {
     $segment = Segment::create();
     $segment->hydrate(['name' => 'List #1']);
     $segment->save();
@@ -49,22 +50,22 @@ class SubscriberActionsTest extends \MailPoetTest {
     $segment2->hydrate(['name' => 'List #2']);
     $segment2->save();
 
-    $subscriber = $this->subscriber_actions->subscribe(
-      $this->test_data,
+    $subscriber = $this->subscriberActions->subscribe(
+      $this->testData,
       [$segment->id(), $segment2->id()]
     );
 
     expect($subscriber->id() > 0)->equals(true);
     expect($subscriber->segments()->count())->equals(2);
-    expect($subscriber->email)->equals($this->test_data['email']);
-    expect($subscriber->first_name)->equals($this->test_data['first_name']);
-    expect($subscriber->last_name)->equals($this->test_data['last_name']);
+    expect($subscriber->email)->equals($this->testData['email']);
+    expect($subscriber->firstName)->equals($this->testData['first_name']);
+    expect($subscriber->lastName)->equals($this->testData['last_name']);
     // signup confirmation is enabled by default
     expect($subscriber->status)->equals(Subscriber::STATUS_UNCONFIRMED);
-    expect($subscriber->deleted_at)->equals(null);
+    expect($subscriber->deletedAt)->equals(null);
   }
 
-  function testItSchedulesWelcomeNotificationUponSubscriptionWhenSubscriptionConfirmationIsDisabled() {
+  public function testItSchedulesWelcomeNotificationUponSubscriptionWhenSubscriptionConfirmationIsDisabled() {
     // create segment
     $segment = Segment::create();
     $segment->hydrate(['name' => 'List #1']);
@@ -78,38 +79,38 @@ class SubscriberActionsTest extends \MailPoetTest {
     $newsletter->save();
     expect($newsletter->getErrors())->false();
 
-    $newsletter_options = [
+    $newsletterOptions = [
       'event' => 'segment',
       'segment' => $segment->id,
       'afterTimeType' => 'days',
       'afterTimeNumber' => 1,
     ];
-    foreach ($newsletter_options as $option => $value) {
-      $newsletter_option_field = NewsletterOptionField::create();
-      $newsletter_option_field->name = $option;
-      $newsletter_option_field->newsletter_type = $newsletter->type;
-      $newsletter_option_field->save();
-      expect($newsletter_option_field->getErrors())->false();
+    foreach ($newsletterOptions as $option => $value) {
+      $newsletterOptionField = NewsletterOptionField::create();
+      $newsletterOptionField->name = $option;
+      $newsletterOptionField->newsletterType = $newsletter->type;
+      $newsletterOptionField->save();
+      expect($newsletterOptionField->getErrors())->false();
 
-      $newsletter_option = NewsletterOption::create();
-      $newsletter_option->option_field_id = $newsletter_option_field->id;
-      $newsletter_option->newsletter_id = $newsletter->id;
-      $newsletter_option->value = $value;
-      $newsletter_option->save();
-      expect($newsletter_option->getErrors())->false();
+      $newsletterOption = NewsletterOption::create();
+      $newsletterOption->optionFieldId = (int)$newsletterOptionField->id;
+      $newsletterOption->newsletterId = $newsletter->id;
+      $newsletterOption->value = (string)$value;
+      $newsletterOption->save();
+      expect($newsletterOption->getErrors())->false();
     }
 
     $this->settings->set('signup_confirmation.enabled', false);
-    $subscriber = $this->subscriber_actions->subscribe($this->test_data, [$segment->id()]);
+    $subscriber = $this->subscriberActions->subscribe($this->testData, [$segment->id()]);
     expect($subscriber->id() > 0)->equals(true);
     expect($subscriber->segments()->count())->equals(1);
-    $scheduled_notification = SendingQueue::findTaskByNewsletterId($newsletter->id)
+    $scheduledNotification = SendingQueue::findTaskByNewsletterId($newsletter->id)
       ->where('tasks.status', SendingQueue::STATUS_SCHEDULED)
       ->findOne();
-    expect($scheduled_notification)->notEmpty();
+    expect($scheduledNotification)->notEmpty();
   }
 
-  function testItDoesNotScheduleWelcomeNotificationUponSubscriptionWhenSubscriptionConfirmationIsEnabled() {
+  public function testItDoesNotScheduleWelcomeNotificationUponSubscriptionWhenSubscriptionConfirmationIsEnabled() {
     // create segment
     $segment = Segment::create();
     $segment->hydrate(['name' => 'List #1']);
@@ -123,43 +124,43 @@ class SubscriberActionsTest extends \MailPoetTest {
     $newsletter->save();
     expect($newsletter->getErrors())->false();
 
-    $newsletter_options = [
+    $newsletterOptions = [
       'event' => 'segment',
       'segment' => $segment->id,
       'afterTimeType' => 'days',
       'afterTimeNumber' => 1,
     ];
-    foreach ($newsletter_options as $option => $value) {
-      $newsletter_option_field = NewsletterOptionField::create();
-      $newsletter_option_field->name = $option;
-      $newsletter_option_field->newsletter_type = $newsletter->type;
-      $newsletter_option_field->save();
-      expect($newsletter_option_field->getErrors())->false();
+    foreach ($newsletterOptions as $option => $value) {
+      $newsletterOptionField = NewsletterOptionField::create();
+      $newsletterOptionField->name = $option;
+      $newsletterOptionField->newsletterType = $newsletter->type;
+      $newsletterOptionField->save();
+      expect($newsletterOptionField->getErrors())->false();
 
-      $newsletter_option = NewsletterOption::create();
-      $newsletter_option->option_field_id = $newsletter_option_field->id;
-      $newsletter_option->newsletter_id = $newsletter->id;
-      $newsletter_option->value = $value;
-      $newsletter_option->save();
-      expect($newsletter_option->getErrors())->false();
+      $newsletterOption = NewsletterOption::create();
+      $newsletterOption->optionFieldId = (int)$newsletterOptionField->id;
+      $newsletterOption->newsletterId = $newsletter->id;
+      $newsletterOption->value = (string)$value;
+      $newsletterOption->save();
+      expect($newsletterOption->getErrors())->false();
     }
 
     $this->settings->set('signup_confirmation.enabled', true);
-    $subscriber = $this->subscriber_actions->subscribe($this->test_data, [$segment->id()]);
+    $subscriber = $this->subscriberActions->subscribe($this->testData, [$segment->id()]);
     expect($subscriber->id() > 0)->equals(true);
     expect($subscriber->segments()->count())->equals(1);
-    $scheduled_notification = SendingQueue::findTaskByNewsletterId($newsletter->id)
+    $scheduledNotification = SendingQueue::findTaskByNewsletterId($newsletter->id)
       ->where('tasks.status', SendingQueue::STATUS_SCHEDULED)
       ->findOne();
-    expect($scheduled_notification)->isEmpty();
+    expect($scheduledNotification)->isEmpty();
   }
 
-  function testItCannotSubscribeWithReservedColumns() {
+  public function testItCannotSubscribeWithReservedColumns() {
     $segment = Segment::create();
     $segment->hydrate(['name' => 'List #1']);
     $segment->save();
 
-    $subscriber = $this->subscriber_actions->subscribe(
+    $subscriber = $this->subscriberActions->subscribe(
       [
         'email' => 'donald@mailpoet.com',
         'first_name' => 'Donald',
@@ -180,20 +181,20 @@ class SubscriberActionsTest extends \MailPoetTest {
     expect($subscriber->id)->notEquals(1337);
     expect($subscriber->segments()->count())->equals(1);
     expect($subscriber->email)->equals('donald@mailpoet.com');
-    expect($subscriber->first_name)->equals('Donald');
-    expect($subscriber->last_name)->equals('Trump');
+    expect($subscriber->firstName)->equals('Donald');
+    expect($subscriber->lastName)->equals('Trump');
 
-    expect($subscriber->wp_user_id)->equals(null);
-    expect($subscriber->is_woocommerce_user)->equals(0);
+    expect($subscriber->wpUserId)->equals(null);
+    expect($subscriber->isWoocommerceUser)->equals(0);
     expect($subscriber->status)->equals(Subscriber::STATUS_UNCONFIRMED);
-    expect($subscriber->created_at)->notEquals('1984-03-09 00:00:01');
-    expect($subscriber->updated_at)->notEquals('1984-03-09 00:00:02');
-    expect($subscriber->created_at)->equals($subscriber->updated_at);
-    expect($subscriber->deleted_at)->equals(null);
+    expect($subscriber->createdAt)->notEquals('1984-03-09 00:00:01');
+    expect($subscriber->updatedAt)->notEquals('1984-03-09 00:00:02');
+    expect($subscriber->createdAt)->equals($subscriber->updatedAt);
+    expect($subscriber->deletedAt)->equals(null);
   }
 
-  function testItOverwritesSubscriberDataWhenConfirmationIsDisabled() {
-    $original_setting_value = $this->settings->get('signup_confirmation.enabled');
+  public function testItOverwritesSubscriberDataWhenConfirmationIsDisabled() {
+    $originalSettingValue = $this->settings->get('signup_confirmation.enabled');
     $this->settings->set('signup_confirmation.enabled', false);
 
     $segment = Segment::create();
@@ -210,7 +211,7 @@ class SubscriberActionsTest extends \MailPoetTest {
       'last_name' => 'Example',
     ];
 
-    $subscriber = $this->subscriber_actions->subscribe(
+    $subscriber = $this->subscriberActions->subscribe(
       $data,
       [$segment->id()]
     );
@@ -218,14 +219,14 @@ class SubscriberActionsTest extends \MailPoetTest {
     expect($subscriber->id() > 0)->equals(true);
     expect($subscriber->segments()->count())->equals(1);
     expect($subscriber->email)->equals($data['email']);
-    expect($subscriber->first_name)->equals($data['first_name']);
-    expect($subscriber->last_name)->equals($data['last_name']);
+    expect($subscriber->firstName)->equals($data['first_name']);
+    expect($subscriber->lastName)->equals($data['last_name']);
 
     $data2 = $data;
     $data2['first_name'] = 'Aaa';
     $data2['last_name'] = 'Bbb';
 
-    $subscriber = $this->subscriber_actions->subscribe(
+    $subscriber = $this->subscriberActions->subscribe(
       $data2,
       [$segment->id(), $segment2->id()]
     );
@@ -233,14 +234,14 @@ class SubscriberActionsTest extends \MailPoetTest {
     expect($subscriber->id() > 0)->equals(true);
     expect($subscriber->segments()->count())->equals(2);
     expect($subscriber->email)->equals($data2['email']);
-    expect($subscriber->first_name)->equals($data2['first_name']);
-    expect($subscriber->last_name)->equals($data2['last_name']);
+    expect($subscriber->firstName)->equals($data2['first_name']);
+    expect($subscriber->lastName)->equals($data2['last_name']);
 
-    $this->settings->set('signup_confirmation.enabled', $original_setting_value);
+    $this->settings->set('signup_confirmation.enabled', $originalSettingValue);
   }
 
-  function testItStoresUnconfirmedSubscriberDataWhenConfirmationIsEnabled() {
-    $original_setting_value = $this->settings->get('signup_confirmation.enabled');
+  public function testItStoresUnconfirmedSubscriberDataWhenConfirmationIsEnabled() {
+    $originalSettingValue = $this->settings->get('signup_confirmation.enabled');
     $this->settings->set('signup_confirmation.enabled', true);
 
     $segment = Segment::create();
@@ -257,7 +258,7 @@ class SubscriberActionsTest extends \MailPoetTest {
       'last_name' => 'Example',
     ];
 
-    $subscriber = $this->subscriber_actions->subscribe(
+    $subscriber = $this->subscriberActions->subscribe(
       $data,
       [$segment->id()]
     );
@@ -265,16 +266,16 @@ class SubscriberActionsTest extends \MailPoetTest {
     expect($subscriber->id() > 0)->equals(true);
     expect($subscriber->segments()->count())->equals(1);
     expect($subscriber->email)->equals($data['email']);
-    expect($subscriber->first_name)->equals($data['first_name']);
-    expect($subscriber->last_name)->equals($data['last_name']);
+    expect($subscriber->firstName)->equals($data['first_name']);
+    expect($subscriber->lastName)->equals($data['last_name']);
 
-    expect($subscriber->unconfirmed_data)->isEmpty();
+    expect($subscriber->unconfirmedData)->isEmpty();
 
     $data2 = $data;
     $data2['first_name'] = 'Aaa';
     $data2['last_name'] = 'Bbb';
 
-    $subscriber = $this->subscriber_actions->subscribe(
+    $subscriber = $this->subscriberActions->subscribe(
       $data2,
       [$segment->id(), $segment2->id()]
     );
@@ -283,40 +284,40 @@ class SubscriberActionsTest extends \MailPoetTest {
     expect($subscriber->segments()->count())->equals(2);
     // fields should be left intact
     expect($subscriber->email)->equals($data['email']);
-    expect($subscriber->first_name)->equals($data['first_name']);
-    expect($subscriber->last_name)->equals($data['last_name']);
+    expect($subscriber->firstName)->equals($data['first_name']);
+    expect($subscriber->lastName)->equals($data['last_name']);
 
-    expect($subscriber->unconfirmed_data)->notEmpty();
-    expect($subscriber->unconfirmed_data)->equals(json_encode($data2));
+    expect($subscriber->unconfirmedData)->notEmpty();
+    expect($subscriber->unconfirmedData)->equals(json_encode($data2));
 
     // Unconfirmed data should be wiped after any direct update
     // during confirmation, manual admin editing
     $subscriber = Subscriber::createOrUpdate($data2);
-    expect($subscriber->unconfirmed_data)->isEmpty();
+    expect($subscriber->unconfirmedData)->isEmpty();
     // during import
-    $subscriber->unconfirmed_data = json_encode($data2);
+    $subscriber->unconfirmedData = json_encode($data2);
     $subscriber->save();
     expect($subscriber->isDirty('unconfirmed_data'))->false();
-    expect($subscriber->unconfirmed_data)->notEmpty();
+    expect($subscriber->unconfirmedData)->notEmpty();
     Subscriber::updateMultiple(
       array_keys($data2),
       [array_values($data2)]
     );
     $subscriber = Subscriber::where('email', $data2['email'])->findOne();
-    expect($subscriber->unconfirmed_data)->isEmpty();
+    expect($subscriber->unconfirmedData)->isEmpty();
 
-    $this->settings->set('signup_confirmation.enabled', $original_setting_value);
+    $this->settings->set('signup_confirmation.enabled', $originalSettingValue);
   }
 
-  function _after() {
-    \ORM::raw_execute('TRUNCATE ' . Subscriber::$_table);
-    \ORM::raw_execute('TRUNCATE ' . Segment::$_table);
-    \ORM::raw_execute('TRUNCATE ' . SubscriberSegment::$_table);
-    \ORM::raw_execute('TRUNCATE ' . Newsletter::$_table);
-    \ORM::raw_execute('TRUNCATE ' . NewsletterOptionField::$_table);
-    \ORM::raw_execute('TRUNCATE ' . NewsletterOption::$_table);
-    \ORM::raw_execute('TRUNCATE ' . ScheduledTask::$_table);
-    \ORM::raw_execute('TRUNCATE ' . SendingQueue::$_table);
-    \ORM::raw_execute('TRUNCATE ' . Setting::$_table);
+  public function _after() {
+    ORM::raw_execute('TRUNCATE ' . Subscriber::$_table);
+    ORM::raw_execute('TRUNCATE ' . Segment::$_table);
+    ORM::raw_execute('TRUNCATE ' . SubscriberSegment::$_table);
+    ORM::raw_execute('TRUNCATE ' . Newsletter::$_table);
+    ORM::raw_execute('TRUNCATE ' . NewsletterOptionField::$_table);
+    ORM::raw_execute('TRUNCATE ' . NewsletterOption::$_table);
+    ORM::raw_execute('TRUNCATE ' . ScheduledTask::$_table);
+    ORM::raw_execute('TRUNCATE ' . SendingQueue::$_table);
+    $this->diContainer->get(SettingsRepository::class)->truncate();
   }
 }

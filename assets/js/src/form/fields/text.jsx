@@ -1,5 +1,6 @@
 import React from 'react';
 import PropTypes from 'prop-types';
+import Input from 'common/form/input/input';
 
 class FormFieldText extends React.Component { // eslint-disable-line react/prefer-stateless-function, max-len
   render() {
@@ -24,13 +25,13 @@ class FormFieldText extends React.Component { // eslint-disable-line react/prefe
       id = `field_${this.props.field.name}`;
     }
 
-    let className = this.props.field.class || null;
+    let className = this.props.field.className || null;
     if (!className && !this.props.field.size) {
       className = 'regular-text';
     }
 
     return (
-      <input
+      <Input
         type="text"
         disabled={
           (this.props.field.disabled !== undefined)
@@ -49,7 +50,9 @@ class FormFieldText extends React.Component { // eslint-disable-line react/prefe
         defaultValue={defaultValue}
         placeholder={this.props.field.placeholder}
         onChange={this.props.onValueChange}
-        {...this.props.field.validation}
+        customLabel={this.props.field.customLabel}
+        tooltip={this.props.field.tooltip}
+        {...this.props.field.validation}// eslint-disable-line react/jsx-props-no-spreading
       />
     );
   }
@@ -61,7 +64,7 @@ FormFieldText.propTypes = {
     name: PropTypes.string.isRequired,
     defaultValue: PropTypes.string,
     id: PropTypes.string,
-    class: PropTypes.string,
+    className: PropTypes.string,
     size: PropTypes.oneOfType([
       PropTypes.string,
       PropTypes.number,
@@ -69,6 +72,8 @@ FormFieldText.propTypes = {
     disabled: PropTypes.func,
     placeholder: PropTypes.string,
     validation: PropTypes.object,
+    customLabel: PropTypes.string,
+    tooltip: PropTypes.string,
   }).isRequired,
   item: PropTypes.object.isRequired, // eslint-disable-line react/forbid-prop-types
 };

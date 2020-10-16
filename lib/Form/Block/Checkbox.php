@@ -1,54 +1,63 @@
 <?php
+
 namespace MailPoet\Form\Block;
 
-if (!defined('ABSPATH')) exit;
+use MailPoet\Form\BlockWrapperRenderer;
 
-class Checkbox extends Base {
+class Checkbox {
 
-  static function render($block) {
+  /** @var BlockRendererHelper */
+  private $rendererHelper;
+
+  /** @var BlockWrapperRenderer */
+  private $wrapper;
+
+  public function __construct(BlockRendererHelper $rendererHelper, BlockWrapperRenderer $wrapper) {
+    $this->rendererHelper = $rendererHelper;
+    $this->wrapper = $wrapper;
+  }
+
+  public function render(array $block, array $formSettings): string {
     $html = '';
 
-    $field_name = 'data[' . static::getFieldName($block) . ']';
-    $field_validation = static::getInputValidation($block);
+    $fieldName = 'data[' . $this->rendererHelper->getFieldName($block) . ']';
+    $fieldValidation = $this->rendererHelper->getInputValidation($block);
 
-    $html .= '<p class="mailpoet_paragraph">';
-
-    $html .= static::renderLabel($block);
+    $html .= $this->rendererHelper->renderLabel($block, $formSettings);
 
     $options = (!empty($block['params']['values'])
       ? $block['params']['values']
       : []
     );
 
-    $selected_value = self::getFieldValue($block);
+    $selectedValue = $this->rendererHelper->getFieldValue($block);
 
     foreach ($options as $option) {
-      $html .= '<label class="mailpoet_checkbox_label">';
+      $html .= '<label class="mailpoet_checkbox_label" '
+        . $this->rendererHelper->renderFontStyle($formSettings) . '>';
       $html .= '<input type="checkbox" class="mailpoet_checkbox" ';
 
-      $html .= 'name="' . $field_name . '" ';
+      $html .= 'name="' . $fieldName . '" ';
 
       $html .= 'value="1" ';
 
       $html .= (
         (
-          $selected_value === ''
+          $selectedValue === ''
           && isset($option['is_checked'])
           && $option['is_checked']
-        ) || ($selected_value)
+        ) || ($selectedValue)
       ) ? 'checked="checked"' : '';
 
-      $html .= $field_validation;
+      $html .= $fieldValidation;
 
-      $html .= ' /> ' . esc_attr($option['value']);
+      $html .= ' /> ' . $option['value'];
 
       $html .= '</label>';
     }
 
     $html .= '<span class="mailpoet_error_' . $block['id'] . '"></span>';
 
-    $html .= '</p>';
-
-    return $html;
+    return $this->wrapper->render($block, $html);
   }
 }

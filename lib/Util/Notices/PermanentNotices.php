@@ -3,7 +3,6 @@
 namespace MailPoet\Util\Notices;
 
 use MailPoet\Config\Menu;
-use MailPoet\Features\FeaturesController;
 use MailPoet\Settings\SettingsController;
 use MailPoet\WP\Functions as WPFunctions;
 
@@ -13,84 +12,89 @@ class PermanentNotices {
   private $wp;
 
   /** @var PHPVersionWarnings */
-  private $php_version_warnings;
+  private $phpVersionWarnings;
 
   /** @var AfterMigrationNotice */
-  private $after_migration_notice;
-
-  /** @var DiscountsAnnouncement */
-  private $discounts_announcement;
+  private $afterMigrationNotice;
 
   /** @var UnauthorizedEmailNotice */
-  private $unauthorized_emails_notice;
+  private $unauthorizedEmailsNotice;
 
   /** @var UnauthorizedEmailInNewslettersNotice */
-  private $unauthorized_emails_in_newsletters_notice;
+  private $unauthorizedEmailsInNewslettersNotice;
 
   /** @var InactiveSubscribersNotice */
-  private $inactive_subscribers_notice;
+  private $inactiveSubscribersNotice;
 
-  /** @var FeaturesController */
-  private $features_controller;
+  /** @var BlackFridayNotice */
+  private $blackFridayNotice;
 
-  public function __construct(WPFunctions $wp, FeaturesController $features_controller) {
+  /** @var HeadersAlreadySentNotice */
+  private $headersAlreadySentNotice;
+
+  public function __construct(WPFunctions $wp) {
     $this->wp = $wp;
-    $this->php_version_warnings = new PHPVersionWarnings();
-    $this->after_migration_notice = new AfterMigrationNotice();
-    $this->discounts_announcement = new DiscountsAnnouncement();
-    $this->unauthorized_emails_notice = new UnauthorizedEmailNotice(new SettingsController, $wp);
-    $this->unauthorized_emails_in_newsletters_notice = new UnauthorizedEmailInNewslettersNotice(new SettingsController, $wp);
-    $this->inactive_subscribers_notice = new InactiveSubscribersNotice(new SettingsController, $wp);
-    $this->features_controller = $features_controller;
+    $this->phpVersionWarnings = new PHPVersionWarnings();
+    $this->afterMigrationNotice = new AfterMigrationNotice();
+    $this->unauthorizedEmailsNotice = new UnauthorizedEmailNotice(SettingsController::getInstance(), $wp);
+    $this->unauthorizedEmailsInNewslettersNotice = new UnauthorizedEmailInNewslettersNotice(SettingsController::getInstance(), $wp);
+    $this->inactiveSubscribersNotice = new InactiveSubscribersNotice(SettingsController::getInstance(), $wp);
+    $this->blackFridayNotice = new BlackFridayNotice();
+    $this->headersAlreadySentNotice = new HeadersAlreadySentNotice(SettingsController::getInstance(), $wp);
   }
 
   public function init() {
+    $excludeWizard = [
+      'mailpoet-welcome-wizard',
+      'mailpoet-woocommerce-setup',
+    ];
     $this->wp->addAction('wp_ajax_dismissed_notice_handler', [
       $this,
       'ajaxDismissNoticeHandler',
     ]);
 
-    $this->php_version_warnings->init(
+    $this->phpVersionWarnings->init(
       phpversion(),
-      Menu::isOnMailPoetAdminPage($exclude = ['mailpoet-welcome-wizard'])
+      Menu::isOnMailPoetAdminPage($excludeWizard)
     );
-    $this->after_migration_notice->init(
-      Menu::isOnMailPoetAdminPage($exclude = ['mailpoet-welcome-wizard'])
+    $this->afterMigrationNotice->init(
+      Menu::isOnMailPoetAdminPage($excludeWizard)
     );
-    $this->unauthorized_emails_notice->init(
-      Menu::isOnMailPoetAdminPage($exclude = ['mailpoet-welcome-wizard'])
+    $this->unauthorizedEmailsNotice->init(
+      Menu::isOnMailPoetAdminPage($excludeWizard)
     );
-    $this->unauthorized_emails_in_newsletters_notice->init(
-      Menu::isOnMailPoetAdminPage($exclude = null, $page_id = 'mailpoet-newsletters')
+    $this->unauthorizedEmailsInNewslettersNotice->init(
+      Menu::isOnMailPoetAdminPage($exclude = null, $pageId = 'mailpoet-newsletters')
     );
-    $this->inactive_subscribers_notice->init(
-      $this->features_controller->isSupported(FeaturesController::FEATURE_INACTIVE_SUBSCRIBERS_NOTICE)
-      && Menu::isOnMailPoetAdminPage($exclude = ['mailpoet-welcome-wizard'])
+    $this->inactiveSubscribersNotice->init(
+      Menu::isOnMailPoetAdminPage($excludeWizard)
     );
-    $this->discounts_announcement->init(
-      empty($_GET['page'])
-      && $this->wp->isAdmin()
-      && strpos($_SERVER['SCRIPT_NAME'], 'wp-admin/index.php') !== false
+    $this->blackFridayNotice->init(
+      Menu::isOnMailPoetAdminPage($excludeWizard)
+    );
+    $this->headersAlreadySentNotice->init(
+      Menu::isOnMailPoetAdminPage($excludeWizard)
     );
   }
 
-  function ajaxDismissNoticeHandler() {
+  public function ajaxDismissNoticeHandler() {
     if (!isset($_POST['type'])) return;
     switch ($_POST['type']) {
       case (PHPVersionWarnings::OPTION_NAME):
-        $this->php_version_warnings->disable();
+        $this->phpVersionWarnings->disable();
         break;
       case (AfterMigrationNotice::OPTION_NAME):
-        $this->after_migration_notice->disable();
+        $this->afterMigrationNotice->disable();
         break;
-      case (DiscountsAnnouncement::OPTION_NAME):
-        $this->discounts_announcement->disable();
+      case (BlackFridayNotice::OPTION_NAME):
+        $this->blackFridayNotice->disable();
+        break;
+      case (HeadersAlreadySentNotice::OPTION_NAME):
+        $this->headersAlreadySentNotice->disable();
         break;
       case (InactiveSubscribersNotice::OPTION_NAME):
-        $this->inactive_subscribers_notice->disable();
+        $this->inactiveSubscribersNotice->disable();
         break;
     }
   }
-
 }
-

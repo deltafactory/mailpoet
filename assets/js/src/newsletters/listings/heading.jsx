@@ -1,13 +1,10 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import MailPoet from 'mailpoet';
-import FreePlanAnnouncement from 'announcements/free_plan_announcement.jsx';
 
 const ListingHeading = () => (
-  <div>
-    <FreePlanAnnouncement />
-
-    <h1 className="title">
+  <div className="mailpoet-newsletter-listing-heading-wrapper">
+    <h1 className="mailpoet-newsletter-listing-heading title">
       {MailPoet.I18n.t('pageTitle')}
       <Link
         id="mailpoet-new-email"
@@ -24,6 +21,5 @@ const ListingHeading = () => (
     </h1>
   </div>
 );
-
 
 export default ListingHeading;

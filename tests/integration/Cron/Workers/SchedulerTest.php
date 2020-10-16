@@ -1,86 +1,94 @@
 <?php
+
 namespace MailPoet\Test\Cron\Workers;
 
-use Carbon\Carbon;
 use Codeception\Stub;
 use Codeception\Stub\Expected;
 use MailPoet\Cron\CronHelper;
 use MailPoet\Cron\Workers\Scheduler;
+use MailPoet\Logging\LoggerFactory;
 use MailPoet\Models\Newsletter;
 use MailPoet\Models\NewsletterOption;
 use MailPoet\Models\NewsletterOptionField;
 use MailPoet\Models\NewsletterSegment;
-use MailPoet\Models\Segment;
 use MailPoet\Models\ScheduledTask;
 use MailPoet\Models\ScheduledTaskSubscriber;
+use MailPoet\Models\Segment;
 use MailPoet\Models\SendingQueue;
-use MailPoet\Models\Setting;
 use MailPoet\Models\Subscriber;
 use MailPoet\Models\SubscriberSegment;
+use MailPoet\Newsletter\Scheduler\WelcomeScheduler;
 use MailPoet\Segments\SubscribersFinder;
+use MailPoet\Settings\SettingsRepository;
 use MailPoet\Tasks\Sending as SendingTask;
+use MailPoet\WP\Functions as WPFunctions;
+use MailPoetVendor\Carbon\Carbon;
+use MailPoetVendor\Idiorm\ORM;
 
 class SchedulerTest extends \MailPoetTest {
-  function testItDefinesConstants() {
-    expect(Scheduler::UNCONFIRMED_SUBSCRIBER_RESCHEDULE_TIMEOUT)->equals(5);
+  public $cronHelper;
+  /** @var LoggerFactory */
+  private $loggerFactory;
+
+  /** @var SubscribersFinder */
+  private $subscribersFinder;
+
+  public function _before() {
+    parent::_before();
+    $this->loggerFactory = LoggerFactory::getInstance();
+    $this->cronHelper = $this->diContainer->get(CronHelper::class);
+    $this->subscribersFinder = $this->diContainer->get(SubscribersFinder::class);
   }
 
-  function testItConstructs() {
-    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class));
-    expect($scheduler->timer)->greaterOrEquals(5);
-    $timer = microtime(true) - 2;
-    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class), $timer);
-    expect($scheduler->timer)->equals($timer);
-  }
-
-  function testItThrowsExceptionWhenExecutionLimitIsReached() {
+  public function testItThrowsExceptionWhenExecutionLimitIsReached() {
     try {
-      $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class), microtime(true) - CronHelper::DAEMON_EXECUTION_LIMIT);
+      $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class), $this->loggerFactory, $this->cronHelper);
+      $scheduler->process(microtime(true) - $this->cronHelper->getDaemonExecutionLimit());
       self::fail('Maximum execution time limit exception was not thrown.');
     } catch (\Exception $e) {
       expect($e->getMessage())->equals('Maximum execution time has been reached.');
     }
   }
 
-  function testItCanGetScheduledQueues() {
+  public function testItCanGetScheduledQueues() {
     expect(Scheduler::getScheduledQueues())->isEmpty();
     $queue = SendingTask::create();
-    $queue->newsletter_id = 1;
+    $queue->newsletterId = 1;
     $queue->status = SendingQueue::STATUS_SCHEDULED;
-    $queue->scheduled_at = Carbon::createFromTimestamp(current_time('timestamp'));
+    $queue->scheduledAt = Carbon::createFromTimestamp(WPFunctions::get()->currentTime('timestamp'));
     $queue->save();
     expect(Scheduler::getScheduledQueues())->notEmpty();
   }
 
-  function testItCanCreateNotificationHistory() {
+  public function testItCanCreateNotificationHistory() {
     $newsletter = Newsletter::create();
     $newsletter->type = Newsletter::TYPE_NOTIFICATION;
     $newsletter->save();
 
     // ensure that notification history does not exist
-    $notification_history = Newsletter::where('type', Newsletter::TYPE_NOTIFICATION_HISTORY)
+    $notificationHistory = Newsletter::where('type', Newsletter::TYPE_NOTIFICATION_HISTORY)
       ->where('parent_id', $newsletter->id)
       ->findOne();
-    expect($notification_history)->isEmpty();
+    expect($notificationHistory)->isEmpty();
 
     // create notification history and ensure that it exists
-    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class));
+    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class), $this->loggerFactory, $this->cronHelper);
     $scheduler->createNotificationHistory($newsletter->id);
-    $notification_history = Newsletter::where('type', Newsletter::TYPE_NOTIFICATION_HISTORY)
+    $notificationHistory = Newsletter::where('type', Newsletter::TYPE_NOTIFICATION_HISTORY)
       ->where('parent_id', $newsletter->id)
       ->findOne();
-    expect($notification_history)->notEmpty();
+    expect($notificationHistory)->notEmpty();
   }
 
-  function testItCanDeleteQueueWhenDeliveryIsSetToImmediately() {
+  public function testItCanDeleteQueueWhenDeliveryIsSetToImmediately() {
     $newsletter = $this->_createNewsletter();
-    $newsletter_option_field =
+    $newsletterOptionField =
       $this->_createNewsletterOptionField('intervalType', Newsletter::TYPE_WELCOME);
-    $newsletter_option = $this->_createNewsletterOption($newsletter_option_field->id, $newsletter->id, 'immediately');
+    $newsletterOption = $this->_createNewsletterOption($newsletterOptionField->id, $newsletter->id, 'immediately');
     $newsletter = Newsletter::filter('filterWithOptions', Newsletter::TYPE_WELCOME)
       ->findOne($newsletter->id);
     $queue = $this->_createQueue($newsletter->id);
-    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class));
+    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class), $this->loggerFactory, $this->cronHelper);
 
     // queue and associated newsletter should be deleted when interval type is set to "immediately"
     expect(SendingQueue::findMany())->notEmpty();
@@ -88,45 +96,47 @@ class SchedulerTest extends \MailPoetTest {
     expect(SendingQueue::findMany())->count(0);
   }
 
-  function testItCanRescheduleQueueDeliveryTime() {
+  public function testItCanRescheduleQueueDeliveryTime() {
     $newsletter = $this->_createNewsletter();
-    $newsletter_option_field =
+    $newsletterOptionField =
       $this->_createNewsletterOptionField('intervalType', Newsletter::TYPE_WELCOME);
-    $newsletter_option = $this->_createNewsletterOption($newsletter_option_field->id, $newsletter->id, 'daily');
+    $newsletterOption = $this->_createNewsletterOption($newsletterOptionField->id, $newsletter->id, 'daily');
     $newsletter = Newsletter::filter('filterWithOptions', Newsletter::TYPE_WELCOME)
       ->findOne($newsletter->id);
     $queue = $this->_createQueue($newsletter->id);
-    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class));
+    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class), $this->loggerFactory, $this->cronHelper);
 
     // queue's next run date should change when interval type is set to anything
     // other than "immediately"
     $queue = $this->_createQueue($newsletter->id);
-    $newsletter_option->value = 'daily';
-    $newsletter_option->save();
+    $newsletterOption->value = 'daily';
+    $newsletterOption->save();
     $newsletter = Newsletter::filter('filterWithOptions', Newsletter::TYPE_WELCOME)->findOne($newsletter->id);
-    expect($queue->scheduled_at)->null();
+    expect($queue->scheduledAt)->null();
     $newsletter->schedule = '0 5 * * *'; // set it to daily at 5
     $scheduler->deleteQueueOrUpdateNextRunDate($queue, $newsletter);
-    $queue = SendingTask::createFromQueue(SendingQueue::findOne($queue->id));
-    expect($queue->scheduled_at)->notNull();
+    /** @var SendingQueue $queue */
+    $queue = SendingQueue::findOne($queue->id);
+    $queue = SendingTask::createFromQueue($queue);
+    expect($queue->scheduledAt)->notNull();
   }
 
-  function testItFailsWPSubscriberVerificationWhenSubscriberIsNotAWPUser() {
-    $WP_user = $this->_createOrUpdateWPUser('editor');
+  public function testItFailsWPSubscriberVerificationWhenSubscriberIsNotAWPUser() {
+    $wPUser = $this->_createOrUpdateWPUser('editor');
     $subscriber = $this->_createSubscriber();
     $newsletter = $this->_createNewsletter(Newsletter::TYPE_WELCOME);
-    $newsletter_option_field = $this->_createNewsletterOptionField(
+    $newsletterOptionField = $this->_createNewsletterOptionField(
       'role',
       Newsletter::TYPE_WELCOME
     );
-    $newsletter_option = $this->_createNewsletterOption(
-      $newsletter_option_field->id,
+    $newsletterOption = $this->_createNewsletterOption(
+      $newsletterOptionField->id,
       $newsletter->id, 'author'
     );
     $newsletter = Newsletter::filter('filterWithOptions', Newsletter::TYPE_WELCOME)
       ->findOne($newsletter->id);
     $queue = $this->_createQueue($newsletter->id);
-    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class));
+    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class), $this->loggerFactory, $this->cronHelper);
 
     // return false and delete queue when subscriber is not a WP user
     $result = $scheduler->verifyWPSubscriber($subscriber->id, $newsletter, $queue);
@@ -134,22 +144,22 @@ class SchedulerTest extends \MailPoetTest {
     expect(SendingQueue::findMany())->count(0);
   }
 
-  function testItFailsWPSubscriberVerificationWhenSubscriberRoleDoesNotMatch() {
-    $WP_user = $this->_createOrUpdateWPUser('editor');
-    $subscriber = $this->_createSubscriber($WP_user->ID);
+  public function testItFailsWPSubscriberVerificationWhenSubscriberRoleDoesNotMatch() {
+    $wPUser = $this->_createOrUpdateWPUser('editor');
+    $subscriber = $this->_createSubscriber($wPUser->ID);
     $newsletter = $this->_createNewsletter(Newsletter::TYPE_WELCOME);
-    $newsletter_option_field = $this->_createNewsletterOptionField(
+    $newsletterOptionField = $this->_createNewsletterOptionField(
       'role',
       Newsletter::TYPE_WELCOME
     );
-    $newsletter_option = $this->_createNewsletterOption(
-      $newsletter_option_field->id,
+    $newsletterOption = $this->_createNewsletterOption(
+      $newsletterOptionField->id,
       $newsletter->id, 'author'
     );
     $newsletter = Newsletter::filter('filterWithOptions', Newsletter::TYPE_WELCOME)
       ->findOne($newsletter->id);
     $queue = $this->_createQueue($newsletter->id);
-    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class));
+    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class), $this->loggerFactory, $this->cronHelper);
 
     // return false and delete queue when subscriber role is different from the one
     // specified for the welcome email
@@ -158,20 +168,20 @@ class SchedulerTest extends \MailPoetTest {
     expect(count(SendingQueue::findMany()))->equals(0);
   }
 
-  function testItPassesWPSubscriberVerificationWhenSubscriberExistsAndRoleMatches() {
-    $WP_user = $this->_createOrUpdateWPUser('author');
-    $subscriber = $this->_createSubscriber($WP_user->ID);
+  public function testItPassesWPSubscriberVerificationWhenSubscriberExistsAndRoleMatches() {
+    $wPUser = $this->_createOrUpdateWPUser('author');
+    $subscriber = $this->_createSubscriber($wPUser->ID);
     $newsletter = $this->_createNewsletter(Newsletter::TYPE_WELCOME);
-    $newsletter_option_field =
+    $newsletterOptionField =
       $this->_createNewsletterOptionField('role', Newsletter::TYPE_WELCOME);
-    $newsletter_option = $this->_createNewsletterOption(
-      $newsletter_option_field->id,
+    $newsletterOption = $this->_createNewsletterOption(
+      $newsletterOptionField->id,
       $newsletter->id, 'author'
     );
     $newsletter = Newsletter::filter('filterWithOptions', Newsletter::TYPE_WELCOME)
       ->findOne($newsletter->id);
     $queue = $this->_createQueue($newsletter->id);
-    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class));
+    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class), $this->loggerFactory, $this->cronHelper);
 
     // return true when user exists and WP role matches the one specified for the welcome email
     $result = $scheduler->verifyWPSubscriber($subscriber->id, $newsletter, $queue);
@@ -179,19 +189,20 @@ class SchedulerTest extends \MailPoetTest {
     expect(count(SendingQueue::findMany()))->greaterOrEquals(1);
   }
 
-  function testItPassesWPSubscriberVerificationWhenSubscriberHasAnyRole() {
-    $WP_user = $this->_createOrUpdateWPUser('author');
-    $subscriber = $this->_createSubscriber($WP_user->ID);
+  public function testItPassesWPSubscriberVerificationWhenSubscriberHasAnyRole() {
+    $wPUser = $this->_createOrUpdateWPUser('author');
+    $subscriber = $this->_createSubscriber($wPUser->ID);
     $newsletter = $this->_createNewsletter(Newsletter::TYPE_WELCOME);
-    $newsletter_option_field =
+    $newsletterOptionField =
       $this->_createNewsletterOptionField('role', Newsletter::TYPE_WELCOME);
-    $newsletter_option = $this->_createNewsletterOption(
-      $newsletter_option_field->id, $newsletter->id,
-      \MailPoet\Newsletter\Scheduler\Scheduler::WORDPRESS_ALL_ROLES);
+    $newsletterOption = $this->_createNewsletterOption(
+      $newsletterOptionField->id, $newsletter->id,
+      WelcomeScheduler::WORDPRESS_ALL_ROLES
+    );
     $newsletter = Newsletter::filter('filterWithOptions', Newsletter::TYPE_WELCOME)
       ->findOne($newsletter->id);
     $queue = $this->_createQueue($newsletter->id);
-    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class));
+    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class), $this->loggerFactory, $this->cronHelper);
 
     // true when user exists and has any role
     $result = $scheduler->verifyWPSubscriber($subscriber->id, $newsletter, $queue);
@@ -199,19 +210,19 @@ class SchedulerTest extends \MailPoetTest {
     expect(count(SendingQueue::findMany()))->greaterOrEquals(1);
   }
 
-  function testItDoesNotProcessWelcomeNewsletterWhenThereAreNoSubscribersToProcess() {
+  public function testItDoesNotProcessWelcomeNewsletterWhenThereAreNoSubscribersToProcess() {
     $newsletter = $this->_createNewsletter();
     $queue = $this->_createQueue($newsletter->id);
     $queue->setSubscribers([]);
 
     // delete queue when the list of subscribers to process is blank
-    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class));
+    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class), $this->loggerFactory, $this->cronHelper);
     $result = $scheduler->processWelcomeNewsletter($newsletter, $queue);
     expect($result)->false();
     expect(SendingQueue::findMany())->count(0);
   }
 
-  function testItDoesNotProcessWelcomeNewsletterWhenWPUserCannotBeVerified() {
+  public function testItDoesNotProcessWelcomeNewsletterWhenWPUserCannotBeVerified() {
     $newsletter = $this->_createNewsletter();
     $newsletter->event = 'user';
     $queue = $this->_createQueue($newsletter->id);
@@ -226,7 +237,7 @@ class SchedulerTest extends \MailPoetTest {
     expect($scheduler->processWelcomeNewsletter($newsletter, $queue))->false();
   }
 
-  function testItDoesNotProcessWelcomeNewsletterWhenSubscriberCannotBeVerified() {
+  public function testItDoesNotProcessWelcomeNewsletterWhenSubscriberCannotBeVerified() {
     $newsletter = $this->_createNewsletter();
     $newsletter->event = 'segment';
     $queue = $this->_createQueue($newsletter->id);
@@ -241,7 +252,7 @@ class SchedulerTest extends \MailPoetTest {
     expect($scheduler->processWelcomeNewsletter($newsletter, $queue))->false();
   }
 
-  function testItProcessesWelcomeNewsletterWhenSubscriberIsVerified() {
+  public function testItProcessesWelcomeNewsletterWhenSubscriberIsVerified() {
     $newsletter = $this->_createNewsletter();
     $newsletter->event = 'segment';
 
@@ -253,11 +264,13 @@ class SchedulerTest extends \MailPoetTest {
     ], $this);
     expect($queue->status)->notNull();
     expect($scheduler->processWelcomeNewsletter($newsletter, $queue))->true();
-    $updated_queue = SendingTask::createFromQueue(SendingQueue::findOne($queue->id));
-    expect($updated_queue->status)->null();
+    /** @var SendingQueue $updatedQueue */
+    $updatedQueue = SendingQueue::findOne($queue->id);
+    $updatedQueue = SendingTask::createFromQueue($updatedQueue);
+    expect($updatedQueue->status)->null();
   }
 
-  function testItProcessesWelcomeNewsletterWhenWPUserIsVerified() {
+  public function testItProcessesWelcomeNewsletterWhenWPUserIsVerified() {
     $newsletter = $this->_createNewsletter();
     $newsletter->event = 'user';
 
@@ -270,12 +283,14 @@ class SchedulerTest extends \MailPoetTest {
     expect($queue->status)->notNull();
     expect($scheduler->processWelcomeNewsletter($newsletter, $queue))->true();
     // update queue's status to null
-    $updated_queue = SendingTask::createFromQueue(SendingQueue::findOne($queue->id));
-    expect($updated_queue->status)->null();
+    /** @var SendingQueue $updatedQueue */
+    $updatedQueue = SendingQueue::findOne($queue->id);
+    $updatedQueue = SendingTask::createFromQueue($updatedQueue);
+    expect($updatedQueue->status)->null();
   }
 
-  function testItFailsMailpoetSubscriberVerificationWhenSubscriberDoesNotExist() {
-    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class));
+  public function testItFailsMailpoetSubscriberVerificationWhenSubscriberDoesNotExist() {
+    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class), $this->loggerFactory, $this->cronHelper);
     $newsletter = $this->_createNewsletter();
     $queue = $this->_createQueue($newsletter->id);
 
@@ -286,16 +301,16 @@ class SchedulerTest extends \MailPoetTest {
     expect(SendingQueue::findMany())->count(0);
   }
 
-  function testItFailsMailpoetSubscriberVerificationWhenSubscriberIsNotInSegment() {
+  public function testItFailsMailpoetSubscriberVerificationWhenSubscriberIsNotInSegment() {
     $subscriber = $this->_createSubscriber();
     $segment = $this->_createSegment();
     $newsletter = $this->_createNewsletter();
-    $newsletter_option_field = $this->_createNewsletterOptionField('segment', Newsletter::TYPE_NOTIFICATION);
-    $newsletter_option = $this->_createNewsletterOption($newsletter_option_field->id, $newsletter->id, $segment->id);
+    $newsletterOptionField = $this->_createNewsletterOptionField('segment', Newsletter::TYPE_NOTIFICATION);
+    $newsletterOption = $this->_createNewsletterOption($newsletterOptionField->id, $newsletter->id, $segment->id);
     $newsletter = Newsletter::filter('filterWithOptions', Newsletter::TYPE_NOTIFICATION)
       ->findOne($newsletter->id);
     $queue = $this->_createQueue($newsletter->id);
-    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class));
+    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class), $this->loggerFactory, $this->cronHelper);
 
     // return false
     $result = $scheduler->verifyMailpoetSubscriber($subscriber->id, $newsletter, $queue);
@@ -304,85 +319,122 @@ class SchedulerTest extends \MailPoetTest {
     expect(SendingQueue::findMany())->count(0);
   }
 
-  function testItReschedulesQueueDeliveryWhenMailpoetSubscriberHasNotConfirmedSubscription() {
-    $subscriber = $this->_createSubscriber($wp_user_id = null, 'unsubscribed');
+  public function testItReschedulesQueueDeliveryWhenMailpoetSubscriberHasNotConfirmedSubscription() {
+    $timestamp = WPFunctions::get()->currentTime('timestamp');
+    $wpFunctions = $this->make(WPFunctions::class, [
+      'currentTime' => $timestamp,
+    ]);
+    WPFunctions::set($wpFunctions);
+    $currentTime = Carbon::createFromTimestamp($timestamp);
+    Carbon::setTestNow($currentTime); // mock carbon to return current time
+
+    $subscriber = $this->_createSubscriber($wpUserId = null, 'unconfirmed');
     $segment = $this->_createSegment();
-    $subscriber_segment = $this->_createSubscriberSegment($subscriber->id, $segment->id);
+    $subscriberSegment = $this->_createSubscriberSegment($subscriber->id, $segment->id);
     $newsletter = $this->_createNewsletter();
-    $newsletter_option_field =
+    $newsletterOptionField =
       $this->_createNewsletterOptionField('segment', Newsletter::TYPE_NOTIFICATION);
-    $newsletter_option = $this->_createNewsletterOption(
-      $newsletter_option_field->id, $newsletter->id,
+    $newsletterOption = $this->_createNewsletterOption(
+      $newsletterOptionField->id, $newsletter->id,
       $segment->id
     );
     $newsletter = Newsletter::filter('filterWithOptions', Newsletter::TYPE_NOTIFICATION)
       ->findOne($newsletter->id);
     $queue = $this->_createQueue($newsletter->id);
-    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class));
+    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class), $this->loggerFactory, $this->cronHelper);
 
     // return false
     $result = $scheduler->verifyMailpoetSubscriber($subscriber->id, $newsletter, $queue);
     expect($result)->false();
     // update the time queue is scheduled to run at
-    $updated_queue = SendingTask::createFromQueue(SendingQueue::findOne($queue->id));
-    expect(Carbon::parse($updated_queue->scheduled_at))->equals(
-      Carbon::createFromTimestamp(current_time('timestamp'))
-        ->addMinutes(Scheduler::UNCONFIRMED_SUBSCRIBER_RESCHEDULE_TIMEOUT)
+    /** @var SendingQueue $updatedQueue */
+    $updatedQueue = SendingQueue::findOne($queue->id);
+    $updatedQueue = SendingTask::createFromQueue($updatedQueue);
+    expect(Carbon::parse($updatedQueue->scheduledAt))->equals(
+      $currentTime->addMinutes(ScheduledTask::BASIC_RESCHEDULE_TIMEOUT)
     );
+    WPFunctions::set(new WPFunctions());
   }
 
-  function testItCanVerifyMailpoetSubscriber() {
-    $subscriber = $this->_createSubscriber();
+  public function testItDoesntRunQueueDeliveryWhenMailpoetSubscriberHasUnsubscribed() {
+    $currentTime = Carbon::createFromTimestamp(WPFunctions::get()->currentTime('timestamp'));
+    Carbon::setTestNow($currentTime); // mock carbon to return current time
+    $subscriber = $this->_createSubscriber($wpUserId = null, 'unsubscribed');
     $segment = $this->_createSegment();
-    $subscriber_segment = $this->_createSubscriberSegment($subscriber->id, $segment->id);
+    $subscriberSegment = $this->_createSubscriberSegment($subscriber->id, $segment->id);
     $newsletter = $this->_createNewsletter();
-    $newsletter_option_field =
+    $newsletterOptionField =
       $this->_createNewsletterOptionField('segment', Newsletter::TYPE_NOTIFICATION);
-    $newsletter_option = $this->_createNewsletterOption(
-      $newsletter_option_field->id, $newsletter->id,
+    $newsletterOption = $this->_createNewsletterOption(
+      $newsletterOptionField->id, $newsletter->id,
       $segment->id
     );
     $newsletter = Newsletter::filter('filterWithOptions', Newsletter::TYPE_NOTIFICATION)
       ->findOne($newsletter->id);
     $queue = $this->_createQueue($newsletter->id);
-    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class));
+    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class), $this->loggerFactory, $this->cronHelper);
+
+    // return false
+    $result = $scheduler->verifyMailpoetSubscriber($subscriber->id, $newsletter, $queue);
+    expect($result)->false();
+    // update the time queue is scheduled to run at
+    expect(SendingQueue::findOne($queue->id))->false();
+  }
+
+  public function testItCanVerifyMailpoetSubscriber() {
+    $subscriber = $this->_createSubscriber();
+    $segment = $this->_createSegment();
+    $subscriberSegment = $this->_createSubscriberSegment($subscriber->id, $segment->id);
+    $newsletter = $this->_createNewsletter();
+    $newsletterOptionField =
+      $this->_createNewsletterOptionField('segment', Newsletter::TYPE_NOTIFICATION);
+    $newsletterOption = $this->_createNewsletterOption(
+      $newsletterOptionField->id, $newsletter->id,
+      $segment->id
+    );
+    $newsletter = Newsletter::filter('filterWithOptions', Newsletter::TYPE_NOTIFICATION)
+      ->findOne($newsletter->id);
+    $queue = $this->_createQueue($newsletter->id);
+    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class), $this->loggerFactory, $this->cronHelper);
 
     // return true after successful verification
     $result = $scheduler->verifyMailpoetSubscriber($subscriber->id, $newsletter, $queue);
     expect($result)->true();
   }
 
-  function testItProcessesScheduledStandardNewsletter() {
+  public function testItProcessesScheduledStandardNewsletter() {
     $subscriber = $this->_createSubscriber();
     $segment = $this->_createSegment();
-    $subscriber_segment = $this->_createSubscriberSegment($subscriber->id, $segment->id);
+    $subscriberSegment = $this->_createSubscriberSegment($subscriber->id, $segment->id);
     $newsletter = $this->_createNewsletter();
-    $newsletter_segment = $this->_createNewsletterSegment($newsletter->id, $segment->id);
-    $newsletter_option_field =
+    $newsletterSegment = $this->_createNewsletterSegment($newsletter->id, $segment->id);
+    $newsletterOptionField =
       $this->_createNewsletterOptionField('segment', Newsletter::TYPE_NOTIFICATION);
-    $newsletter_option = $this->_createNewsletterOption(
-      $newsletter_option_field->id, $newsletter->id,
+    $newsletterOption = $this->_createNewsletterOption(
+      $newsletterOptionField->id, $newsletter->id,
       $segment->id
     );
     $newsletter = Newsletter::filter('filterWithOptions', Newsletter::TYPE_NOTIFICATION)
       ->findOne($newsletter->id);
     $queue = $this->_createQueue($newsletter->id);
-    $scheduler = new Scheduler(new SubscribersFinder());
+    $scheduler = new Scheduler($this->subscribersFinder, $this->loggerFactory, $this->cronHelper);
 
     // return true
     expect($scheduler->processScheduledStandardNewsletter($newsletter, $queue))->true();
     // update queue's list of subscribers to process
-    $updated_queue = SendingTask::createFromQueue(SendingQueue::findOne($queue->id));
-    $updated_queue_subscribers = $updated_queue->getSubscribers(ScheduledTaskSubscriber::STATUS_UNPROCESSED);
-    expect($updated_queue_subscribers)->equals([$subscriber->id]);
+    /** @var SendingQueue $updatedQueue */
+    $updatedQueue = SendingQueue::findOne($queue->id);
+    $updatedQueue = SendingTask::createFromQueue($updatedQueue);
+    $updatedQueueSubscribers = $updatedQueue->getSubscribers(ScheduledTaskSubscriber::STATUS_UNPROCESSED);
+    expect($updatedQueueSubscribers)->equals([$subscriber->id]);
     // set queue's status to null
-    expect($updated_queue->status)->null();
+    expect($updatedQueue->status)->null();
     // set newsletter's status to sending
-    $updated_newsletter = Newsletter::findOne($newsletter->id);
-    expect($updated_newsletter->status)->equals(Newsletter::STATUS_SENDING);
+    $updatedNewsletter = Newsletter::findOne($newsletter->id);
+    expect($updatedNewsletter->status)->equals(Newsletter::STATUS_SENDING);
   }
 
-  function testItFailsToProcessPostNotificationNewsletterWhenSegmentsDontExist() {
+  public function testItFailsToProcessPostNotificationNewsletterWhenSegmentsDontExist() {
     $newsletter = $this->_createNewsletter();
     $queue = $this->_createQueue($newsletter->id);
 
@@ -391,18 +443,20 @@ class SchedulerTest extends \MailPoetTest {
       'deleteQueueOrUpdateNextRunDate' => Expected::exactly(1, function() {
         return false;
       }),
+      'loggerFactory' => $this->loggerFactory,
+      'cronHelper' => $this->cronHelper,
     ], $this);
     expect($scheduler->processPostNotificationNewsletter($newsletter, $queue))->false();
   }
 
-  function testItFailsToProcessPostNotificationNewsletterWhenSubscribersNotInSegment() {
+  public function testItFailsToProcessPostNotificationNewsletterWhenSubscribersNotInSegment() {
     $newsletter = $this->_createNewsletter();
     $queue = $this->_createQueue($newsletter->id);
     $segment = $this->_createSegment();
-    $newsletter_segment = $this->_createNewsletterSegment($newsletter->id, $segment->id);
+    $newsletterSegment = $this->_createNewsletterSegment($newsletter->id, $segment->id);
 
     // delete or reschedule queue when there are no subscribers in segments
-    $scheduler = $this->construct(Scheduler::class, [new SubscribersFinder()], [
+    $scheduler = $this->construct(Scheduler::class, [$this->subscribersFinder, $this->loggerFactory, $this->cronHelper], [
       'deleteQueueOrUpdateNextRunDate' => Expected::exactly(1, function() {
         return false;
       }),
@@ -410,224 +464,207 @@ class SchedulerTest extends \MailPoetTest {
     expect($scheduler->processPostNotificationNewsletter($newsletter, $queue))->false();
   }
 
-  function testItCanProcessPostNotificationNewsletter() {
+  public function testItCanProcessPostNotificationNewsletter() {
     $newsletter = $this->_createNewsletter();
     $queue = $this->_createQueue($newsletter->id);
     $segment = $this->_createSegment();
-    $newsletter_segment = $this->_createNewsletterSegment($newsletter->id, $segment->id);
+    $newsletterSegment = $this->_createNewsletterSegment($newsletter->id, $segment->id);
     $subscriber = $this->_createSubscriber();
-    $subscriber_segment = $this->_createSubscriberSegment($subscriber->id, $segment->id);
-    $newsletter_option_field =
+    $subscriberSegment = $this->_createSubscriberSegment($subscriber->id, $segment->id);
+    $newsletterOptionField =
       $this->_createNewsletterOptionField('segment', Newsletter::TYPE_NOTIFICATION);
-    $newsletter_option = $this->_createNewsletterOption(
-      $newsletter_option_field->id, $newsletter->id,
+    $newsletterOption = $this->_createNewsletterOption(
+      $newsletterOptionField->id, $newsletter->id,
       $segment->id
     );
     $newsletter = Newsletter::filter('filterWithOptions', Newsletter::TYPE_NOTIFICATION)
       ->findOne($newsletter->id);
-    $scheduler = new Scheduler(new SubscribersFinder());
+    $scheduler = new Scheduler($this->subscribersFinder, $this->loggerFactory, $this->cronHelper);
 
     // return true
     expect($scheduler->processPostNotificationNewsletter($newsletter, $queue))->true();
     // create notification history
-    $notification_history = Newsletter::where('parent_id', $newsletter->id)
+    $notificationHistory = Newsletter::where('parent_id', $newsletter->id)
       ->findOne();
-    expect($notification_history)->notEmpty();
+    expect($notificationHistory)->notEmpty();
     // update queue with a list of subscribers to process and change newsletter id
     // to that of the notification history
-    $updated_queue = SendingTask::createFromQueue(SendingQueue::findOne($queue->id));
-    $updated_queue_subscribers = $updated_queue->getSubscribers(ScheduledTaskSubscriber::STATUS_UNPROCESSED);
-    expect($updated_queue_subscribers)->equals([$subscriber->id]);
-    expect($updated_queue->newsletter_id)->equals($notification_history->id);
+    /** @var SendingQueue $updatedQueue */
+    $updatedQueue = SendingQueue::findOne($queue->id);
+    $updatedQueue = SendingTask::createFromQueue($updatedQueue);
+    $updatedQueueSubscribers = $updatedQueue->getSubscribers(ScheduledTaskSubscriber::STATUS_UNPROCESSED);
+    expect($updatedQueueSubscribers)->equals([$subscriber->id]);
+    expect($updatedQueue->newsletterId)->equals($notificationHistory->id);
     // set notification history's status to sending
-    $updated_notification_history = Newsletter::where('parent_id', $newsletter->id)
+    $updatedNotificationHistory = Newsletter::where('parent_id', $newsletter->id)
       ->findOne();
-    expect($updated_notification_history->status)->equals(Newsletter::STATUS_SENDING);
+    expect($updatedNotificationHistory->status)->equals(Newsletter::STATUS_SENDING);
   }
 
-  function testItFailsToProcessWhenScheduledQueuesNotFound() {
-    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class));
+  public function testItFailsToProcessWhenScheduledQueuesNotFound() {
+    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class), $this->loggerFactory, $this->cronHelper);
     expect($scheduler->process())->false();
   }
 
-  function testItDeletesQueueDuringProcessingWhenNewsletterNotFound() {
+  public function testItDeletesQueueDuringProcessingWhenNewsletterNotFound() {
     $queue = $this->_createQueue(1);
-    $queue->scheduled_at = Carbon::createFromTimestamp(current_time('timestamp'));
+    $queue->scheduledAt = Carbon::createFromTimestamp(WPFunctions::get()->currentTime('timestamp'));
     $queue->save();
-    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class));
+    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class), $this->loggerFactory, $this->cronHelper);
     $scheduler->process();
     expect(SendingQueue::findMany())->count(0);
   }
 
-  function testItDeletesQueueDuringProcessingWhenNewsletterIsSoftDeleted() {
+  public function testItDeletesQueueDuringProcessingWhenNewsletterIsSoftDeleted() {
     $newsletter = $this->_createNewsletter();
-    $newsletter->deleted_at = Carbon::createFromTimestamp(current_time('timestamp'));
+    $newsletter->deletedAt = Carbon::createFromTimestamp(WPFunctions::get()->currentTime('timestamp'));
     $newsletter->save();
     $queue = $this->_createQueue($newsletter->id);
-    $queue->scheduled_at = Carbon::createFromTimestamp(current_time('timestamp'));
+    $queue->scheduledAt = Carbon::createFromTimestamp(WPFunctions::get()->currentTime('timestamp'));
     $queue->save();
-    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class));
+    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class), $this->loggerFactory, $this->cronHelper);
     $scheduler->process();
     expect(SendingQueue::findMany())->count(0);
   }
 
-  function testItProcessesWelcomeNewsletters() {
+  public function testItProcessesWelcomeNewsletters() {
     $newsletter = $this->_createNewsletter(Newsletter::TYPE_WELCOME);
     $queue = $this->_createQueue($newsletter->id);
-    $queue->scheduled_at = Carbon::createFromTimestamp(current_time('timestamp'));
+    $queue->scheduledAt = Carbon::createFromTimestamp(WPFunctions::get()->currentTime('timestamp'));
     $queue->save();
     $scheduler = Stub::make(Scheduler::class, [
       'processWelcomeNewsletter' => Expected::exactly(1),
+      'cronHelper' => $this->cronHelper,
     ], $this);
-    $scheduler->timer = microtime(true);
     $scheduler->process();
   }
 
-  function testItProcessesNotificationNewsletters() {
+  public function testItProcessesNotificationNewsletters() {
     $newsletter = $this->_createNewsletter();
     $queue = $this->_createQueue($newsletter->id);
-    $queue->scheduled_at = Carbon::createFromTimestamp(current_time('timestamp'));
+    $queue->scheduledAt = Carbon::createFromTimestamp(WPFunctions::get()->currentTime('timestamp'));
     $queue->save();
     $scheduler = Stub::make(Scheduler::class, [
       'processPostNotificationNewsletter' => Expected::exactly(1),
+      'cronHelper' => $this->cronHelper,
     ], $this);
-    $scheduler->timer = microtime(true);
     $scheduler->process();
   }
 
-  function testItProcessesStandardScheduledNewsletters() {
+  public function testItProcessesStandardScheduledNewsletters() {
     $newsletter = $this->_createNewsletter(Newsletter::TYPE_STANDARD);
     $queue = $this->_createQueue($newsletter->id);
-    $queue->scheduled_at = Carbon::createFromTimestamp(current_time('timestamp'));
+    $queue->scheduledAt = Carbon::createFromTimestamp(WPFunctions::get()->currentTime('timestamp'));
     $queue->save();
     $scheduler = Stub::make(Scheduler::class, [
       'processScheduledStandardNewsletter' => Expected::exactly(1),
+      'cronHelper' => $this->cronHelper,
     ], $this);
-    $scheduler->timer = microtime(true);
     $scheduler->process();
   }
 
-  function testItEnforcesExecutionLimitDuringProcessing() {
+  public function testItEnforcesExecutionLimitDuringProcessing() {
     $newsletter = $this->_createNewsletter();
     $queue = $this->_createQueue($newsletter->id);
-    $queue->scheduled_at = Carbon::createFromTimestamp(current_time('timestamp'));
+    $queue->scheduledAt = Carbon::createFromTimestamp(WPFunctions::get()->currentTime('timestamp'));
     $queue->save();
     $scheduler = Stub::make(Scheduler::class, [
       'processPostNotificationNewsletter' => Expected::exactly(1),
+      'cronHelper' => $this->make(CronHelper::class, [
+        'enforceExecutionLimit' => Expected::exactly(2), // call at start + during processing
+      ]),
     ], $this);
-    $scheduler->timer = microtime(true) - CronHelper::DAEMON_EXECUTION_LIMIT;
-    try {
-      $scheduler->process();
-      self::fail('Maximum execution time limit exception was not thrown.');
-    } catch (\Exception $e) {
-      expect($e->getMessage())->equals('Maximum execution time has been reached.');
-    }
+    $scheduler->process();
   }
 
-  function testItDoesNotProcessScheduledJobsWhenNewsletterIsNotActive() {
+  public function testItDoesNotProcessScheduledJobsWhenNewsletterIsNotActive() {
     $newsletter = $this->_createNewsletter(Newsletter::TYPE_STANDARD, Newsletter::STATUS_DRAFT);
     $queue = $this->_createQueue($newsletter->id);
-    $queue->scheduled_at = Carbon::createFromTimestamp(current_time('timestamp'));
+    $queue->scheduledAt = Carbon::createFromTimestamp(WPFunctions::get()->currentTime('timestamp'));
     $queue->save();
 
     $scheduler = Stub::make(Scheduler::class, [
       'processScheduledStandardNewsletter' => Expected::never(),
+      'cronHelper' => $this->cronHelper,
     ], $this);
     // scheduled job is not processed
-    $scheduler->timer = microtime(true);
     $scheduler->process();
   }
 
-  function testItProcessesScheduledJobsWhenNewsletterIsActive() {
+  public function testItProcessesScheduledJobsWhenNewsletterIsActive() {
     $newsletter = $this->_createNewsletter(Newsletter::TYPE_STANDARD, Newsletter::STATUS_ACTIVE);
     $queue = $this->_createQueue($newsletter->id);
-    $queue->scheduled_at = Carbon::createFromTimestamp(current_time('timestamp'));
+    $queue->scheduledAt = Carbon::createFromTimestamp(WPFunctions::get()->currentTime('timestamp'));
     $queue->save();
 
     $scheduler = Stub::make(Scheduler::class, [
       'processScheduledStandardNewsletter' => Expected::once(),
+      'cronHelper' => $this->cronHelper,
     ], $this);
     // scheduled job is processed
-    $scheduler->timer = microtime(true);
     $scheduler->process();
   }
 
-  function testItReSchedulesBounceTask() {
+  public function testItDoesNotReSchedulesBounceTaskWhenSoon() {
     $task = ScheduledTask::createOrUpdate([
       'type' => 'bounce',
       'status' => ScheduledTask::STATUS_SCHEDULED,
-      'scheduled_at' => Carbon::createFromTimestamp(current_time('timestamp'))->addMonths(1),
+      'scheduled_at' => Carbon::createFromTimestamp(WPFunctions::get()->currentTime('timestamp'))->addMinute(5),
     ]);
     $newsletter = $this->_createNewsletter(Newsletter::TYPE_STANDARD, Newsletter::STATUS_DRAFT);
     $queue = $this->_createQueue($newsletter->id);
     $finder = $this->makeEmpty(SubscribersFinder::class);
-    $scheduler = new Scheduler($finder);
+    $scheduler = new Scheduler($finder, $this->loggerFactory, $this->cronHelper);
 
     $scheduler->processScheduledStandardNewsletter($newsletter, $queue);
-    $refetched_task = ScheduledTask::where('id', $task->id)->findOne();
-    expect($refetched_task->scheduled_at)->lessThan(Carbon::createFromTimestamp(current_time('timestamp'))->addHours(42));
+    $refetchedTask = ScheduledTask::where('id', $task->id)->findOne();
+    expect($refetchedTask->scheduledAt)->lessThan(Carbon::createFromTimestamp(WPFunctions::get()->currentTime('timestamp'))->addHours(1));
   }
 
-  function testItDoesNotReSchedulesBounceTaskWhenSoon() {
-    $task = ScheduledTask::createOrUpdate([
-      'type' => 'bounce',
-      'status' => ScheduledTask::STATUS_SCHEDULED,
-      'scheduled_at' => Carbon::createFromTimestamp(current_time('timestamp'))->addMinute(5),
-    ]);
-    $newsletter = $this->_createNewsletter(Newsletter::TYPE_STANDARD, Newsletter::STATUS_DRAFT);
-    $queue = $this->_createQueue($newsletter->id);
-    $finder = $this->makeEmpty(SubscribersFinder::class);
-    $scheduler = new Scheduler($finder);
-
-    $scheduler->processScheduledStandardNewsletter($newsletter, $queue);
-    $refetched_task = ScheduledTask::where('id', $task->id)->findOne();
-    expect($refetched_task->scheduled_at)->lessThan(Carbon::createFromTimestamp(current_time('timestamp'))->addHours(1));
-  }
-
-  function testItProcessesScheduledJobsWhenNewsletterIsScheduled() {
+  public function testItProcessesScheduledJobsWhenNewsletterIsScheduled() {
     $newsletter = $this->_createNewsletter(Newsletter::TYPE_STANDARD, Newsletter::STATUS_SCHEDULED);
     $queue = $this->_createQueue($newsletter->id);
-    $queue->scheduled_at = Carbon::createFromTimestamp(current_time('timestamp'));
+    $queue->scheduledAt = Carbon::createFromTimestamp(WPFunctions::get()->currentTime('timestamp'));
     $queue->save();
 
     $scheduler = Stub::make(Scheduler::class, [
       'processScheduledStandardNewsletter' => Expected::once(),
+      'cronHelper' => $this->cronHelper,
     ], $this);
     // scheduled job is processed
-    $scheduler->timer = microtime(true);
     $scheduler->process();
   }
 
-  function testItProcessesScheduledAutomaticEmailWhenSendingToUser() {
+  public function testItProcessesScheduledAutomaticEmailWhenSendingToUser() {
     $newsletter = $this->_createNewsletter(Newsletter::TYPE_AUTOMATIC, Newsletter::STATUS_SCHEDULED);
     $subscriber = $this->_createSubscriber();
     $task = SendingTask::create();
-    $task->newsletter_id = $newsletter->id;
+    $task->newsletterId = $newsletter->id;
     $task->status = SendingQueue::STATUS_SCHEDULED;
-    $task->scheduled_at = Carbon::now()->subDay(1)->toDateTimeString();
+    $task->scheduledAt = Carbon::now()->subDay(1)->toDateTimeString();
     $task->setSubscribers([$subscriber->id]);
     $task->save();
 
     // scheduled task should exist
     $task = SendingTask::getByNewsletterId($newsletter->id);
     expect($task->status)->equals(SendingQueue::STATUS_SCHEDULED);
-    expect($task->newsletter_id)->equals($newsletter->id);
+    expect($task->newsletterId)->equals($newsletter->id);
     expect($task->getSubscribers())->equals([$subscriber->id]);
 
     // task should have its status set to null (i.e., sending)
-    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class));
+    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class), $this->loggerFactory, $this->cronHelper);
     $scheduler->process();
     $task = SendingTask::getByNewsletterId($newsletter->id);
     expect($task->status)->null();
   }
 
-  function testItDeletesScheduledAutomaticEmailWhenUserDoesNotExist() {
+  public function testItDeletesScheduledAutomaticEmailWhenUserDoesNotExist() {
     $newsletter = $this->_createNewsletter(Newsletter::TYPE_AUTOMATIC, Newsletter::STATUS_SCHEDULED);
     $subscriber = $this->_createSubscriber();
     $task = SendingTask::create();
-    $task->newsletter_id = $newsletter->id;
+    $task->newsletterId = $newsletter->id;
     $task->status = SendingQueue::STATUS_SCHEDULED;
-    $task->scheduled_at = Carbon::now()->subDay(1)->toDateTimeString();
+    $task->scheduledAt = Carbon::now()->subDay(1)->toDateTimeString();
     $task->setSubscribers([$subscriber->id]);
     $task->save();
     $subscriber->delete();
@@ -635,39 +672,39 @@ class SchedulerTest extends \MailPoetTest {
     // scheduled task should exist
     $task = SendingTask::getByNewsletterId($newsletter->id);
     expect($task->status)->equals(SendingQueue::STATUS_SCHEDULED);
-    expect($task->newsletter_id)->equals($newsletter->id);
+    expect($task->newsletterId)->equals($newsletter->id);
     expect($task->getSubscribers())->equals([$subscriber->id]);
 
     // task should be deleted
-    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class));
+    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class), $this->loggerFactory, $this->cronHelper);
     $scheduler->process();
     $task = SendingTask::getByNewsletterId($newsletter->id);
     expect($task)->false();
   }
 
-  function testItProcessesScheduledAutomaticEmailWhenSendingToSegment() {
+  public function testItProcessesScheduledAutomaticEmailWhenSendingToSegment() {
     $newsletter = $this->_createNewsletter(Newsletter::TYPE_AUTOMATIC, Newsletter::STATUS_SCHEDULED);
     $segment = $this->_createSegment();
     $subscriber = $this->_createSubscriber();
-    $segment_subscriber = $this->_createSubscriberSegment($subscriber->id, $segment->id);
+    $segmentSubscriber = $this->_createSubscriberSegment($subscriber->id, $segment->id);
     $options = ['sendTo' => 'segment', 'segment' => $segment->id];
     foreach ($options as $option => $value) {
-      $newsletter_option_field = $this->_createNewsletterOptionField($option, Newsletter::TYPE_AUTOMATIC);
-      $newsletter_option = $this->_createNewsletterOption($newsletter_option_field->id, $newsletter->id, $value);
+      $newsletterOptionField = $this->_createNewsletterOptionField($option, Newsletter::TYPE_AUTOMATIC);
+      $newsletterOption = $this->_createNewsletterOption($newsletterOptionField->id, $newsletter->id, $value);
     }
     $task = SendingTask::create();
-    $task->newsletter_id = $newsletter->id;
+    $task->newsletterId = $newsletter->id;
     $task->status = SendingQueue::STATUS_SCHEDULED;
-    $task->scheduled_at = Carbon::now()->subDay(1)->toDateTimeString();
+    $task->scheduledAt = Carbon::now()->subDay(1)->toDateTimeString();
     $task->save();
 
     // scheduled task should exist
     $task = SendingTask::getByNewsletterId($newsletter->id);
     expect($task->status)->equals(SendingQueue::STATUS_SCHEDULED);
-    expect($task->newsletter_id)->equals($newsletter->id);
+    expect($task->newsletterId)->equals($newsletter->id);
 
     // task should have its status set to null (i.e., sending)
-    $scheduler = new Scheduler(new SubscribersFinder());
+    $scheduler = new Scheduler($this->subscribersFinder, $this->loggerFactory, $this->cronHelper);
     $scheduler->process();
     $task = SendingTask::getByNewsletterId($newsletter->id);
     expect($task->status)->null();
@@ -677,40 +714,39 @@ class SchedulerTest extends \MailPoetTest {
     expect($subscribers[0]->id)->equals($subscriber->id);
   }
 
-  function testItUpdatesUpdateTime() {
-    $originalUpdated = Carbon::createFromTimestamp(current_time('timestamp'))->subHours(5)->toDateTimeString();
+  public function testItUpdatesUpdateTime() {
+    $originalUpdated = Carbon::createFromTimestamp(WPFunctions::get()->currentTime('timestamp'))->subHours(5)->toDateTimeString();
     $newsletter = $this->_createNewsletter(Newsletter::TYPE_WELCOME, Newsletter::STATUS_DRAFT);
     $queue = $this->_createQueue($newsletter->id);
-    $queue->scheduled_at = Carbon::createFromTimestamp(current_time('timestamp'));
-    $queue->updated_at = $originalUpdated;
+    $queue->scheduledAt = Carbon::createFromTimestamp(WPFunctions::get()->currentTime('timestamp'));
+    $queue->updatedAt = $originalUpdated;
     $queue->save();
-    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class));
-    $scheduler->timer = microtime(true);
+    $scheduler = new Scheduler($this->makeEmpty(SubscribersFinder::class), $this->loggerFactory, $this->cronHelper);
     $scheduler->process();
-    $newQueue = ScheduledTask::findOne($queue->task_id);
-    expect($newQueue->updated_at)->notEquals($originalUpdated);
+    $newQueue = ScheduledTask::findOne($queue->taskId);
+    expect($newQueue->updatedAt)->notEquals($originalUpdated);
   }
 
-  function _createNewsletterSegment($newsletter_id, $segment_id) {
-    $newsletter_segment = NewsletterSegment::create();
-    $newsletter_segment->newsletter_id = $newsletter_id;
-    $newsletter_segment->segment_id = $segment_id;
-    $newsletter_segment->save();
-    expect($newsletter_segment->getErrors())->false();
-    return $newsletter_segment;
+  public function _createNewsletterSegment($newsletterId, $segmentId) {
+    $newsletterSegment = NewsletterSegment::create();
+    $newsletterSegment->newsletterId = $newsletterId;
+    $newsletterSegment->segmentId = $segmentId;
+    $newsletterSegment->save();
+    expect($newsletterSegment->getErrors())->false();
+    return $newsletterSegment;
   }
 
-  function _createSubscriberSegment($subscriber_id, $segment_id, $status = 'subscribed') {
-    $subscriber_segment = SubscriberSegment::create();
-    $subscriber_segment->subscriber_id = $subscriber_id;
-    $subscriber_segment->segment_id = $segment_id;
-    $subscriber_segment->status = $status;
-    $subscriber_segment->save();
-    expect($subscriber_segment->getErrors())->false();
-    return $subscriber_segment;
+  public function _createSubscriberSegment($subscriberId, $segmentId, $status = 'subscribed') {
+    $subscriberSegment = SubscriberSegment::create();
+    $subscriberSegment->subscriberId = $subscriberId;
+    $subscriberSegment->segmentId = $segmentId;
+    $subscriberSegment->status = $status;
+    $subscriberSegment->save();
+    expect($subscriberSegment->getErrors())->false();
+    return $subscriberSegment;
   }
 
-  function _createSegment() {
+  public function _createSegment() {
     $segment = Segment::create();
     $segment->name = 'test';
     $segment->type = 'default';
@@ -719,19 +755,19 @@ class SchedulerTest extends \MailPoetTest {
     return $segment;
   }
 
-  function _createSubscriber($wp_user_id = null, $status = 'subscribed') {
+  public function _createSubscriber($wpUserId = null, $status = 'subscribed') {
     $subscriber = Subscriber::create();
     $subscriber->email = 'john@doe.com';
-    $subscriber->first_name = 'John';
-    $subscriber->last_name = 'Doe';
-    $subscriber->wp_user_id = $wp_user_id;
+    $subscriber->firstName = 'John';
+    $subscriber->lastName = 'Doe';
+    $subscriber->wpUserId = $wpUserId;
     $subscriber->status = $status;
     $subscriber->save();
     expect($subscriber->getErrors())->false();
     return $subscriber;
   }
 
-  function _createNewsletter($type = Newsletter::TYPE_NOTIFICATION, $status = 'active') {
+  public function _createNewsletter($type = Newsletter::TYPE_NOTIFICATION, $status = 'active') {
     $newsletter = Newsletter::create();
     $newsletter->type = $type;
     $newsletter->status = $status;
@@ -740,35 +776,35 @@ class SchedulerTest extends \MailPoetTest {
     return $newsletter;
   }
 
-  function _createNewsletterOptionField($name, $type) {
-    $newsletter_option_field = NewsletterOptionField::create();
-    $newsletter_option_field->name = $name;
-    $newsletter_option_field->newsletter_type = $type;
-    $newsletter_option_field->save();
-    expect($newsletter_option_field->getErrors())->false();
-    return $newsletter_option_field;
+  public function _createNewsletterOptionField($name, $type) {
+    $newsletterOptionField = NewsletterOptionField::create();
+    $newsletterOptionField->name = $name;
+    $newsletterOptionField->newsletterType = $type;
+    $newsletterOptionField->save();
+    expect($newsletterOptionField->getErrors())->false();
+    return $newsletterOptionField;
   }
 
-  function _createNewsletterOption($option_field_id, $newsletter_id, $value) {
-    $newsletter_option = NewsletterOption::create();
-    $newsletter_option->option_field_id = $option_field_id;
-    $newsletter_option->newsletter_id = $newsletter_id;
-    $newsletter_option->value = $value;
-    $newsletter_option->save();
-    expect($newsletter_option->getErrors())->false();
-    return $newsletter_option;
+  public function _createNewsletterOption($optionFieldId, $newsletterId, $value) {
+    $newsletterOption = NewsletterOption::create();
+    $newsletterOption->optionFieldId = $optionFieldId;
+    $newsletterOption->newsletterId = $newsletterId;
+    $newsletterOption->value = $value;
+    $newsletterOption->save();
+    expect($newsletterOption->getErrors())->false();
+    return $newsletterOption;
   }
 
-  function _createQueue($newsletter_id, $status = SendingQueue::STATUS_SCHEDULED) {
+  public function _createQueue($newsletterId, $status = SendingQueue::STATUS_SCHEDULED) {
     $queue = SendingTask::create();
     $queue->status = $status;
-    $queue->newsletter_id = $newsletter_id;
+    $queue->newsletterId = $newsletterId;
     $queue->save();
     expect($queue->getErrors())->false();
     return $queue;
   }
 
-  function _createOrUpdateWPUser($role = null) {
+  public function _createOrUpdateWPUser($role = null) {
     $email = 'test@example.com';
     $username = 'phoenix_test_user';
     if (email_exists($email) === false) {
@@ -791,17 +827,18 @@ class SchedulerTest extends \MailPoetTest {
     return $user;
   }
 
-  function _after() {
-    \ORM::raw_execute('TRUNCATE ' . Newsletter::$_table);
-    \ORM::raw_execute('TRUNCATE ' . Setting::$_table);
-    \ORM::raw_execute('TRUNCATE ' . ScheduledTask::$_table);
-    \ORM::raw_execute('TRUNCATE ' . ScheduledTaskSubscriber::$_table);
-    \ORM::raw_execute('TRUNCATE ' . SendingQueue::$_table);
-    \ORM::raw_execute('TRUNCATE ' . NewsletterOption::$_table);
-    \ORM::raw_execute('TRUNCATE ' . NewsletterOptionField::$_table);
-    \ORM::raw_execute('TRUNCATE ' . Subscriber::$_table);
-    \ORM::raw_execute('TRUNCATE ' . SubscriberSegment::$_table);
-    \ORM::raw_execute('TRUNCATE ' . Segment::$_table);
-    \ORM::raw_execute('TRUNCATE ' . NewsletterSegment::$_table);
+  public function _after() {
+    Carbon::setTestNow();
+    ORM::raw_execute('TRUNCATE ' . Newsletter::$_table);
+    $this->diContainer->get(SettingsRepository::class)->truncate();
+    ORM::raw_execute('TRUNCATE ' . ScheduledTask::$_table);
+    ORM::raw_execute('TRUNCATE ' . ScheduledTaskSubscriber::$_table);
+    ORM::raw_execute('TRUNCATE ' . SendingQueue::$_table);
+    ORM::raw_execute('TRUNCATE ' . NewsletterOption::$_table);
+    ORM::raw_execute('TRUNCATE ' . NewsletterOptionField::$_table);
+    ORM::raw_execute('TRUNCATE ' . Subscriber::$_table);
+    ORM::raw_execute('TRUNCATE ' . SubscriberSegment::$_table);
+    ORM::raw_execute('TRUNCATE ' . Segment::$_table);
+    ORM::raw_execute('TRUNCATE ' . NewsletterSegment::$_table);
   }
 }

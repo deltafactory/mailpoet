@@ -5,26 +5,23 @@ namespace MailPoet\Test\Acceptance;
 use MailPoet\Test\DataFactories\Newsletter;
 
 class SearchForStandardNewsletterCest {
+  public function searchForStandardNewsletter(\AcceptanceTester $i) {
+    $i->wantTo('Successfully search for an existing newsletter');
 
-  function searchForStandardNewsletter(\AcceptanceTester $I) {
-    $I->wantTo('Successfully search for an existing newsletter');
-
-    $newsletter_title = 'Search Test Newsletter';
-    $failure_condition_newsletter = 'Not Actually Real';
+    $newsletterTitle = 'Search Test Newsletter';
+    $failureConditionNewsletter = 'Not Actually Real';
 
 
     // step 1 - Prepare newsletter data
     $newsletterFactory = new Newsletter();
-    $newsletterFactory->withSubject($newsletter_title)->create();
+    $newsletterFactory->withSubject($newsletterTitle)->create();
 
     // step 2 - Search
-    $I->login();
-    $I->amOnMailpoetPage('Emails');
-    $I->searchFor($failure_condition_newsletter, 2);
-    $I->wait(5);
-    $I->dontSee($newsletter_title);
-    $I->searchFor($newsletter_title);
-    $I->waitForText($newsletter_title);
+    $i->login();
+    $i->amOnMailpoetPage('Emails');
+    $i->searchFor($failureConditionNewsletter);
+    $i->waitForText('No emails found.', 15, '[data-automation-id="newsletters_listing_tabs"]');
+    $i->searchFor($newsletterTitle);
+    $i->waitForText($newsletterTitle, 15, '[data-automation-id="newsletters_listing_tabs"]');
   }
-
 }

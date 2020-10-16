@@ -2,6 +2,9 @@ import React from 'react';
 import MailPoet from 'mailpoet';
 import _ from 'underscore';
 import PropTypes from 'prop-types';
+import Badge from 'common/badge/badge';
+import Button from 'common/button/button';
+import Heading from 'common/typography/heading/heading';
 
 class AutomaticEmailEvent extends React.PureComponent {
   render() {
@@ -31,12 +34,11 @@ class AutomaticEmailEvent extends React.PureComponent {
     } else {
       const onClick = !disabled ? _.partial(this.props.eventsConfigurator, event.slug) : null;
       action = (
-        <a
-          className="button button-primary"
+        <Button
           disabled={disabled}
           onClick={onClick}
           role="presentation"
-          data-automation-id={`create_${event.slug}`}
+          automationId={`create_${event.slug}`}
           onKeyDown={(keyEvent) => {
             if ((['keydown', 'keypress'].includes(keyEvent.type) && ['Enter', ' '].includes(keyEvent.key))
             ) {
@@ -46,37 +48,28 @@ class AutomaticEmailEvent extends React.PureComponent {
           }}
         >
           {event.actionButtonTitle || MailPoet.I18n.t('setUp')}
-        </a>
+        </Button>
       );
     }
 
     return (
-      <li data-type={event.slug}>
-        <div className="mailpoet_thumbnail">
-          {event.thumbnailImage ? <img src={event.thumbnailImage} alt="" /> : null}
+      <div data-type={event.slug} className="mailpoet-newsletter-type">
+        <div className="mailpoet-newsletter-type-image">
+          {event.badge && <Badge title={event.badge.text} /> }
         </div>
-        <div className="mailpoet_boxes_content">
-          <div className="mailpoet_description">
-            <div className="title_and_badge">
-              <h3>
-                {event.title}
-                {' '}
-                {event.soon ? `(${MailPoet.I18n.t('soon')})` : ''}
-              </h3>
-              {event.badge ? (
-                <span className={`mailpoet_badge mailpoet_badge_${event.badge.style}`}>
-                  {event.badge.text}
-                </span>
-              ) : ''
-              }
-            </div>
-            <p>{event.description}</p>
-          </div>
-          <div className="mailpoet_actions">
+        <div className="mailpoet-newsletter-type-content">
+          <Heading level={4}>
+            {event.title}
+            {' '}
+            {event.soon && `(${MailPoet.I18n.t('soon')})`}
+          </Heading>
+          <p>{event.description}</p>
+          <div className="mailpoet-flex-grow" />
+          <div className="mailpoet-newsletter-type-action">
             {action}
           </div>
         </div>
-      </li>
+      </div>
     );
   }
 }
@@ -90,7 +83,7 @@ AutomaticEmailEvent.propTypes = {
   eventsConfigurator: PropTypes.func.isRequired,
   event: PropTypes.shape({
     slug: PropTypes.string.isRequired,
-    thumbnailImage: PropTypes.string,
+    actionButtonLink: PropTypes.string,
     title: PropTypes.string.isRequired,
     soon: PropTypes.bool,
     badge: PropTypes.shape({

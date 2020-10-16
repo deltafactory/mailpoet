@@ -1,0 +1,140 @@
+.admin_page_mailpoet-welcome-wizard,
+.admin_page_mailpoet-woocommerce-setup {
+  background: #fff;
+
+  p {
+    font-size: $font-size;
+  }
+
+  #wpcontent {
+    padding: 0;
+  }
+
+  .wrap {
+    margin: 0;
+  }
+
+  div.updated,
+  div.error,
+  .update-nag,
+  .notice {
+    display: none !important;
+  }
+}
+
+.mailpoet-wizard-logo {
+  margin-bottom: 100px;
+  text-align: center;
+
+  @include respond-to(medium-screen) {
+    margin-bottom: 20px;
+  }
+}
+
+.mailpoet-wizard-step {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+
+  @include respond-to(medium-screen) {
+    flex-direction: column;
+  }
+}
+
+.mailpoet-wizard-step-illustration {
+  margin-right: $grid-gap;
+  max-width: $grid-column;
+  text-align: center;
+  width: 100%;
+
+  img {
+    max-height: 300px;
+    max-width: 100%;
+  }
+
+  @include respond-to(medium-screen) {
+    margin-right: 0;
+    max-width: $grid-column-small;
+
+    img {
+      max-height: 240px;
+    }
+  }
+}
+
+.mailpoet-wizard-step-content {
+  max-width: $grid-column-small + $grid-gap + $grid-column;
+  width: 100%;
+
+  @include respond-to(medium-screen) {
+    max-width: $grid-column;
+  }
+}
+
+.mailpoet-wizard-label {
+  display: block;
+  font-size: $font-size;
+  margin-bottom: $grid-gap-half;
+}
+
+.mailpoet-wizard-course-iframe {
+  height: 150px;
+}
+
+.mailpoet-welcome-wizard-step-content {
+  margin-top: 40px;
+  max-width: 620px;
+  min-height: 30vh;
+
+  h1 {
+    font-weight: 700;
+    margin: 0 0 20px;
+    padding: 0;
+  }
+
+  p {
+    color: #595c65;
+    font-size: 15px;
+    font-weight: normal;
+    line-height: 22px;
+    margin: 0 0 40px;
+
+    + p,
+    + ul { margin-top: -20px; }
+  }
+}
+
+.mailpoet-wizard-video {
+  position: absolute;
+  top: -1000px;
+}
+
+.mailpoet-wizard-woocommerce-option {
+  align-items: center;
+  box-shadow: 0 -1px 0 0 $color-tertiary-light;
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: space-between;
+  padding-bottom: 25px;
+  padding-top: 1px;
+}
+
+.mailpoet-wizard-gdpr {
+  color: $color-text-light;
+  font-size: $font-size-small;
+  line-height: 1.14;
+
+  span {
+    background-color: rgba($color-tertiary-light, .7);
+    border-radius: 2px;
+    color: $color-tertiary;
+    font-size: $font-size-extra-small;
+    line-height: 2;
+    margin-right: 8px;
+    padding: 3px 4px;
+  }
+}
+
+.mailpoet-wizard-woocommerce-toggle {
+  margin-left: $grid-gap;
+}

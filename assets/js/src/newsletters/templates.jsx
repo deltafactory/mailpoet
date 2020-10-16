@@ -1,30 +1,45 @@
 import React from 'react';
 import MailPoet from 'mailpoet';
-import Breadcrumb from 'newsletters/breadcrumb.jsx';
+import ListingHeadingStepsRoute from 'newsletters/listings/heading_steps_route.jsx';
 import Loading from 'common/loading.jsx';
-import Tabs from 'newsletters/templates/tabs.jsx';
+import Background from 'common/background/background';
+import Categories from 'common/categories/categories';
 import TemplateBox from 'newsletters/templates/template_box.jsx';
 import ImportTemplate from 'newsletters/templates/import_template.jsx';
-import Hooks from 'wp-js-hooks';
 import _ from 'underscore';
 import PropTypes from 'prop-types';
+import { GlobalContext } from 'context/index.jsx';
 
-const getEditorUrl = id => `admin.php?page=mailpoet-newsletter-editor&id=${id}`;
+const getEditorUrl = (id) => `admin.php?page=mailpoet-newsletter-editor&id=${id}`;
 
-const templatesCategories = [
-  {
-    name: 'standard',
-    label: MailPoet.I18n.t('tabStandardTitle'),
-  },
-  {
-    name: 'welcome',
-    label: MailPoet.I18n.t('tabWelcomeTitle'),
-  },
-  {
-    name: 'notification',
-    label: MailPoet.I18n.t('tabNotificationTitle'),
-  },
-];
+const templatesCategories = [];
+if (window.mailpoet_newsletters_templates_recently_sent_count) {
+  templatesCategories.push({
+    name: 'recent',
+    label: MailPoet.I18n.t('recentlySent'),
+  });
+}
+
+templatesCategories.push(
+  ...[
+    {
+      name: 'standard',
+      label: MailPoet.I18n.t('tabStandardTitle'),
+    },
+    {
+      name: 'welcome',
+      label: MailPoet.I18n.t('tabWelcomeTitle'),
+    },
+    {
+      name: 'notification',
+      label: MailPoet.I18n.t('tabNotificationTitle'),
+    },
+    {
+      name: 'blank',
+      label: MailPoet.I18n.t('tabBlankTitle'),
+    },
+  ]
+);
 
 if (window.mailpoet_woocommerce_active) {
   templatesCategories.push({
@@ -35,14 +50,6 @@ if (window.mailpoet_woocommerce_active) {
 
 templatesCategories.push(
   ...[
-    {
-      name: 'all',
-      label: MailPoet.I18n.t('allTemplates'),
-    },
-    {
-      name: 'recent',
-      label: MailPoet.I18n.t('recentlySent'),
-    },
     {
       name: 'saved',
       label: MailPoet.I18n.t('savedTemplates'),
@@ -67,8 +74,8 @@ class NewsletterTemplates extends React.Component {
     this.afterTemplateImport = this.afterTemplateImport.bind(this);
   }
 
-  componentWillMount() {
-    MailPoet.Ajax.post({
+  componentDidMount() {
+    MailPoet.Ajax.get({
       api_version: window.mailpoet_api_version,
       endpoint: 'newsletterTemplates',
       action: 'getAll',
@@ -79,7 +86,7 @@ class NewsletterTemplates extends React.Component {
             name:
               MailPoet.I18n.t('mailpoetGuideTemplateTitle'),
             categories: '["welcome", "notification", "standard", "woocommerce"]',
-            readonly: '1',
+            readonly: true,
           },
         ];
       }
@@ -87,8 +94,8 @@ class NewsletterTemplates extends React.Component {
       this.sortTemplates();
     }).fail((response) => {
       if (response.errors.length > 0) {
-        MailPoet.Notice.error(
-          response.errors.map(error => error.message),
+        this.context.notices.error(
+          response.errors.map((error) => <p key={error.message}>{error.message}</p>),
           { scroll: true }
         );
       }
@@ -98,12 +105,15 @@ class NewsletterTemplates extends React.Component {
   }
 
   addTemplate(template) {
-    const categoriesNames = templatesCategories.map(category => category.name);
+    const categoriesNames = templatesCategories.map((category) => category.name);
     let categories;
 
+    if (categoriesNames.indexOf('woocommerce') === -1) {
+      categoriesNames.push('woocommerce');
+    }
     try {
       categories = JSON.parse(template.categories)
-        .filter(name => categoriesNames.indexOf(name) !== -1);
+        .filter((name) => categoriesNames.indexOf(name) !== -1);
     } catch (err) {
       categories = [];
     }
@@ -123,9 +133,19 @@ class NewsletterTemplates extends React.Component {
   }
 
   sortTemplates() {
+    const blankFirstCategories = ['welcome', 'notification', 'standard'];
     Object.keys(this.templates).forEach((category) => {
       this.templates[category].sort((a, b) => {
-        if (parseInt(a.id, 10) < parseInt(b.id, 10)) {
+        // MAILPOET-2087 - templates of type "blank" should be first
+        if (blankFirstCategories.includes(category)) {
+          if (a.categories.includes('"blank"') && !b.categories.includes('"blank"')) {
+            return -1;
+          }
+          if (!a.categories.includes('"blank"') && b.categories.includes('"blank"')) {
+            return 1;
+          }
+        }
+        if (a.id < b.id) {
           return 1;
         }
         return -1;
@@ -145,7 +165,12 @@ class NewsletterTemplates extends React.Component {
       },
     }).done((response) => {
       emailType = response.data.type;
-      if (_.findWhere(templatesCategories, { name: response.data.type })) {
+      if (emailType === 'automatic') {
+        emailType = response.data.options.group || emailType;
+      }
+      if (window.mailpoet_newsletters_templates_recently_sent_count) {
+        selectedTab = 'recent';
+      } else if (_.findWhere(templatesCategories, { name: response.data.type })) {
         selectedTab = response.data.type;
       } else if (
         response.data.type === 'automatic'
@@ -155,8 +180,8 @@ class NewsletterTemplates extends React.Component {
       }
     }).fail((response) => {
       if (response.errors.length > 0) {
-        MailPoet.Notice.error(
-          response.errors.map(error => error.message),
+        this.context.notices.error(
+          response.errors.map((error) => <p key={error.message}>{error.message}</p>),
           { scroll: true }
         );
       }
@@ -173,7 +198,9 @@ class NewsletterTemplates extends React.Component {
   afterTemplateDelete(success, id) {
     if (success) {
       Object.keys(this.templates).forEach((category) => {
-        this.templates[category] = this.templates[category].filter(template => template.id !== id);
+        this.templates[category] = this.templates[category].filter(
+          (template) => template.id !== id
+        );
       });
     }
     this.setState({
@@ -204,10 +231,12 @@ class NewsletterTemplates extends React.Component {
   render() {
     if (this.state.loading) return <Loading />;
 
-    const tabs = templatesCategories.concat({
+    const categories = templatesCategories.concat({
       name: 'import',
       label: MailPoet.I18n.t('tabImportTitle'),
-    });
+    }).map((category) => Object.assign(category, {
+      automationId: `templates-${category.name.replace(/\s+/g, '-').toLowerCase()}`,
+    }));
 
     const selectedTab = this.state.selectedTab;
     let content = null;
@@ -236,38 +265,37 @@ class NewsletterTemplates extends React.Component {
             afterDelete={this.afterTemplateDelete}
             beforeSelect={() => this.setState({ loading: true })}
             afterSelect={this.afterTemplateSelect}
-            {...template}
+            id={template.id}
+            name={template.name}
+            thumbnail={template.thumbnail}
+            readonly={template.readonly}
           />
         ));
       }
-      content = <ul className="mailpoet_boxes clearfix">{templates}</ul>;
+      content = templates;
     }
-
-    const breadcrumb = Hooks.applyFilters(
-      'mailpoet_newsletters_template_breadcrumb',
-      <Breadcrumb step="template" />,
-      this.state.emailType,
-      'template'
-    );
 
     return (
       <div>
-        <h1>{MailPoet.I18n.t('selectTemplateTitle')}</h1>
+        <Background color="#fff" />
 
-        {breadcrumb}
+        <ListingHeadingStepsRoute emailType={this.state.emailType} automationId="email_template_selection_heading" />
 
-        <Tabs
-          tabs={tabs}
-          selected={this.state.selectedTab}
-          select={name => this.setState({ selectedTab: name })}
-        />
+        <div className="mailpoet-templates">
+          <Categories
+            categories={categories}
+            active={this.state.selectedTab}
+            onSelect={(name) => this.setState({ selectedTab: name })}
+          />
 
-        {content}
-
+          {content}
+        </div>
       </div>
     );
   }
 }
+
+NewsletterTemplates.contextType = GlobalContext;
 
 NewsletterTemplates.propTypes = {
   match: PropTypes.shape({

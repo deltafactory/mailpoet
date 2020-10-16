@@ -4,7 +4,7 @@ import PropTypes from 'prop-types';
 import classNames from 'classnames';
 import { Link } from 'react-router-dom';
 import Listing from 'listing/listing.jsx';
-import { CronMixin, MailerMixin } from 'newsletters/listings/mixins.jsx';
+import { checkCronStatus, checkMailerStatus } from 'newsletters/listings/utils.jsx';
 
 const columns = [
   {
@@ -27,8 +27,11 @@ const messages = {
 };
 
 const SendingStatus = (props) => {
-  const newsletterId = props.match.params.id;
-  const [newsletterSubject, setNewsletterSubject] = React.useState('');
+  const [newsletter, setNewsletter] = React.useState({
+    id: props.match.params.id,
+    subject: '',
+    sent: false,
+  });
 
   React.useEffect(() => {
     MailPoet.Ajax.post({
@@ -36,19 +39,22 @@ const SendingStatus = (props) => {
       endpoint: 'newsletters',
       action: 'get',
       data: {
-        id: newsletterId,
+        id: newsletter.id,
       },
     })
-      .done(res => setNewsletterSubject(res.data.subject))
-      .fail(res => MailPoet.Notice.showApiErrorNotice(res));
-  }, [newsletterId]);
+      .done((res) => setNewsletter({
+        id: newsletter.id,
+        subject: res.data.subject,
+        sent: res.data.sent_at !== null,
+      }))
+      .fail((res) => MailPoet.Notice.showApiErrorNotice(res));
+  }, [newsletter.id]);
 
   return (
     <>
       <h1>{MailPoet.I18n.t('sendingStatusTitle')}</h1>
       <StatsLink
-        newsletterId={newsletterId}
-        newsletterSubject={newsletterSubject}
+        newsletter={newsletter}
       />
       <SendingStatusListing location={props.location} params={props.match.params} />
     </>
@@ -77,16 +83,23 @@ const SendingStatusListing = React.memo(({ location, params }) => (
     params={params}
     endpoint="sending_task_subscribers"
     base_url="sending-status/:id"
-    onRenderItem={item => <div><ListingItem {...item} /></div>}
-    getListingItemKey={item => `${item.taskId}-${item.subscriberId}`}
+    onRenderItem={
+      (item) => (
+        <div>
+          { /* eslint-disable-next-line react/jsx-props-no-spreading */ }
+          <ListingItem {...item} />
+        </div>
+      )
+    }
+    getListingItemKey={(item) => `${item.taskId}-${item.subscriberId}`}
     columns={columns}
     messages={messages}
     auto_refresh
     sort_by="failed"
     sort_order="desc"
     afterGetItems={(state) => {
-      MailerMixin.checkMailerStatus(state);
-      CronMixin.checkCronStatus(state);
+      checkMailerStatus(state);
+      checkCronStatus(state);
     }}
   />
 ), compareProps);
@@ -99,20 +112,23 @@ SendingStatusListing.propTypes = {
   }).isRequired,
 };
 
-const StatsLink = ({ newsletterId, newsletterSubject }) => {
-  if (!newsletterId || !newsletterSubject) return null;
-  if (window.mailpoet_premium_active) {
-    return <p><Link to={`/stats/${newsletterId}`}>{ newsletterSubject }</Link></p>;
-  }
-  return <p><a href="admin.php?page=mailpoet-premium">{newsletterSubject}</a></p>;
+const StatsLink = ({ newsletter }) => {
+  if (!newsletter.id || !newsletter.subject || !newsletter.sent) return null;
+  return <p><Link to={`/stats/${newsletter.id}`}>{ newsletter.subject }</Link></p>;
 };
 StatsLink.propTypes = {
-  newsletterId: PropTypes.string,
-  newsletterSubject: PropTypes.string,
+  newsletter: PropTypes.shape({
+    id: PropTypes.string,
+    subject: PropTypes.string,
+    sent: PropTypes.bool,
+  }),
 };
 StatsLink.defaultProps = {
-  newsletterId: null,
-  newsletterSubject: null,
+  newsletter: {
+    id: null,
+    subject: null,
+    sent: false,
+  },
 };
 
 const ListingItem = ({
@@ -126,7 +142,7 @@ const ListingItem = ({
       data: { taskId, subscriberId },
     })
       .done(() => window.mailpoet_listing.forceUpdate())
-      .fail(res => MailPoet.Notice.showApiErrorNotice(res));
+      .fail((res) => MailPoet.Notice.showApiErrorNotice(res));
   };
 
   const rowClasses = classNames(
@@ -143,8 +159,11 @@ const ListingItem = ({
           <br />
           <a
             className="button"
-            href="javascript:;"
-            onClick={resend}
+            href="#"
+            onClick={(event) => {
+              event.preventDefault();
+              resend();
+            }}
           >
             {MailPoet.I18n.t('resend')}
           </a>

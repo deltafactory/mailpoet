@@ -6,6 +6,17 @@
 import Marionette from 'backbone.marionette';
 import BehaviorsLookup from 'newsletter_editor/behaviors/BehaviorsLookup';
 import App from 'newsletter_editor/App';
+import tinymce from 'tinymce/tinymce';
+import tinymceMailpoetShortcodes from 'newsletter_editor/tinymce/mailpoet_shortcodes.js';
+
+// TinyMCE theme and plugins
+import 'tinymce/themes/silver';
+import 'tinymce/plugins/code';
+import 'tinymce/plugins/link';
+import 'tinymce/plugins/lists';
+import 'tinymce/plugins/paste';
+
+import './tinymce_icons';
 
 var BL = BehaviorsLookup;
 
@@ -17,7 +28,7 @@ BL.TextEditorBehavior = Marionette.Behavior.extend({
     validElements: 'p[class|style],span[class|style],a[href|class|title|target|style],strong[class|style],em[class|style],strike,br,del',
     invalidElements: 'script',
     blockFormats: 'Paragraph=p',
-    plugins: 'link textcolor colorpicker mailpoet_shortcodes',
+    plugins: 'link mailpoet_shortcodes',
     configurationFilter: function configurationFilter(originalConfig) { return originalConfig; },
   },
   initialize: function initialize() {
@@ -34,8 +45,12 @@ BL.TextEditorBehavior = Marionette.Behavior.extend({
       return;
     }
 
-    this.$(this.options.selector).tinymce(this.options.configurationFilter({
+    tinymce.PluginManager.add('mailpoet_shortcodes', tinymceMailpoetShortcodes);
+
+    tinymce.init(this.options.configurationFilter({
+      target: this.el.querySelector(this.options.selector),
       inline: true,
+      contextmenu: false,
 
       menubar: false,
       toolbar1: this.options.toolbar1,

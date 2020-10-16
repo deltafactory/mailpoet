@@ -12,7 +12,7 @@ if (class_exists(\MailPoet\API\API::class)) {
   $mailpoet_api = \MailPoet\API\API::MP('v1');
   // Get available list so that a subscriber can choose in which to subscribe 
   $lists = $mailpoet_api->getLists();
-  // Ger subscriber fields to know what fields can be rendered within a form
+  // Get subscriber fields to know what fields can be rendered within a form
   $subscriber_form_fields = $mailpoet_api->getSubscriberFields();
 }
 ```
@@ -38,11 +38,11 @@ if (class_exists(\MailPoet\API\API::class)) {
 
   // Check if subscriber exists. If subscriber doesn't exist an exception is thrown
   try {
-    $subscriber = $mailpoet_api->getSubscriber($subscriber['email']);
+    $get_subscriber = $mailpoet_api->getSubscriber($subscriber['email']);
   } catch (\Exception $e) {}
 
   try {
-    if (!$subscriber) {
+    if (!$get_subscriber) {
       // Subscriber doesn't exist let's create one
       $mailpoet_api->addSubscriber($subscriber, $list_ids);
     } else {

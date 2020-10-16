@@ -4,9 +4,12 @@ import MailPoet from 'mailpoet';
 import PropTypes from 'prop-types';
 
 class ListingPages extends React.Component {
-  state = {
-    page: null,
-  };
+  constructor(props) {
+    super(props);
+    this.state = {
+      page: null,
+    };
+  }
 
   setPage = (page) => {
     this.setState({
@@ -54,7 +57,7 @@ class ListingPages extends React.Component {
     this.setPage(e.target.value);
   };
 
-  constrainPage = page => Math.min(Math.max(1, Math.abs(Number(page))), this.getLastPage());
+  constrainPage = (page) => Math.min(Math.max(1, Math.abs(Number(page))), this.getLastPage());
 
   render() {
     if (this.props.count === 0) {
@@ -62,28 +65,43 @@ class ListingPages extends React.Component {
     }
     let pagination = false;
     let firstPage = (
-      <span aria-hidden="true" className="tablenav-pages-navspan button disabled">«</span>
+      <span aria-hidden="true" className="mailpoet-listing-pages-first">
+        <Arrow direction="left" disabled />
+        <Arrow direction="left" disabled />
+      </span>
     );
     let previousPage = (
-      <span aria-hidden="true" className="tablenav-pages-navspan button disabled">‹</span>
+      <span aria-hidden="true" className="mailpoet-listing-pages-previous">
+        <Arrow direction="left" disabled />
+      </span>
     );
     let nextPage = (
-      <span aria-hidden="true" className="tablenav-pages-navspan button disabled">›</span>
+      <span aria-hidden="true" className="mailpoet-listing-pages-next">
+        <Arrow disabled />
+      </span>
     );
     let lastPage = (
-      <span aria-hidden="true" className="tablenav-pages-navspan button disabled">»</span>
+      <span aria-hidden="true" className="mailpoet-listing-pages-last">
+        <Arrow disabled />
+        <Arrow disabled />
+      </span>
     );
 
     if (this.props.limit > 0 && this.props.count > this.props.limit) {
       if (this.props.page > 1) {
         previousPage = (
           <a
-            href="javascript:;"
-            onClick={this.setPreviousPage}
-            className="prev-page button"
+            href="#"
+            onClick={(event) => {
+              event.preventDefault();
+              this.setPreviousPage(event);
+            }}
+            className="mailpoet-listing-pages-previous"
           >
             <span className="screen-reader-text">{MailPoet.I18n.t('previousPage')}</span>
-            <span aria-hidden="true">‹</span>
+            <span aria-hidden="true">
+              <Arrow direction="left" />
+            </span>
           </a>
         );
       }
@@ -91,12 +109,18 @@ class ListingPages extends React.Component {
       if (this.props.page > 2) {
         firstPage = (
           <a
-            href="javascript:;"
-            onClick={this.setFirstPage}
-            className="first-page button"
+            href="#"
+            onClick={(event) => {
+              event.preventDefault();
+              this.setFirstPage(event);
+            }}
+            className="mailpoet-listing-pages-first"
           >
             <span className="screen-reader-text">{MailPoet.I18n.t('firstPage')}</span>
-            <span aria-hidden="true">«</span>
+            <span aria-hidden="true">
+              <Arrow direction="left" />
+              <Arrow direction="left" />
+            </span>
           </a>
         );
       }
@@ -104,12 +128,17 @@ class ListingPages extends React.Component {
       if (this.props.page < this.getLastPage()) {
         nextPage = (
           <a
-            href="javascript:;"
-            onClick={this.setNextPage}
-            className="next-page button"
+            href="#"
+            onClick={(event) => {
+              event.preventDefault();
+              this.setNextPage(event);
+            }}
+            className="mailpoet-listing-pages-next"
           >
             <span className="screen-reader-text">{MailPoet.I18n.t('nextPage')}</span>
-            <span aria-hidden="true">›</span>
+            <span aria-hidden="true">
+              <Arrow />
+            </span>
           </a>
         );
       }
@@ -117,12 +146,18 @@ class ListingPages extends React.Component {
       if (this.props.page < this.getLastPage() - 1) {
         lastPage = (
           <a
-            href="javascript:;"
-            onClick={this.setLastPage}
-            className="last-page button"
+            href="#"
+            onClick={(event) => {
+              event.preventDefault();
+              this.setLastPage();
+            }}
+            className="mailpoet-listing-pages-last"
           >
             <span className="screen-reader-text">{MailPoet.I18n.t('lastPage')}</span>
-            <span aria-hidden="true">»</span>
+            <span aria-hidden="true">
+              <Arrow />
+              <Arrow />
+            </span>
           </a>
         );
       }
@@ -133,12 +168,12 @@ class ListingPages extends React.Component {
       }
 
       pagination = (
-        <span className="pagination-links">
+        <span className="mailpoet-listing-pages-links">
           {firstPage}
           &nbsp;
           {previousPage}
           &nbsp;
-          <span className="paging-input">
+          <span className="mailpoet-listing-paging-input">
             <label
               className="screen-reader-text"
               htmlFor="current-page-selector"
@@ -155,11 +190,11 @@ class ListingPages extends React.Component {
               value={pageValue}
               name="paged"
               id="current-page-selector"
-              className="current-page"
+              className="mailpoet-listing-current-page"
             />
             {MailPoet.I18n.t('pageOutOf')}
             &nbsp;
-            <span className="total-pages">
+            <span className="mailpoet-listing-total-pages">
               {Math.ceil(this.props.count / this.props.limit).toLocaleString()}
             </span>
           </span>
@@ -172,7 +207,7 @@ class ListingPages extends React.Component {
     }
 
     const classes = classNames(
-      'tablenav-pages',
+      'mailpoet-listing-pages',
       { 'one-page': (this.props.count <= this.props.limit) }
     );
 
@@ -186,7 +221,7 @@ class ListingPages extends React.Component {
 
     return (
       <div className={classes}>
-        <span className="displaying-num">{ numberOfItemsLabel }</span>
+        <span className="mailpoet-listing-pages-num">{ numberOfItemsLabel }</span>
         { pagination }
       </div>
     );
@@ -201,6 +236,39 @@ ListingPages.propTypes = {
   ]).isRequired,
   count: PropTypes.number.isRequired,
   limit: PropTypes.number.isRequired,
+};
+
+/* type ArrowProps = {
+  direction?: 'right',
+  disabled?: boolean
+} */
+
+const Arrow = ({ direction, disabled }/* : ArrowProps */) => {
+  const arrowLeftPath = 'M8 10V2c0-.552-.448-1-1-1-.216 0-.427.07-.6.2l-5.333 4c-.442.331-.532.958-.2 1.4.057.076.124.143.2.2l5.333 4c.442.331 1.069.242 1.4-.2.13-.173.2-.384.2-.6z';
+  const arrowRightPath = 'M0 10V2c0-.552.448-1 1-1 .216 0 .427.07.6.2l5.333 4c.442.331.532.958.2 1.4-.057.076-.124.143-.2.2l-5.333 4c-.442.331-1.069.242-1.4-.2-.13-.173-.2-.384-.2-.6z';
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="8"
+      height="12"
+      viewBox="0 0 8 12"
+    >
+      <path
+        fill={disabled ? '#E5E9F8' : '#9CA6CC'}
+        d={direction === 'left' ? arrowLeftPath : arrowRightPath}
+      />
+    </svg>
+  );
+};
+
+Arrow.propTypes = {
+  direction: PropTypes.oneOf(['left', 'right']),
+  disabled: PropTypes.bool,
+};
+
+Arrow.defaultProps = {
+  direction: 'right',
+  disabled: false,
 };
 
 export default ListingPages;

@@ -1,12 +1,12 @@
 <?php
+
 namespace MailPoet\Test\Newsletter;
 
 use MailPoet\Newsletter\Renderer\StylesHelper;
 
 class StylesHelperTest extends \MailPoetUnitTest {
-
-  function testItGetsCustomFontsLinks() {
-    $styles_with_custom_fonts = [
+  public function testItGetsCustomFontsLinks() {
+    $stylesWithCustomFonts = [
       "text" => [
         "fontColor" => "#565656",
         "fontFamily" => "Arial",
@@ -33,7 +33,7 @@ class StylesHelperTest extends \MailPoetUnitTest {
       ],
     ];
 
-    $styles_without_custom_fonts = [
+    $stylesWithoutCustomFonts = [
       "text" => [
         "fontColor" => "#565656",
         "fontFamily" => "Arial",
@@ -60,10 +60,10 @@ class StylesHelperTest extends \MailPoetUnitTest {
       ],
     ];
 
-    expect(StylesHelper::getCustomFontsLinks($styles_with_custom_fonts))
-      ->equals('<!--[if !mso]><link href="https://fonts.googleapis.com/css?family=Roboto:400,400i,700,700i|Source+Sans+Pro:400,400i,700,700i" rel="stylesheet"><![endif]-->');
+    expect(StylesHelper::getCustomFontsLinks($stylesWithCustomFonts))
+      ->equals('<!--[if !mso]><!-- --><link href="https://fonts.googleapis.com/css?family=Roboto:400,400i,700,700i|Source+Sans+Pro:400,400i,700,700i" rel="stylesheet"><!--<![endif]-->');
 
-    expect(StylesHelper::getCustomFontsLinks($styles_without_custom_fonts))
+    expect(StylesHelper::getCustomFontsLinks($stylesWithoutCustomFonts))
       ->equals('');
   }
 }

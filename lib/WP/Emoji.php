@@ -1,18 +1,49 @@
 <?php
+
 namespace MailPoet\WP;
+
 use MailPoet\WP\Functions as WPFunctions;
 
 class Emoji {
+  /** @var WPFunctions */
   private $wp;
 
-  function __construct(WPFunctions $wp = null) {
+  public function __construct(WPFunctions $wp = null) {
     if ($wp === null) {
       $wp = new WPFunctions();
     }
     $this->wp = $wp;
   }
 
-  function encodeForUTF8Column($table, $field, $value) {
+  public function encodeEmojisInBody($newsletterRenderedBody) {
+    if (is_array($newsletterRenderedBody)) {
+      return array_map([$this, 'encodeRenderedBodyForUTF8Column'], $newsletterRenderedBody);
+    }
+    return $this->encodeRenderedBodyForUTF8Column($newsletterRenderedBody);
+  }
+
+  public function decodeEmojisInBody($newsletterRenderedBody) {
+    if (is_array($newsletterRenderedBody)) {
+      return array_map([$this, 'decodeEntities'], $newsletterRenderedBody);
+    }
+    return $this->decodeEntities($newsletterRenderedBody);
+  }
+
+  public function sanitizeEmojisInFormBody(array $body): array {
+    $bodyJson = json_encode($body, JSON_UNESCAPED_UNICODE);
+    $fixedJson = $this->encodeForUTF8Column(MP_FORMS_TABLE, 'body', $bodyJson);
+    return json_decode($fixedJson, true);
+  }
+
+  private function encodeRenderedBodyForUTF8Column($value) {
+    return $this->encodeForUTF8Column(
+      MP_SENDING_QUEUES_TABLE,
+      'newsletter_rendered_body',
+      $value
+    );
+  }
+
+  public function encodeForUTF8Column($table, $field, $value) {
     global $wpdb;
     $charset = $wpdb->get_col_charset($table, $field);
     if ($charset === 'utf8') {
@@ -21,7 +52,7 @@ class Emoji {
     return $value;
   }
 
-  function decodeEntities($content) {
+  public function decodeEntities($content) {
     // Based on WPFunctions::get()->wpStaticizeEmoji()
 
     // Loosely match the Emoji Unicode range.

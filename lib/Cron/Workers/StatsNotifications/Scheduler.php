@@ -2,11 +2,12 @@
 
 namespace MailPoet\Cron\Workers\StatsNotifications;
 
-use Carbon\Carbon;
-use MailPoet\Models\Newsletter;
-use MailPoet\Models\ScheduledTask;
-use MailPoet\Models\StatsNotification;
+use MailPoet\Entities\NewsletterEntity;
+use MailPoet\Entities\ScheduledTaskEntity;
+use MailPoet\Entities\StatsNotificationEntity;
 use MailPoet\Settings\SettingsController;
+use MailPoetVendor\Carbon\Carbon;
+use MailPoetVendor\Doctrine\ORM\EntityManager;
 
 class Scheduler {
 
@@ -19,35 +20,52 @@ class Scheduler {
   /** @var SettingsController */
   private $settings;
 
-  function __construct(SettingsController $settings) {
+  private $supportedTypes = [
+    NewsletterEntity::TYPE_NOTIFICATION_HISTORY,
+    NewsletterEntity::TYPE_STANDARD,
+  ];
+
+  /** @var EntityManager */
+  private $entityManager;
+
+  /** @var StatsNotificationsRepository */
+  private $repository;
+
+  public function __construct(
+    SettingsController $settings,
+    EntityManager $entityManager,
+    StatsNotificationsRepository $repository
+  ) {
     $this->settings = $settings;
+    $this->entityManager = $entityManager;
+    $this->repository = $repository;
   }
 
-  function schedule(Newsletter $newsletter) {
+  public function schedule(NewsletterEntity $newsletter) {
     if (!$this->shouldSchedule($newsletter)) {
       return false;
     }
 
-    $task = ScheduledTask::create();
-    $task->type = Worker::TASK_TYPE;
-    $task->status = ScheduledTask::STATUS_SCHEDULED;
-    $task->scheduled_at = $this->getNextRunDate();
-    $task->save();
+    $task = new ScheduledTaskEntity();
+    $task->setType(Worker::TASK_TYPE);
+    $task->setStatus(ScheduledTaskEntity::STATUS_SCHEDULED);
+    $task->setScheduledAt($this->getNextRunDate());
+    $this->entityManager->persist($task);
+    $this->entityManager->flush();
 
-    $stats_notifications = StatsNotification::create();
-    $stats_notifications->newsletter_id = $newsletter->id;
-    $stats_notifications->task_id = $task->id;
-    $stats_notifications->save();
+    $statsNotifications = new StatsNotificationEntity($newsletter, $task);
+    $this->entityManager->persist($statsNotifications);
+    $this->entityManager->flush();
   }
 
-  private function shouldSchedule(Newsletter $newsletter) {
+  private function shouldSchedule(NewsletterEntity $newsletter) {
     if ($this->isDisabled()) {
       return false;
     }
-    if ($this->isTaskScheduled($newsletter->id)) {
+    if (!in_array($newsletter->getType(), $this->supportedTypes)) {
       return false;
     }
-    if (($newsletter->type !== Newsletter::TYPE_NOTIFICATION) && ($newsletter->type !== Newsletter::TYPE_STANDARD)) {
+    if ($this->hasTaskBeenScheduled($newsletter->getId())) {
       return false;
     }
     return true;
@@ -73,13 +91,9 @@ class Scheduler {
     return !(bool)$settings['enabled'];
   }
 
-  private function isTaskScheduled($newsletter_id) {
-    $existing = ScheduledTask::tableAlias('tasks')
-      ->join(StatsNotification::$_table, 'tasks.id = notification.task_id', 'notification')
-      ->where('tasks.type', Worker::TASK_TYPE)
-      ->where('notification.newsletter_id', $newsletter_id)
-      ->findMany();
-    return (bool)$existing;
+  private function hasTaskBeenScheduled($newsletterId) {
+    $existing = $this->repository->findOneByNewsletterId($newsletterId);
+    return $existing instanceof StatsNotificationEntity;
   }
 
   private function getNextRunDate() {
@@ -87,5 +101,4 @@ class Scheduler {
     $date->addHours(self::HOURS_TO_SEND_AFTER_NEWSLETTER);
     return $date;
   }
-
 }

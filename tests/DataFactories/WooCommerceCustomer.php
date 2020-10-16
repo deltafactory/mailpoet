@@ -10,14 +10,14 @@ class WooCommerceCustomer {
   /** @var array */
   private $data;
 
-  function __construct(\AcceptanceTester $tester) {
-    $unique_id = bin2hex(random_bytes(7)); // phpcs:ignore
+  public function __construct(\AcceptanceTester $tester) {
+    $uniqueId = bin2hex(random_bytes(7)); // phpcs:ignore
     $this->tester = $tester;
     $this->data = [
-      'first_name' => "FirstName_$unique_id",
-      'last_name' => "LastName_$unique_id",
-      'email' => "woo_customer_$unique_id@example.com",
-      'password' => "woo_customer_$unique_id",
+      'first_name' => "FirstName_$uniqueId",
+      'last_name' => "LastName_$uniqueId",
+      'email' => "woo_customer_$uniqueId@example.com",
+      'password' => "woo_customer_$uniqueId",
     ];
   }
 
@@ -25,7 +25,7 @@ class WooCommerceCustomer {
  * @param string $name
  * @return $this
  */
-  function withFirstName($name) {
+  public function withFirstName($name) {
     return $this->update('first_name', $name);
   }
 
@@ -33,7 +33,7 @@ class WooCommerceCustomer {
    * @param string $name
    * @return $this
    */
-  function withLastName($name) {
+  public function withLastName($name) {
     return $this->update('last_name', $name);
   }
 
@@ -41,7 +41,7 @@ class WooCommerceCustomer {
    * @param string $password
    * @return $this
    */
-  function withPassword($password) {
+  public function withPassword($password) {
     return $this->update('password', $password);
   }
 
@@ -49,26 +49,25 @@ class WooCommerceCustomer {
    * @param string $email
    * @return $this
    */
-  function withEmail($email) {
+  public function withEmail($email) {
     return $this->update('email', $email);
   }
 
-
-  function create() {
-    $create_output = $this->tester->cliToArray("wc customer create --porcelain --allow-root --user=admin --first_name=\"{$this->data['first_name']}\" --last_name=\"{$this->data['last_name']}\" --email=\"{$this->data['email']}\" --password=\"{$this->data['password']}\"");
-    $customer_out = $this->tester->cliToArray("wc customer get $create_output[0] --format=json --allow-root --user=admin");
-    return json_decode($customer_out[0], true);
+  public function create() {
+    $createOutput = $this->tester->cliToArray(['wc', 'customer', 'create', '--porcelain', '--user=admin', "--first_name={$this->data['first_name']}", "--last_name={$this->data['last_name']}", "--email={$this->data['email']}", "--password={$this->data['password']}"]);
+    $customerOut = $this->tester->cliToArray(['wc', 'customer', 'get', $createOutput[0], '--format=json', '--user=admin']);
+    return json_decode($customerOut[0], true);
   }
 
   /**
    * @param int $id
    */
-  function delete($id) {
-    $this->tester->cliToArray("wc customer delete $id --force=1 --allow-root --user=admin");
+  public function delete($id) {
+    $this->tester->cliToArray(['wc', 'customer', 'delete', $id, '--force=1', '--user=admin']);
   }
 
-  function deleteAll() {
-    $list = $this->tester->cliToArray("wc customer list --format=json --allow-root --user=admin --fields=id");
+  public function deleteAll() {
+    $list = $this->tester->cliToArray(['wc', 'customer', 'list', '--format=json', '--user=admin', '--fields=id']);
     foreach (json_decode($list[0], true) as $item) {
       $this->delete($item['id']);
     }

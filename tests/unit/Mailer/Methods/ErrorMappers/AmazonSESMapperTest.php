@@ -1,4 +1,5 @@
 <?php
+
 namespace MailPoet\Test\Mailer\Methods\ErrorMappers;
 
 use MailPoet\Mailer\MailerError;
@@ -11,12 +12,12 @@ class AmazonSESMapperTest extends \MailPoetUnitTest {
   private $mapper;
 
   /** @var array */
-  private $response_data = [];
+  private $responseData = [];
 
-  function _before() {
+  public function _before() {
     parent::_before();
     $this->mapper = new AmazonSESMapper();
-    $this->response_data = [
+    $this->responseData = [
       'Error' => [
         'Type' => 'Sender',
         'Code' => 'ConfigurationSetDoesNotExist',
@@ -26,17 +27,17 @@ class AmazonSESMapperTest extends \MailPoetUnitTest {
     ];
   }
 
-  function testGetProperError() {
-    $response = $this->buildXmlResponseFromArray($this->response_data, new SimpleXMLElement('<response/>'));
+  public function testGetProperError() {
+    $response = $this->buildXmlResponseFromArray($this->responseData, new SimpleXMLElement('<response/>'));
     $error = $this->mapper->getErrorFromResponse($response, 'john@rambo.com');
     expect($error->getLevel())->equals(MailerError::LEVEL_HARD);
     expect($error->getMessage())->equals('Some message');
     expect($error->getSubscriberErrors()[0]->getEmail())->equals('john@rambo.com');
   }
 
-  function testGetSoftErrorForRejectedMessage() {
-    $this->response_data['Error']['Code'] = 'MessageRejected';
-    $response = $this->buildXmlResponseFromArray($this->response_data, new SimpleXMLElement('<response/>'));
+  public function testGetSoftErrorForRejectedMessage() {
+    $this->responseData['Error']['Code'] = 'MessageRejected';
+    $response = $this->buildXmlResponseFromArray($this->responseData, new SimpleXMLElement('<response/>'));
     $error = $this->mapper->getErrorFromResponse($response, 'john@rambo.com');
     expect($error->getLevel())->equals(MailerError::LEVEL_SOFT);
   }
@@ -44,8 +45,8 @@ class AmazonSESMapperTest extends \MailPoetUnitTest {
   /**
    * @return SimpleXMLElement
    */
-  private function buildXmlResponseFromArray($response_data, SimpleXMLElement $xml) {
-    foreach ($response_data as $tag => $value) {
+  private function buildXmlResponseFromArray($responseData, SimpleXMLElement $xml) {
+    foreach ($responseData as $tag => $value) {
       if (is_array($value)) {
         $this->buildXmlResponseFromArray($value, $xml->addChild($tag));
       } else {

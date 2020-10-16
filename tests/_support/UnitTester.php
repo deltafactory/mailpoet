@@ -1,6 +1,5 @@
 <?php
 
-
 /**
  * Inherited Methods
  * @method void wantToTest($text)
@@ -16,25 +15,26 @@
  *
  * @SuppressWarnings(PHPMD)
 */
+// phpcs:ignore PSR1.Classes.ClassDeclaration
 class UnitTester extends \Codeception\Actor {
   use _generated\UnitTesterActions;
 
   // generate random users
-  function generateSubscribers($count, $data = array()) {
+  public function generateSubscribers($count, $data = []) {
     for ($i = 0; $i < $count; $i++) {
       $this->generateSubscriber($data);
     }
   }
 
-  function generateSubscriber($data = array()) {
-    $subscriber_data = array(
-      'email' => sprintf('user%s@mailpoet.com', bin2hex(random_bytes(7))), // phpcs:ignore
+  public function generateSubscriber($data = []) {
+    $subscriberData = [
+      'email' => sprintf('user%s@mailpoet.com', bin2hex(random_bytes(7))), // phpcs:ignore PHPCompatibility
       'first_name' => $this->generateName(),
-      'last_name' => $this->generateName()
-    );
+      'last_name' => $this->generateName(),
+    ];
 
     $subscriber = \MailPoet\Models\Subscriber::create();
-    $subscriber->hydrate(array_merge($subscriber_data, $data));
+    $subscriber->hydrate(array_merge($subscriberData, $data));
     $subscriber->save();
   }
 
@@ -45,18 +45,18 @@ class UnitTester extends \Codeception\Actor {
     $vowels = 'aeiouy';
     $consonants = 'bcdfgjklmnpqrstvwxz';
     $specials = ' \'';
-    $alphabet = $consonants.$vowels;
-    $charset = $specials.$alphabet;
+    $alphabet = $consonants . $vowels;
+    $charset = $specials . $alphabet;
 
     // pick first letter in alphabet
-    $name .= $alphabet{mt_rand(0, strlen($alphabet) - 1)};
+    $name .= $alphabet[mt_rand(0, strlen($alphabet) - 1)];
 
     for ($i = 0; $i < $length; $i++) {
-      $name .= $charset{mt_rand(0, strlen($charset) - 1)};
+      $name .= $charset[mt_rand(0, strlen($charset) - 1)];
     }
 
     // pick last letter in alphabet
-    $name .= $alphabet{mt_rand(0, strlen($alphabet) - 1)};
+    $name .= $alphabet[mt_rand(0, strlen($alphabet) - 1)];
 
     return ucfirst($name);
   }

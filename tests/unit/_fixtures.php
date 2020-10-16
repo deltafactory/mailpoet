@@ -1,7 +1,8 @@
 <?php
+
 use Codeception\Util\Fixtures;
 
-$newsletter_body_text =
+$newsletterBodyText =
 
 Fixtures::add(
   'newsletter_body_template',
@@ -44,6 +45,36 @@ Fixtures::add(
     'first_name' => 'John',
     'last_name' => 'John',
     'email' => 'john.doe@example.com',
+  ]
+);
+
+Fixtures::add(
+  'simple_form_body',
+  [
+    [
+      'id' => 'email',
+      'name' => 'Email',
+      'position' => '1',
+      'type' => 'text',
+      'unique' => '0',
+      'static' => '1',
+      'params' => [
+        'label' => 'Email',
+        'label_within' => '1',
+        'required' => '1',
+      ],
+    ],
+    [
+      'id' => 'submit',
+      'name' => 'Submit',
+      'position' => '2',
+      'type' => 'submit',
+      'unique' => '0',
+      'static' => '1',
+      'params' => [
+        'label' => 'Subscribe!',
+      ],
+    ],
   ]
 );
 

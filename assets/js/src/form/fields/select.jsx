@@ -1,6 +1,7 @@
 import React from 'react';
 import _ from 'underscore';
 import PropTypes from 'prop-types';
+import Select from 'common/form/select/select';
 
 class FormFieldSelect extends React.Component {
   render() {
@@ -33,9 +34,9 @@ class FormFieldSelect extends React.Component {
       keys = _.map(
         _.sortBy(
           _.pairs(this.props.field.values),
-          item => sortBy(item[0], item[1])
+          (item) => sortBy(item[0], item[1])
         ),
-        item => item[0]
+        (item) => item[0]
       );
     } else {
       keys = Object.keys(this.props.field.values);
@@ -47,7 +48,7 @@ class FormFieldSelect extends React.Component {
         return filter(this.props.item, value);
       })
       .map(
-        value => (
+        (value) => (
           <option
             key={`option-${value}`}
             value={value}
@@ -58,17 +59,17 @@ class FormFieldSelect extends React.Component {
       );
 
     return (
-      <select
+      <Select
         name={this.props.field.name}
         id={`field_${this.props.field.name}`}
         value={this.props.item[this.props.field.name] || ''}
         onChange={this.props.onValueChange}
         data-automation-id={this.props.automationId}
-        {...this.props.field.validation}
+        {...this.props.field.validation} // eslint-disable-line react/jsx-props-no-spreading
       >
         {placeholder}
         {options}
-      </select>
+      </Select>
     );
   }
 }

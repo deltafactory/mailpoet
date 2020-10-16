@@ -8,12 +8,12 @@ class YogaStudio {
   private $template_image_url;
   private $social_icon_url;
 
-  function __construct($assets_url) {
+  public function __construct($assets_url) {
      $this->template_image_url = 'https://ps.w.org/mailpoet/assets/newsletter-templates/yoga_studio';
     $this->social_icon_url = $assets_url . '/img/newsletter_editor/social-icons';
   }
 
-  function get() {
+  public function get() {
     return [
       'name' => WPFunctions::get()->__("Yoga Studio", 'mailpoet'),
       'categories' => json_encode(['standard', 'all']),
@@ -695,7 +695,7 @@ class YogaStudio {
                 'blocks' => [
                   0 => [
                     'type' => 'footer',
-                    'text' => '<p><a href="[link:subscription_unsubscribe_url]">Unsubscribe</a></p><p><a href="[link:subscription_manage_url]">Manage subscription</a></p>',
+                    'text' => '<p><a href="[link:subscription_unsubscribe_url]">'.WPFunctions::get()->__("Unsubscribe", 'mailpoet').'</a></p><p><a href="[link:subscription_manage_url]">'.WPFunctions::get()->__("Manage your subscription", 'mailpoet').'</a></p>',
                     'styles' => [
                       'block' => [
                         'backgroundColor' => 'transparent',

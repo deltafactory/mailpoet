@@ -57,11 +57,19 @@ Module.StylesModel = SuperModel.extend({
 
 Module.StylesView = Marionette.View.extend({
   getTemplate: function () { return window.templates.styles; }, // eslint-disable-line func-names
+  templateContext: function () { // eslint-disable-line func-names
+    return {
+      isWoocommerceTransactional: this.isWoocommerceTransactional,
+    };
+  },
   modelEvents: {
     change: 'render',
   },
   serializeData: function () { // eslint-disable-line func-names
     return this.model.toJSON();
+  },
+  initialize: function (options) { // eslint-disable-line func-names
+    this.isWoocommerceTransactional = options.isWoocommerceTransactional;
   },
 });
 
@@ -81,6 +89,7 @@ App.on('before:start', function (BeforeStartApp, options) { // eslint-disable-li
   var Application = BeforeStartApp;
   var body;
   var globalStyles;
+  var overriddenGlobalStyles;
   // Expose style methods to global application
   Application.getGlobalStyles = Module.getGlobalStyles;
   Application.setGlobalStyles = Module.setGlobalStyles;
@@ -88,11 +97,15 @@ App.on('before:start', function (BeforeStartApp, options) { // eslint-disable-li
 
   body = options.newsletter.body;
   globalStyles = (_.has(body, 'globalStyles')) ? body.globalStyles : {};
-  this.setGlobalStyles(globalStyles);
+  overriddenGlobalStyles = (_.has(options.config, 'overrideGlobalStyles')) ? options.config.overrideGlobalStyles : {};
+  this.setGlobalStyles(jQuery.extend(true, {}, globalStyles, overriddenGlobalStyles));
 });
 
 App.on('start', function (StartApp) { // eslint-disable-line func-names
-  var stylesView = new Module.StylesView({ model: StartApp.getGlobalStyles() });
+  var stylesView = new Module.StylesView({
+    model: StartApp.getGlobalStyles(),
+    isWoocommerceTransactional: App.getNewsletter().isWoocommerceTransactional(),
+  });
   StartApp._appView.showChildView('stylesRegion', stylesView);
 });
 

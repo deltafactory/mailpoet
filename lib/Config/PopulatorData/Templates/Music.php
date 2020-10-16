@@ -8,12 +8,12 @@ class Music {
   private $template_image_url;
   private $social_icon_url;
 
-  function __construct($assets_url) {
+  public function __construct($assets_url) {
     $this->template_image_url = 'https://ps.w.org/mailpoet/assets/newsletter-templates/music';
     $this->social_icon_url = $assets_url . '/img/newsletter_editor/social-icons';
   }
 
-  function get() {
+  public function get() {
     return [
       'name' => WPFunctions::get()->__("Music", 'mailpoet'),
       'categories' => json_encode(['standard', 'all']),
@@ -1087,8 +1087,8 @@ class Music {
                               2 =>
                                  [
                                   'type' => 'text',
-                                  'text' => '<p style="text-align: center; font-size: 11px;"><span style="color: #999999;"><em><strong><a href="[link:subscription_unsubscribe_url]" style="color: #999999;">Unsubscribe</a></strong></em></span></p>
-<p style="text-align: center; font-size: 11px;"><span style="color: #999999;"><em><strong><a href="[link:subscription_manage_url]" style="color: #999999;">Manage subscription</a></strong></em></span><br /><span style="color: #999999;">Add your postal address here!</span></p>',
+                                  'text' => '<p style="text-align: center; font-size: 11px;"><span style="color: #999999;"><em><strong><a href="[link:subscription_unsubscribe_url]" style="color: #999999;">'.WPFunctions::get()->__("Unsubscribe", 'mailpoet').'</a></strong></em></span></p>
+<p style="text-align: center; font-size: 11px;"><span style="color: #999999;"><em><strong><a href="[link:subscription_manage_url]" style="color: #999999;">'.WPFunctions::get()->__("Manage your subscription", 'mailpoet').'</a></strong></em></span><br /><span style="color: #999999;">'.WPFunctions::get()->__("Add your postal address here!", 'mailpoet').'</span></p>',
                                  ],
                              ],
                          ],
@@ -1333,7 +1333,7 @@ class Music {
              ],
           'footer' =>
              [
-              'text' => '<p><a href="[link:subscription_unsubscribe_url]">Unsubscribe</a> | <a href="[link:subscription_manage_url]">Manage subscription</a><br />Add your postal address here!</p>',
+              'text' => '<p><a href="[link:subscription_unsubscribe_url]">'.WPFunctions::get()->__("Unsubscribe", 'mailpoet').'</a> | <a href="[link:subscription_manage_url]">'.WPFunctions::get()->__("Manage your subscription", 'mailpoet').'</a><br />'.WPFunctions::get()->__("Add your postal address here!", 'mailpoet').'</p>',
               'styles' =>
                  [
                   'block' =>
@@ -1458,7 +1458,7 @@ class Music {
              ],
           'header' =>
              [
-              'text' => 'Display problems?&nbsp;<a href="[link:newsletter_view_in_browser_url]">Open this email in your web browser.</a>',
+              'text' => '<a href="[link:newsletter_view_in_browser_url]">'.WPFunctions::get()->__("View this in your browser.", 'mailpoet').'</a>',
               'styles' =>
                  [
                   'block' =>

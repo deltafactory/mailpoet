@@ -2,39 +2,58 @@
 
 namespace MailPoet\Subscribers;
 
-use AspectMock\Test as Mock;
 use Codeception\Stub;
 use MailPoet\Mailer\Mailer;
 use MailPoet\Models\Segment;
 use MailPoet\Models\Subscriber;
 use MailPoet\Models\SubscriberSegment;
 use MailPoet\Services\AuthorizedEmailsController;
-use MailPoet\Services\Bridge;
 use MailPoet\Settings\SettingsController;
+use MailPoet\Subscription\SubscriptionUrlFactory;
 use MailPoet\WP\Functions as WPFunctions;
+use MailPoetVendor\Idiorm\ORM;
 
 class ConfirmationEmailMailerTest extends \MailPoetTest {
+  public function testItSendsConfirmationEmail() {
+    $subcriptionUrlFacroryMock = $this->createMock(SubscriptionUrlFactory::class);
+    $subcriptionUrlFacroryMock->method('getConfirmationUrl')->willReturn('http://example.com');
 
-  function testItSendsConfirmationEmail() {
-    Mock::double('MailPoet\Subscription\Url', [
-      'getConfirmationUrl' => 'http://example.com',
-    ]);
+    $settings = $this->diContainer->get(SettingsController::class);
+    $settings->set(
+      'signup_confirmation.body',
+      $settings->get('signup_confirmation.body') . "\nLists: [lists_to_confirm]"
+    );
+
     $subscriber = Subscriber::create();
     $subscriber->hydrate([
       'first_name' => 'John',
       'last_name' => 'Mailer',
       'email' => 'john@mailpoet.com',
+      'status' => 'unconfirmed',
+      'source' => 'api',
     ]);
+    $subscriber->save();
 
     $mailer = Stub::makeEmpty(Mailer::class, [
       'send' =>
-        Stub\Expected::once(function($email) {
+        Stub\Expected::once(function($email, $subscriber, $extraParams) {
           expect($email['body']['html'])->contains('<strong>Test segment</strong>');
-          expect($email['body']['html'])->contains('<a target="_blank" href="http://example.com">Click here to confirm your subscription.</a>');
+          expect($email['body']['html'])->contains('<a target="_blank" href="http://example.com">I confirm my subscription!</a>');
+          expect($extraParams['meta'])->equals([
+            'email_type' => 'confirmation',
+            'subscriber_status' => 'unconfirmed',
+            'subscriber_source' => 'api',
+          ]);
+          return ['response' => true];
         }),
     ], $this);
 
-    $sender = new ConfirmationEmailMailer($mailer, new WPFunctions);
+    $sender = new ConfirmationEmailMailer(
+      $mailer,
+      $this->diContainer->get(WPFunctions::class),
+      $this->diContainer->get(SettingsController::class),
+      $subcriptionUrlFacroryMock
+    );
 
 
     $segment = Segment::createOrUpdate(
@@ -47,10 +66,17 @@ class ConfirmationEmailMailerTest extends \MailPoetTest {
       [$segment->id]
     );
 
-    $sender->sendConfirmationEmail($subscriber);
+    $result = $sender->sendConfirmationEmail($subscriber);
+    expect($result)->true();
+    expect($subscriber->countConfirmations)->equals(1);
+
+    $sender->sendConfirmationEmailOnce($subscriber);
+    $subscriberFromDb = Subscriber::findOne($subscriber->id);
+    expect($subscriberFromDb->countConfirmations)->equals(1);
+    expect($subscriber->countConfirmations)->equals(1);
   }
 
-  function testItSetsErrorsWhenConfirmationEmailCannotBeSent() {
+  public function testItSetsErrorsWhenConfirmationEmailCannotBeSent() {
     $subscriber = Subscriber::create();
     $subscriber->hydrate([
       'first_name' => 'John',
@@ -65,14 +91,19 @@ class ConfirmationEmailMailerTest extends \MailPoetTest {
         }),
     ], $this);
 
-    $sender = new ConfirmationEmailMailer($mailer);
+    $sender = new ConfirmationEmailMailer(
+      $mailer,
+      $this->diContainer->get(WPFunctions::class),
+      $this->diContainer->get(SettingsController::class),
+      $this->diContainer->get(SubscriptionUrlFactory::class)
+    );
 
     $sender->sendConfirmationEmail($subscriber);
     // error is set on the subscriber model object
-    expect($subscriber->getErrors()[0])->equals('send error');
+    expect($subscriber->getErrors()[0])->equals('Something went wrong with your subscription. Please contact the website owner.');
   }
 
-  function testItDoesntSendWhenMSSIsActiveAndConfirmationEmailIsNotAuthorized() {
+  public function testItDoesntSendWhenMSSIsActiveAndConfirmationEmailIsNotAuthorized() {
     $subscriber = Subscriber::create();
     $subscriber->hydrate([
       'first_name' => 'John',
@@ -84,17 +115,22 @@ class ConfirmationEmailMailerTest extends \MailPoetTest {
       'send' => Stub\Expected::never(),
     ]);
 
-    $settings = new SettingsController;
-    $settings->set(AuthorizedEmailsController::AUTHORIZED_EMAIL_ADDRESSES_ERROR_SETTING, ['invalid_confirmation_address' => 'email@email.com']);
+    $settings = SettingsController::getInstance();
+    $settings->set(AuthorizedEmailsController::AUTHORIZED_EMAIL_ADDRESSES_ERROR_SETTING, ['invalid_sender_address' => 'email@email.com']);
     $settings->set(Mailer::MAILER_CONFIG_SETTING_NAME, ['method' => Mailer::METHOD_MAILPOET]);
-    $sender = new ConfirmationEmailMailer($mailer);
+    $sender = new ConfirmationEmailMailer(
+      $mailer,
+      $this->diContainer->get(WPFunctions::class),
+      $this->diContainer->get(SettingsController::class),
+      $this->diContainer->get(SubscriptionUrlFactory::class)
+    );
 
     $result = $sender->sendConfirmationEmail($subscriber);
     expect($result)->equals(false);
     $settings->set(AuthorizedEmailsController::AUTHORIZED_EMAIL_ADDRESSES_ERROR_SETTING, null);
   }
 
-  function testItLimitsNumberOfConfirmationEmailsForNotLoggedInUser() {
+  public function testItLimitsNumberOfConfirmationEmailsForNotLoggedInUser() {
     wp_set_current_user(0);
     expect((new WPFunctions)->isUserLoggedIn())->false();
     $subscriber = Subscriber::create();
@@ -106,10 +142,15 @@ class ConfirmationEmailMailerTest extends \MailPoetTest {
 
     $mailer = Stub::makeEmpty(Mailer::class, [
       'send' => function() {
-        return true;
+        return ['response' => true];
       },
     ], $this);
-    $sender = new ConfirmationEmailMailer($mailer);
+    $sender = new ConfirmationEmailMailer(
+      $mailer,
+      $this->diContainer->get(WPFunctions::class),
+      $this->diContainer->get(SettingsController::class),
+      $this->diContainer->get(SubscriptionUrlFactory::class)
+    );
 
     for ($i = 0; $i < $sender::MAX_CONFIRMATION_EMAILS; $i++) {
       expect($sender->sendConfirmationEmail($subscriber))->equals(true);
@@ -117,7 +158,7 @@ class ConfirmationEmailMailerTest extends \MailPoetTest {
     expect($sender->sendConfirmationEmail($subscriber))->equals(false);
   }
 
-  function testItDoesNotLimitNumberOfConfirmationEmailsForLoggedInUser() {
+  public function testItDoesNotLimitNumberOfConfirmationEmailsForLoggedInUser() {
     wp_set_current_user(1);
     expect((new WPFunctions)->isUserLoggedIn())->true();
     $subscriber = Subscriber::create();
@@ -129,10 +170,15 @@ class ConfirmationEmailMailerTest extends \MailPoetTest {
 
     $mailer = Stub::makeEmpty(Mailer::class, [
       'send' => function() {
-        return true;
+        return ['response' => true];
       },
     ], $this);
-    $sender = new ConfirmationEmailMailer($mailer);
+    $sender = new ConfirmationEmailMailer(
+      $mailer,
+      $this->diContainer->get(WPFunctions::class),
+      $this->diContainer->get(SettingsController::class),
+      $this->diContainer->get(SubscriptionUrlFactory::class)
+    );
 
     for ($i = 0; $i < $sender::MAX_CONFIRMATION_EMAILS; $i++) {
       expect($sender->sendConfirmationEmail($subscriber))->equals(true);
@@ -140,11 +186,9 @@ class ConfirmationEmailMailerTest extends \MailPoetTest {
     expect($sender->sendConfirmationEmail($subscriber))->equals(true);
   }
 
-  function _after() {
-    Mock::clean();
-    \ORM::raw_execute('TRUNCATE ' . Subscriber::$_table);
-    \ORM::raw_execute('TRUNCATE ' . Segment::$_table);
-    \ORM::raw_execute('TRUNCATE ' . SubscriberSegment::$_table);
+  public function _after() {
+    ORM::raw_execute('TRUNCATE ' . Subscriber::$_table);
+    ORM::raw_execute('TRUNCATE ' . Segment::$_table);
+    ORM::raw_execute('TRUNCATE ' . SubscriberSegment::$_table);
   }
-
 }

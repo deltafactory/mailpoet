@@ -4,98 +4,156 @@ namespace MailPoet\Test\Acceptance;
 
 use Codeception\Util\Locator;
 use MailPoet\Test\DataFactories\Settings;
+use PHPUnit\Framework\Exception;
 
 class ManageSubscriptionLinkCest {
 
-  function __construct() {
-    $this->newsletter_title = 'Subscription links Email ' . \MailPoet\Util\Security::generateRandomString();
+  /** @var Settings */
+  private $settings;
+
+  /** @var string */
+  private $newsletterTitle;
+
+  public function __construct() {
+    $this->newsletterTitle = 'Subscription links Email ' . \MailPoet\Util\Security::generateRandomString();
   }
 
-  function _before() {
-    $settings = new Settings();
-    $settings->withConfirmationEmailEnabled();
+  public function _before() {
+    $this->settings = new Settings();
+    $this->settings
+      ->withConfirmationEmailEnabled()
+      ->withCronTriggerMethod('WordPress');
   }
 
-  function sendEmail(\AcceptanceTester $I) {
-    $I->wantTo('Create and send new email to list');
-    $segment_name = $I->createListWithSubscriber();
-
-    $I->login();
-    $I->amOnMailpoetPage('Emails');
-    $I->click('[data-automation-id="new_email"]');
-
-    // step 1 - select type
-    $I->click('[data-automation-id="create_standard"]');
-
-    // step 2 - select template
-    $first_template_element = '[data-automation-id="select_template_0"]';
-    $I->waitForElement($first_template_element);
-    $I->click($first_template_element);
-
-    // step 3 - design newsletter (update subject)
-    $title_element = '[data-automation-id="newsletter_title"]';
-    $I->waitForElement($title_element);
-    $I->fillField($title_element, $this->newsletter_title);
-    $I->click('Next');
-
-    // step 4 - send
-    $search_field_element = 'input.select2-search__field';
-    $I->waitForElement($search_field_element);
-    $I->selectOptionInSelect2($segment_name);
-    $I->click('Send');
-    $I->waitForText('Sent to 1 of 1', 60);
-  }
-
-  function manageSubscriptionLink(\AcceptanceTester $I) {
-    $I->wantTo('Verify that "manage subscription" link works and subscriber status can be updated');
-    $I->amOnMailboxAppPage();
-    $I->click(Locator::contains('span.subject', $this->newsletter_title));
-    $I->switchToIframe('preview-html');
-    $I->waitForElementChange(
+  public function manageSubscriptionLink(\AcceptanceTester $i) {
+    $i->wantTo('Verify that "manage subscription" link works and subscriber status can be updated');
+    $this->sendEmail($i);
+    $i->amOnMailboxAppPage();
+    $i->click(Locator::contains('span.subject', $this->newsletterTitle));
+    $i->switchToIframe('#preview-html');
+    $i->waitForElementChange(
         \Codeception\Util\Locator::contains('a', 'Manage your subscription'), function ($el) {
             return $el->getAttribute('target') === "_blank";
         }, 100
     );
-    $I->click('Manage your subscription');
-    $I->switchToNextTab();
-    $I->waitForText('Manage your subscription');
+    $i->click('Manage your subscription');
+    $i->switchToNextTab();
+    $i->waitForText('Manage your subscription');
+    $successMessage = 'Your preferences have been saved.';
+    $i->dontSee($successMessage);
 
-    $form_status_element = '[data-automation-id="form_status"]';
+    $formStatusElement = '[data-automation-id="form_status"]';
 
     // set status to unsubscribed
-    $I->selectOption($form_status_element, 'Unsubscribed');
-    $I->scrollTo('[data-automation-id="subscribe-submit-button"]');
-    $I->click('Save');
-    $I->waitForElement($form_status_element);
-    $I->seeOptionIsSelected($form_status_element, 'Unsubscribed');
+    $approximateSaveButtonHeight = 50; // Used for scroll offset to ensure that button is not hidden above the top fold
+    $i->selectOption($formStatusElement, 'Unsubscribed');
+    $i->scrollTo('[data-automation-id="subscribe-submit-button"]', 0, -$approximateSaveButtonHeight);
+    $i->click('Save');
+    $i->waitForElement($formStatusElement);
+    $i->seeOptionIsSelected($formStatusElement, 'Unsubscribed');
+    $i->see($successMessage);
 
     // change status back to subscribed
-    $I->selectOption($form_status_element, 'Subscribed');
-    $I->scrollTo('[data-automation-id="subscribe-submit-button"]');
-    $I->click('Save');
-    $I->waitForElement($form_status_element);
-    $I->seeOptionIsSelected($form_status_element, 'Subscribed');
-    $I->seeNoJSErrors();
+    $i->selectOption($formStatusElement, 'Subscribed');
+    $i->scrollTo('[data-automation-id="subscribe-submit-button"]', 0, -$approximateSaveButtonHeight);
+    $i->click('Save');
+    $i->waitForElement($formStatusElement);
+    $i->seeOptionIsSelected($formStatusElement, 'Subscribed');
+    $i->seeNoJSErrors();
   }
 
-  function unsubscribeLink(\AcceptanceTester $I) {
-    $I->wantTo('Verify that "unsubscribe" link works and subscriber status is set to unsubscribed');
+  public function unsubscribeLinksWithLinkTracking(\AcceptanceTester $i) {
+    $i->wantTo('Verify that "unsubscribe" links works with tracking enabled');
+    $this->settings->withTrackingEnabled();
+    $this->verifyUnsubscribeLinks($i);
+  }
 
-    $form_status_element = '[data-automation-id="form_status"]';
+  public function unsubscribeLinksWithoutLinkTracking(\AcceptanceTester $i) {
+    $i->wantTo('Verify that "unsubscribe" links works with tracking disabled');
+    $this->settings->withTrackingDisabled();
+    $this->verifyUnsubscribeLinks($i);
+  }
 
-    $I->amOnMailboxAppPage();
-    $I->click(Locator::contains('span.subject', $this->newsletter_title));
-    $I->switchToIframe('preview-html');
-    $I->waitForElementChange(
+  private function verifyUnsubscribeLinks(\AcceptanceTester $i) {
+    $this->sendEmail($i);
+    $formStatusElement = '[data-automation-id="form_status"]';
+    $i->wantTo('Verify that "Unsubscribe List" header link works and subscriber status is set to unsubscribed instantly');
+    $i->amOnMailboxAppPage();
+    $i->click(Locator::contains('span.subject', $this->newsletterTitle));
+    $i->click('#show-headers');
+    $i->waitForText('List-Unsubscribe');
+    $link = $i->grabTextFrom('//div[@class="row headers"]//th[text()="List-Unsubscribe"]/following-sibling::td');
+    $link = trim($link, '<>');
+    $i->amOnUrl($link);
+    $i->waitForText('You are now unsubscribed');
+    $i->click('Manage your subscription');
+    $i->seeOptionIsSelected($formStatusElement, 'Unsubscribed');
+
+    // Re-subscribe to test the link in newsletter body
+    $i->selectOption($formStatusElement, 'Subscribed');
+    $approximateSaveButtonHeight = 50; // Used for scroll offset to ensure that button is not hidden above the top fold
+    $i->scrollTo('[data-automation-id="subscribe-submit-button"]', 0, -$approximateSaveButtonHeight);
+    $i->click('Save');
+    $i->waitForElement($formStatusElement);
+    $i->seeOptionIsSelected($formStatusElement, 'Subscribed');
+
+    $i->wantTo('Verify that "unsubscribe" link works and subscriber can confirm switching status to unsubscribed');
+    $i->amOnMailboxAppPage();
+    $i->click(Locator::contains('span.subject', $this->newsletterTitle));
+    $i->switchToIframe('#preview-html');
+    $i->waitForElementChange(
         \Codeception\Util\Locator::contains('a', 'Unsubscribe'), function ($el) {
             return $el->getAttribute('target') === "_blank";
         }, 100
     );
-    $I->click('Unsubscribe');
-    $I->switchToNextTab();
-    $I->waitForText('You are now unsubscribed');
-    $I->click('Manage your subscription');
-    $I->seeOptionIsSelected($form_status_element, 'Unsubscribed');
-    $I->seeNoJSErrors();
+    $i->click('Unsubscribe');
+    $i->switchToNextTab();
+    $confirmUnsubscribe = 'Yes, unsubscribe me';
+    $i->waitForText($confirmUnsubscribe);
+    $i->click($confirmUnsubscribe, '.mailpoet_confirm_unsubscribe');
+    $i->waitForText('You are now unsubscribed');
+    $i->click('Manage your subscription');
+    $i->seeOptionIsSelected($formStatusElement, 'Unsubscribed');
+    $i->seeNoJSErrors();
+  }
+
+  private function sendEmail(\AcceptanceTester $i) {
+    $segmentName = $i->createListWithSubscriber();
+
+    $i->login();
+    $i->amOnMailpoetPage('Emails');
+
+    // step 1 - select type
+    $i->click('[data-automation-id="create_standard"]');
+
+    // step 2 - select template
+    $firstTemplateElement = $i->checkTemplateIsPresent(0);
+    $i->click($firstTemplateElement);
+
+    // step 3 - design newsletter (update subject)
+    $titleElement = '[data-automation-id="newsletter_title"]';
+    $i->waitForElement($titleElement);
+    $i->fillField($titleElement, $this->newsletterTitle);
+    $i->click('Next');
+
+    // step 4 - send
+    $searchFieldElement = 'input.select2-search__field';
+    $i->waitForElement($searchFieldElement);
+    $i->selectOptionInSelect2($segmentName);
+    $i->click('Send');
+
+    // Reloading page is faster than waiting for regular AJAX request to refresh it
+    for ($index = 0; $index < 15; $index++) {
+      try {
+        $i->wait(2);
+        $i->reloadPage();
+        $i->waitForListingItemsToLoad();
+        $i->see('Processed 1 of 1');
+        return;
+      } catch (Exception $e) {
+        continue;
+      }
+    }
+    $i->see('Sent to 1 of 1');
   }
 }

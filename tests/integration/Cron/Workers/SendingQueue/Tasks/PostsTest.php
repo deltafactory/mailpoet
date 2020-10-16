@@ -1,65 +1,65 @@
 <?php
+
 namespace MailPoet\Test\Cron\Workers\SendingQueue\Tasks;
 
 use MailPoet\Cron\Workers\SendingQueue\Tasks\Posts as PostsTask;
 use MailPoet\Models\Newsletter;
 use MailPoet\Models\NewsletterPost;
-
-if (!defined('ABSPATH')) exit;
+use MailPoetVendor\Idiorm\ORM;
 
 class PostsTest extends \MailPoetTest {
 
   /** @var PostsTask */
-  private $posts_task;
+  private $postsTask;
 
-  function _before() {
+  public function _before() {
     parent::_before();
-    $this->posts_task = new PostsTask;
+    $this->postsTask = new PostsTask;
   }
 
-  function testItFailsWhenNoPostsArePresent() {
+  public function testItFailsWhenNoPostsArePresent() {
     $newsletter = (object)[
       'id' => 1,
       'type' => Newsletter::TYPE_NOTIFICATION_HISTORY,
     ];
-    $rendered_newsletter = [
+    $renderedNewsletter = [
       'html' => 'Sample newsletter',
     ];
-    expect($this->posts_task->extractAndSave($rendered_newsletter, $newsletter))->equals(false);
+    expect($this->postsTask->extractAndSave($renderedNewsletter, $newsletter))->equals(false);
   }
 
-  function testItCanExtractAndSavePosts() {
-    $post_id = 10;
+  public function testItCanExtractAndSavePosts() {
+    $postId = 10;
     $newsletter = (object)[
       'id' => 2,
-      'parent_id' => 1,
+      'parentId' => 1,
       'type' => Newsletter::TYPE_NOTIFICATION_HISTORY,
     ];
-    $rendered_newsletter = [
-      'html' => '<a data-post-id="' . $post_id . '" href="#">sample post</a>',
+    $renderedNewsletter = [
+      'html' => '<a data-post-id="' . $postId . '" href="#">sample post</a>',
     ];
-    expect($this->posts_task->extractAndSave($rendered_newsletter, $newsletter))->equals(true);
-    $newsletter_post = NewsletterPost::where('newsletter_id', $newsletter->parent_id)
+    expect($this->postsTask->extractAndSave($renderedNewsletter, $newsletter))->equals(true);
+    $newsletterPost = NewsletterPost::where('newsletter_id', $newsletter->parentId)
       ->findOne();
-    expect($newsletter_post->post_id)->equals($post_id);
+    expect($newsletterPost->postId)->equals($postId);
   }
 
-  function testItDoesNotSavePostsWhenNewsletterIsNotANotificationHistory() {
-    $post_id = 10;
+  public function testItDoesNotSavePostsWhenNewsletterIsNotANotificationHistory() {
+    $postId = 10;
     $newsletter = (object)[
       'id' => 2,
-      'parent_id' => 1,
+      'parentId' => 1,
       'type' => Newsletter::TYPE_WELCOME,
     ];
-    $rendered_newsletter = [
-      'html' => '<a data-post-id="' . $post_id . '" href="#">sample post</a>',
+    $renderedNewsletter = [
+      'html' => '<a data-post-id="' . $postId . '" href="#">sample post</a>',
     ];
-    expect($this->posts_task->extractAndSave($rendered_newsletter, $newsletter))->equals(false);
+    expect($this->postsTask->extractAndSave($renderedNewsletter, $newsletter))->equals(false);
     $newsletter->type = Newsletter::TYPE_STANDARD;
-    expect($this->posts_task->extractAndSave($rendered_newsletter, $newsletter))->equals(false);
+    expect($this->postsTask->extractAndSave($renderedNewsletter, $newsletter))->equals(false);
   }
 
-  function _after() {
-    \ORM::raw_execute('TRUNCATE ' . NewsletterPost::$_table);
+  public function _after() {
+    ORM::raw_execute('TRUNCATE ' . NewsletterPost::$_table);
   }
 }

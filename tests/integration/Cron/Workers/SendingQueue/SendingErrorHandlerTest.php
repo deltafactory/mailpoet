@@ -1,4 +1,5 @@
 <?php
+
 namespace MailPoet\Test\Cron\Workers;
 
 use Codeception\Stub;
@@ -11,20 +12,20 @@ use MailPoet\Tasks\Sending as SendingTask;
 class SendingErrorHandlerTest extends \MailPoetTest {
 
   /** @var SendingErrorHandler */
-  private $error_handler;
+  private $errorHandler;
 
-  function _before() {
+  public function _before() {
     parent::_before();
-    $this->error_handler = new SendingErrorHandler();
+    $this->errorHandler = new SendingErrorHandler();
   }
 
-  function testItShouldProcessSoftErrorCorrectly() {
+  public function testItShouldProcessSoftErrorCorrectly() {
     $subscribers = [
       'john@doe.com',
       'john@rambo.com',
     ];
-    $subscriber_ids = [1, 2];
-    $subscriber_errors = [
+    $subscriberIds = [1, 2];
+    $subscriberErrors = [
       new SubscriberError('john@doe.com', 'Subscriber Message'),
       new SubscriberError('john@rambo.com', null),
     ];
@@ -32,10 +33,10 @@ class SendingErrorHandlerTest extends \MailPoetTest {
       MailerError::OPERATION_SEND,
       MailerError::LEVEL_SOFT,
       'Error Message',
-      null, $subscriber_errors
+      null, $subscriberErrors
     );
 
-    $sending_task = Stub::make(
+    $sendingTask = Stub::make(
       SendingTask::class,
       [
         'saveSubscriberError' => Expected::exactly(
@@ -52,6 +53,6 @@ class SendingErrorHandlerTest extends \MailPoetTest {
       $this
     );
 
-    $this->error_handler->processError($error, $sending_task, $subscriber_ids, $subscribers);
+    $this->errorHandler->processError($error, $sendingTask, $subscriberIds, $subscribers);
   }
 }

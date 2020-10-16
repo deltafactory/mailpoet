@@ -1,53 +1,59 @@
 <?php
+
 namespace MailPoet\WooCommerce;
 
-use MailPoet\WP\Functions;
-
 class Helper {
-
-  /** @var Functions */
-  private $wp;
-
-  function __construct(Functions $wp = null) {
-    if (!$wp) {
-      $wp = Functions::get();
-    }
-    $this->wp = $wp;
-  }
-
-  function isWooCommerceActive() {
+  public function isWooCommerceActive() {
     return class_exists('WooCommerce');
   }
 
-  function wcGetCustomerOrderCount($user_id) {
-    return wc_get_customer_order_count($user_id);
+  public function WC() {
+    return WC();
   }
 
-  function wcGetOrder($order = false) {
+  public function wcGetCustomerOrderCount($userId) {
+    return wc_get_customer_order_count($userId);
+  }
+
+  public function wcGetOrder($order = false) {
     return wc_get_order($order);
   }
 
-  function wcPrice($price, array $args = []) {
+  public function wcGetOrders(array $args) {
+    return wc_get_orders($args);
+  }
+
+  public function wcPrice($price, array $args = []) {
     return wc_price($price, $args);
   }
 
-  function wcGetProduct($the_product = false) {
-    return wc_get_product($the_product);
+  public function wcGetProduct($theProduct = false) {
+    return wc_get_product($theProduct);
   }
 
-  function getWoocommerceCurrency() {
+  public function getWoocommerceCurrency() {
     return get_woocommerce_currency();
   }
 
-  function getOrdersCount() {
-    $counts = $this->wp->wpCountPosts('shop_order');
-    return array_reduce((array)$counts, function($sum, $count_for_state) {
-      return $sum + (int)$count_for_state;
-    });
+  public function wcLightOrDark($color, $dark, $light) {
+    return wc_light_or_dark($color, $dark, $light);
   }
 
-  function getRawPrice($price, array $args = []) {
-    $html_price = $this->wcPrice($price, $args);
-    return html_entity_decode(strip_tags($html_price));
+  public function wcHexIsLight($color) {
+    return wc_hex_is_light($color);
+  }
+
+  public function getOrdersCountCreatedBefore($dateTime) {
+    global $wpdb;
+    $result = $wpdb->get_var( "
+        SELECT DISTINCT count(p.ID) FROM {$wpdb->prefix}posts as p
+        WHERE p.post_type = 'shop_order' AND p.post_date < '{$dateTime}'
+    " );
+    return (int)$result;
+  }
+
+  public function getRawPrice($price, array $args = []) {
+    $htmlPrice = $this->wcPrice($price, $args);
+    return html_entity_decode(strip_tags($htmlPrice));
   }
 }

@@ -2,49 +2,56 @@
 
 namespace MailPoet\Test\Acceptance;
 
-use MailPoet\Test\DataFactories\ScheduledTask;
 use MailPoet\Test\DataFactories\Segment;
 use MailPoet\Test\DataFactories\Settings;
 use MailPoet\Test\DataFactories\Subscriber;
+use PHPUnit\Framework\Exception;
 
 class SettingsInactiveSubscribersChangeCest {
 
   const INACTIVE_SUBSCRIBERS_COUNT = 2;
   const INACTIVE_LIST_NAME = 'Lazy Subscribers';
 
+  /** @var Settings */
+  private $settings;
+
   public function _before() {
+    $this->settings = new Settings();
     $segment = (new Segment())->withName(self::INACTIVE_LIST_NAME)->create();
     (new Subscriber())->withSegments([$segment])->create();
     for ($i = 0; $i < self::INACTIVE_SUBSCRIBERS_COUNT; $i++) {
       (new Subscriber())->withStatus('inactive')->withSegments([$segment])->create();
     }
-    (new Settings)->withDeactivateSubscriberAfter6Months()->withTrackingEnabled();
-    $scheduled_tasks_factory = new ScheduledTask();
-    $scheduled_tasks_factory->deleteAll();
+    $this->settings
+      ->withDeactivateSubscriberAfter6Months()
+      ->withTrackingEnabled()
+      ->withCronTriggerMethod('WordPress');
   }
 
-  function inactiveSubscribersSettingsChange(\AcceptanceTester $I) {
-    $I->wantTo('Change inactive users settings and reactivate all subscribers');
-    $I->login();
-    $I->amOnMailPoetPage('Settings');
-    $I->click('[data-automation-id="settings-advanced-tab"]');
-    $I->waitForElement('[data-automation-id="inactive-subscribers-enabled"]');
-    $I->click('[data-automation-id="inactive-subscribers-option-never"]');
-    $I->click('[data-automation-id="settings-submit-button"]');
-    $I->waitForText('Settings saved');
-    $I->amOnMailPoetPage('Subscribers');
+  public function inactiveSubscribersSettingsChange(\AcceptanceTester $i) {
+    $i->wantTo('Change inactive users settings and reactivate all subscribers');
+    $i->login();
+    $i->amOnMailPoetPage('Settings');
+    $i->click('[data-automation-id="settings-advanced-tab"]');
+    $i->waitForElement('[data-automation-id="inactive-subscribers-option-never"]');
+    $i->click('[data-automation-id="inactive-subscribers-option-never"]');
+    $i->click('[data-automation-id="settings-submit-button"]');
+    $i->waitForText('Settings saved');
+    $i->amOnMailPoetPage('Subscribers');
     // Subscribers are activated in background so we do a couple of reloads
-    for ($i = 0; $i < 15; $i++) {
+    for ($index = 0; $index < 15; $index++) {
       try {
-        $I->wait(2);
-        $I->reloadPage();
-        $I->waitForListingItemsToLoad();
-        $I->see('Inactive (0)');
+        $i->wait(2);
+        $i->reloadPage();
+        $i->waitForListingItemsToLoad();
+        $i->see('Inactive');
+        $i->dontSeeElement('[data-automation-id="filters_inactive"] .mailpoet-listing-groups-count');
         return;
-      } catch (\PHPUnit_Framework_Exception $e) {
+      } catch (Exception $e) {
         continue;
       }
     }
-    $I->see('Inactive (0)');
+    $i->see('Inactive');
+    $i->dontSeeElement('[data-automation-id="filters_inactive"] .mailpoet-listing-groups-count');
   }
 }

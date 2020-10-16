@@ -1,8 +1,22 @@
 import FeaturesController from 'features_controller';
+import MailPoetComUrlFactory from 'mailpoet_com_url_factory';
 
 // A placeholder for MailPoet object
 var MailPoet = {
   FeaturesController: FeaturesController(window.mailpoet_feature_flags),
+  MailPoetComUrlFactory: MailPoetComUrlFactory(window.mailpoet_referral_id),
+  version: window.mailpoet_version,
+  premiumVersion: window.mailpoet_premium_version,
+  premiumLink: window.mailpoet_premium_link,
+  isWoocommerceActive: window.mailpoet_woocommerce_active,
+  premiumActive: window.mailpoet_premium_active,
+  subscribersLimit: window.mailpoet_subscribers_limit,
+  subscribersLimitReached: window.mailpoet_subscribers_limit_reached,
+  subscribersCountTowardsLimit: window.mailpoet_premium_subscribers_count,
+  hasPremiumSupport: window.mailpoet_has_premium_support,
+  hasValidApiKey: window.mailpoet_has_valid_api_key,
+  listingPerPage: window.mailpoet_listing_per_page,
+  getShortcodeLinks: () => (window.mailpoet_shortcode_links ? window.mailpoet_shortcode_links : []),
 };
 
 // Expose MailPoet globally

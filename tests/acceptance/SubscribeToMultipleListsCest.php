@@ -8,24 +8,18 @@ use MailPoet\Test\DataFactories\Segment;
 use MailPoet\Test\DataFactories\Settings;
 
 class SubscribeToMultipleListsCest {
-
-  function _before(\AcceptanceTester $I) {
-    // Clean table with subscriber IPs, so test which run before this won't trigger subscription limits
-    $I->cli('db query "TRUNCATE TABLE mp_mailpoet_subscriber_ips" --allow-root');
-  }
-
-  function subscribeToMultipleLists(\AcceptanceTester $I) {
+  public function subscribeToMultipleLists(\AcceptanceTester $i) {
     //Step one - create form with three lists
-    $segment_factory = new Segment();
+    $segmentFactory = new Segment();
     $seg1 = 'Cats';
     $seg2 = 'Dogs';
     $seg3 = 'Fish';
-    $segment1 = $segment_factory->withName($seg1)->create();
-    $segment2 = $segment_factory->withName($seg2)->create();
-    $segment3 = $segment_factory->withName($seg3)->create();
-    $form_name = 'Multiple Lists Form';
-    $form_factory = new Form();
-    $form = $form_factory->withName($form_name)->withSegments([$segment1, $segment2, $segment3])->create();
+    $segment1 = $segmentFactory->withName($seg1)->create();
+    $segment2 = $segmentFactory->withName($seg2)->create();
+    $segment3 = $segmentFactory->withName($seg3)->create();
+    $formName = 'Multiple Lists Form';
+    $formFactory = new Form();
+    $form = $formFactory->withName($formName)->withSegments([$segment1, $segment2, $segment3])->create();
 
     $settings = new Settings();
     $settings
@@ -33,20 +27,20 @@ class SubscribeToMultipleListsCest {
       ->withConfirmationEmailBody()
       ->withConfirmationEmailSubject('Subscribe to multiple test subject');
 
+    $formFactory->withDefaultSuccessMessage();
+
     //Add this form to a widget
-    $I->createFormAndSubscribe($form);
+    $i->createFormAndSubscribe($form);
     //Subscribe via that form
-    $I->amOnMailboxAppPage();
-    $I->click(Locator::contains('span.subject', 'Subscribe to multiple test subject'));
-    $I->switchToIframe('preview-html');
-    $I->click('Click here to confirm your subscription');
-    $I->switchToNextTab();
-    $I->see('You have subscribed');
-    $I->waitForText($seg1);
-    $I->waitForText($seg2);
-    $I->waitForText($seg3);
-    $I->seeNoJSErrors();
-    //reset widget for other tests
-    $I->cli('widget reset sidebar-1 --allow-root');
+    $i->amOnMailboxAppPage();
+    $i->click(Locator::contains('span.subject', 'Subscribe to multiple test subject'));
+    $i->switchToIframe('#preview-html');
+    $i->click('I confirm my subscription!');
+    $i->switchToNextTab();
+    $i->see('You have subscribed');
+    $i->waitForText($seg1);
+    $i->waitForText($seg2);
+    $i->waitForText($seg3);
+    $i->seeNoJSErrors();
   }
 }

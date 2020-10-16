@@ -3,20 +3,18 @@ namespace MailPoet\Config\PopulatorData\Templates;
 
 use MailPoet\WP\Functions as WPFunctions;
 
-if (!defined('ABSPATH')) exit;
-
 
 class AppWelcome {
 
   private $template_image_url;
   private $social_icon_url;
 
-  function __construct($assets_url) {
+  public function __construct($assets_url) {
     $this->template_image_url = 'https://ps.w.org/mailpoet/assets/newsletter-templates/app_welcome';
     $this->social_icon_url = $assets_url . '/img/newsletter_editor/social-icons';
   }
 
-  function get() {
+  public function get() {
     return [
       'name' => WPFunctions::get()->__("App Welcome", 'mailpoet'),
       'categories' => json_encode(['welcome', 'all']),
@@ -318,7 +316,7 @@ class AppWelcome {
                                 <p style="text-align: center; font-size: 12px;"><span>Address Line 1</span></p>
                                 <p style="text-align: center; font-size: 12px;"><span>Address Line 2</span></p>
                                 <p style="text-align: center; font-size: 12px;"><span>City</span></p>
-                                <p style="text-align: center; font-size: 12px;"><a href="[link:subscription_unsubscribe_url]">Unsubscribe</a><span> | </span><a href="[link:subscription_manage_url]">Manage subscription</a></p>',
+                                <p style="text-align: center; font-size: 12px;"><a href="[link:subscription_unsubscribe_url]">'.WPFunctions::get()->__("Unsubscribe", 'mailpoet').'</a><span> | </span><a href="[link:subscription_manage_url]">'.WPFunctions::get()->__("Manage your subscription", 'mailpoet').'</a></p>',
                   ],
                   [
                     'type' => 'social',

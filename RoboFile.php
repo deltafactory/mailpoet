@@ -1,5 +1,6 @@
 <?php
 
+// phpcs:ignore PSR1.Classes.ClassDeclaration
 class RoboFile extends \Robo\Tasks {
   const ZIP_BUILD_PATH = __DIR__ . '/mailpoet.zip';
 
@@ -8,51 +9,49 @@ class RoboFile extends \Robo\Tasks {
   public function __construct() {
 
     // disable xdebug to avoid slowing down command execution
-    $xdebug_handler = new \Composer\XdebugHandler\XdebugHandler('mailpoet');
-    $xdebug_handler->setPersistent();
-    $xdebug_handler->check();
+    $xdebugHandler = new \Composer\XdebugHandler\XdebugHandler('mailpoet');
+    $xdebugHandler->setPersistent();
+    $xdebugHandler->check();
 
-    $dotenv = new Dotenv\Dotenv(__DIR__);
+    $dotenv = Dotenv\Dotenv::create(__DIR__);
     $dotenv->load();
   }
 
-  function install() {
+  public function install() {
     return $this->taskExecStack()
       ->stopOnFail()
-      ->exec('./composer.phar install')
+      ->exec('./tools/vendor/composer.phar install')
       ->exec('npm ci --prefer-offline')
       ->run();
   }
 
-  function update() {
-    $this->say(getenv('WP_TEST_URL'));
-
+  public function update() {
     return $this->taskExecStack()
       ->stopOnFail()
-      ->exec('./composer.phar update')
+      ->exec('./tools/vendor/composer.phar update')
       ->exec('npm update')
       ->run();
   }
 
-  function watch() {
+  public function watch() {
     $this->say('Warning: this lints and compiles all files, not just the changed one. Use separate tasks watch:js and watch:css for faster and more efficient watching.');
-    $css_files = $this->rsearch('assets/css/src/', ['scss']);
-    $js_files = $this->rsearch('assets/js/src/', ['js', 'jsx']);
+    $cssFiles = $this->rsearch('assets/css/src/', ['scss']);
+    $jsFiles = $this->rsearch('assets/js/src/', ['js', 'jsx']);
 
     $this->taskWatch()
-      ->monitor($js_files, function() {
+      ->monitor($jsFiles, function() {
         $this->compileJs();
       })
-      ->monitor($css_files, function() {
+      ->monitor($cssFiles, function() {
         $this->compileCss();
       })
       ->run();
   }
 
-  function watchCss() {
-    $css_files = $this->rsearch('assets/css/src/', ['scss']);
+  public function watchCss() {
+    $cssFiles = $this->rsearch('assets/css/src/', ['scss']);
     $this->taskWatch()
-      ->monitor($css_files, function($changedFile) {
+      ->monitor($cssFiles, function($changedFile) {
         $file = $changedFile->getResource()->getResource();
         $this->taskExecStack()
           ->stopOnFail()
@@ -64,11 +63,11 @@ class RoboFile extends \Robo\Tasks {
       ->run();
   }
 
-  function watchJs() {
+  public function watchJs() {
     $this->_exec('./node_modules/webpack/bin/webpack.js --watch');
   }
 
-  function compileAll($opts = ['env' => null]) {
+  public function compileAll($opts = ['env' => null]) {
     $collection = $this->collectionBuilder();
     $collection->addCode(function() use ($opts) {
       return call_user_func([$this, 'compileJs'], $opts);
@@ -79,7 +78,7 @@ class RoboFile extends \Robo\Tasks {
     return $collection->run();
   }
 
-  function compileJs($opts = ['env' => null]) {
+  public function compileJs($opts = ['env' => null]) {
     if (!is_dir('assets/dist/js')) {
       mkdir('assets/dist/js', 0777, true);
     }
@@ -89,64 +88,64 @@ class RoboFile extends \Robo\Tasks {
     return $this->_exec($env . ' ./node_modules/webpack/bin/webpack.js --bail');
   }
 
-  function compileCss($opts = ['env' => null]) {
+  public function compileCss($opts = ['env' => null]) {
     if (!is_dir('assets/dist/css')) {
       mkdir('assets/dist/css', 0777, true);
     }
     // Clean up folder from previous files
     array_map('unlink', glob("assets/dist/css/*.*"));
 
-    $this->_exec('npm run stylelint -- "assets/css/src/components/**/*.scss"');
+    $this->_exec('npm run stylelint -- "assets/css/src/**/*.scss"');
     $this->_exec('npm run scss');
-    $compilation_result = $this->_exec('npm run autoprefixer');
+    $compilationResult = $this->_exec('npm run autoprefixer');
 
     // Create manifest file
     $manifest = [];
     foreach (glob('assets/dist/css/*.css') as $style) {
       // Hash and rename styles if production environment
       if ($opts['env'] === 'production') {
-        $hashed_style = sprintf(
+        $hashedStyle = sprintf(
           '%s.%s.css',
           pathinfo($style)['filename'],
           substr(md5_file($style), 0, 8)
         );
-        $manifest[basename($style)] = $hashed_style;
-        rename($style, str_replace(basename($style), $hashed_style, $style));
+        $manifest[basename($style)] = $hashedStyle;
+        rename($style, str_replace(basename($style), $hashedStyle, $style));
       } else {
         $manifest[basename($style)] = basename($style);
       }
     }
     file_put_contents('assets/dist/css/manifest.json', json_encode($manifest, JSON_PRETTY_PRINT));
-    return $compilation_result;
+    return $compilationResult;
   }
 
-  function translationsInit() {
+  public function translationsInit() {
     // Define WP_TRANSIFEX_API_TOKEN env. variable
     return $this->_exec('./tasks/transifex_init.sh');
   }
 
-  function translationsBuild() {
+  public function translationsBuild() {
     return $this->_exec('./node_modules/.bin/grunt makepot' .
       ' --gruntfile=' . __DIR__ . '/tasks/makepot/makepot.js' .
       ' --base_path=' . __DIR__
     );
   }
 
-  function translationsPack() {
+  public function translationsPack() {
     return $this->collectionBuilder()
       ->addCode([$this, 'translationsInit'])
       ->taskExec('./tasks/pack_translations.sh')
       ->run();
   }
 
-  function translationsPush() {
+  public function translationsPush() {
     return $this->collectionBuilder()
       ->addCode([$this, 'translationsInit'])
       ->taskExec('tx push -s')
       ->run();
   }
 
-  function testUnit(array $opts=['file' => null, 'xml' => false, 'multisite' => false, 'debug' => false]) {
+  public function testUnit(array $opts=['file' => null, 'xml' => false, 'multisite' => false, 'debug' => false]) {
     $command = 'vendor/bin/codecept run unit';
 
     if ($opts['file']) {
@@ -164,7 +163,7 @@ class RoboFile extends \Robo\Tasks {
     return $this->_exec($command);
   }
 
-  function testIntegration(array $opts=['file' => null, 'xml' => false, 'multisite' => false, 'debug' => false]) {
+  public function testIntegration(array $opts=['file' => null, 'xml' => false, 'multisite' => false, 'debug' => false]) {
     $command = 'vendor/bin/codecept run integration';
 
     if ($opts['multisite']) {
@@ -186,11 +185,11 @@ class RoboFile extends \Robo\Tasks {
     return $this->_exec($command);
   }
 
-  function testMultisiteIntegration($opts=['file' => null, 'xml' => false, 'multisite' => true]) {
+  public function testMultisiteIntegration($opts=['file' => null, 'xml' => false, 'multisite' => true]) {
     return $this->testIntegration($opts);
   }
 
-  function testCoverage($opts=['file' => null, 'xml' => false]) {
+  public function testCoverage($opts=['file' => null, 'xml' => false]) {
     $command = join(' ', [
       'vendor/bin/codecept run -s acceptance',
       (($opts['file']) ? $opts['file'] : ''),
@@ -205,41 +204,54 @@ class RoboFile extends \Robo\Tasks {
     return $this->execWithXDebug($command);
   }
 
-  function testJavascript($xml_output_file = null) {
+  public function testNewsletterEditor($xmlOutputFile = null) {
     $this->compileJs();
 
     $command = join(' ', [
       './node_modules/.bin/mocha',
-      '-r tests/javascript/mochaTestHelper.js',
-      'tests/javascript/testBundles/**/*.js',
+      '-r tests/javascript_newsletter_editor/mochaTestHelper.js',
+      'tests/javascript_newsletter_editor/testBundles/**/*.js',
     ]);
 
-    if (!empty($xml_output_file)) {
+    if (!empty($xmlOutputFile)) {
       $command .= sprintf(
         ' --reporter xunit --reporter-options output="%s"',
-        $xml_output_file
+        $xmlOutputFile
       );
     }
 
     return $this->_exec($command);
   }
 
-  function securityComposer() {
+  public function testJavascript($xmlOutputFile = null) {
+    $command = './node_modules/.bin/mocha --require tests/javascript/babel_register.js  tests/javascript/**/*.spec.js';
+
+    if (!empty($xmlOutputFile)) {
+      $command .= sprintf(
+        ' --reporter xunit --reporter-options output="%s"',
+        $xmlOutputFile
+      );
+    }
+
+    return $this->_exec($command);
+  }
+
+  public function securityComposer() {
     return $this->collectionBuilder()
       ->taskExec('vendor/bin/security-checker security:check --format=simple')
       ->taskExec('vendor/bin/security-checker security:check --format=simple prefixer/composer.lock')
       ->run();
   }
 
-  function testDebugUnit($opts=['file' => null, 'xml' => false, 'debug' => true]) {
+  public function testDebugUnit($opts=['file' => null, 'xml' => false, 'debug' => true]) {
     return $this->testUnit($opts);
   }
 
-  function testDebugIntegration($opts=['file' => null, 'xml' => false, 'debug' => true]) {
+  public function testDebugIntegration($opts=['file' => null, 'xml' => false, 'debug' => true]) {
     return $this->testIntegration($opts);
   }
 
-  function testAcceptance($opts=['file' => null, 'skip-deps' => false, 'timeout' => null]) {
+  public function testAcceptance($opts=['file' => null, 'skip-deps' => false, 'timeout' => null]) {
     return $this->taskExec(
       'COMPOSE_HTTP_TIMEOUT=200 docker-compose run ' .
       ($opts['skip-deps'] ? '-e SKIP_DEPS=1 ' : '') .
@@ -249,34 +261,34 @@ class RoboFile extends \Robo\Tasks {
     )->dir(__DIR__ . '/tests/docker')->run();
   }
 
-  function testAcceptanceMultisite($opts=['file' => null, 'skip-deps' => false, 'timeout' => null]) {
+  public function testAcceptanceMultisite($opts=['file' => null, 'skip-deps' => false, 'timeout' => null]) {
     return $this->taskExec(
       'COMPOSE_HTTP_TIMEOUT=200 docker-compose run ' .
       ($opts['skip-deps'] ? '-e SKIP_DEPS=1 ' : '') .
       ($opts['timeout'] ? '-e WAIT_TIMEOUT=' . (int)$opts['timeout'] . ' ' : '') .
       '-e MULTISITE=1 ' .
-      'codeception --steps --debug -vvv' .
+      'codeception --steps --debug -vvv ' .
       '-f ' . ($opts['file'] ? $opts['file'] : '')
     )->dir(__DIR__ . '/tests/docker')->run();
   }
 
-  function deleteDocker() {
+  public function deleteDocker() {
     return $this->taskExec(
       'docker-compose down -v --remove-orphans --rmi all'
     )->dir(__DIR__ . '/tests/docker')->run();
   }
 
-  function testFailedUnit() {
+  public function testFailedUnit() {
     $this->_exec('vendor/bin/codecept build');
     return $this->_exec('vendor/bin/codecept run unit -g failed');
   }
 
-  function testFailedIntegration() {
+  public function testFailedIntegration() {
     $this->_exec('vendor/bin/codecept build');
     return $this->_exec('vendor/bin/codecept run integration -g failed');
   }
 
-  function containerDump() {
+  public function containerDump() {
     define('ABSPATH', getenv('WP_ROOT') . '/');
     if (!file_exists(ABSPATH . 'wp-config.php')) {
       $this->yell('WP_ROOT env variable does not contain valid path to wordpress root.', 40, 'red');
@@ -284,16 +296,16 @@ class RoboFile extends \Robo\Tasks {
     }
 
     $configurator = new \MailPoet\DI\ContainerConfigurator();
-    $dump_file = __DIR__ . '/generated/' . $configurator->getDumpClassname() . '.php';
+    $dumpFile = __DIR__ . '/generated/' . $configurator->getDumpClassname() . '.php';
     $this->say('Deleting DI Container');
-    $this->_exec("rm -f $dump_file");
+    $this->_exec("rm -f $dumpFile");
     $this->say('Generating DI container cache');
-    $container_factory = new \MailPoet\DI\ContainerFactory($configurator);
-    $container = $container_factory->getConfiguredContainer();
+    $containerFactory = new \MailPoet\DI\ContainerFactory($configurator);
+    $container = $containerFactory->getConfiguredContainer();
     $container->compile();
     $dumper = new \MailPoetVendor\Symfony\Component\DependencyInjection\Dumper\PhpDumper($container);
     file_put_contents(
-      $dump_file,
+      $dumpFile,
       $dumper->dump([
         'class' => $configurator->getDumpClassname(),
         'namespace' => $configurator->getDumpNamespace(),
@@ -301,64 +313,135 @@ class RoboFile extends \Robo\Tasks {
     );
   }
 
-  function qa() {
+  public function doctrineGenerateMetadata() {
+    $doctrineMetadataDir = \MailPoet\Doctrine\ConfigurationFactory::METADATA_DIR;
+    $validatorMetadataDir = \MailPoet\Doctrine\Validator\ValidatorFactory::METADATA_DIR;
+    $this->_exec("rm -rf $doctrineMetadataDir");
+    $this->_exec("rm -rf $validatorMetadataDir");
+
+    $entityManager = $this->createDoctrineEntityManager();
+    $doctrineMetadata = $entityManager->getMetadataFactory()->getAllMetadata();
+
+    $annotationReaderProvider = new \MailPoet\Doctrine\Annotations\AnnotationReaderProvider();
+    $validatorFactory = new \MailPoet\Doctrine\Validator\ValidatorFactory($annotationReaderProvider);
+    $validator = $validatorFactory->createValidator();
+
+    foreach ($doctrineMetadata as $metadata) {
+      $validator->getMetadataFor($metadata->getName());
+    }
+
+    $this->say("Doctrine metadata generated to: $doctrineMetadataDir");
+    $this->say("Validator metadata generated to: $validatorMetadataDir");
+  }
+
+  public function doctrineGenerateProxies() {
+    $proxyDir = \MailPoet\Doctrine\ConfigurationFactory::PROXY_DIR;
+    $this->_exec("rm -rf $proxyDir");
+
+    // set ArrayCache for metadata to avoid reading & writing them on filesystem as a side effect
+    $entityManager = $this->createDoctrineEntityManager();
+    $entityManager->getMetadataFactory()->setCacheDriver(new \MailPoetVendor\Doctrine\Common\Cache\ArrayCache());
+    $entityManager->getProxyFactory()->generateProxyClasses(
+      $entityManager->getMetadataFactory()->getAllMetadata()
+    );
+    $this->say("Doctrine proxies generated to: $proxyDir");
+  }
+
+  public function qa() {
+    $collection = $this->collectionBuilder();
+    $collection->addCode([$this, 'qaPhp']);
+    $collection->addCode([$this, 'qaFrontendAssets']);
+    return $collection->run();
+  }
+
+  public function qaPhp() {
     $collection = $this->collectionBuilder();
     $collection->addCode([$this, 'qaLint']);
     $collection->addCode(function() {
       return $this->qaCodeSniffer('all');
     });
+    return $collection->run();
+  }
+
+  public function qaFrontendAssets() {
+    $collection = $this->collectionBuilder();
     $collection->addCode([$this, 'qaLintJavascript']);
     $collection->addCode([$this, 'qaLintCss']);
     return $collection->run();
   }
 
-  function qaLint() {
+  public function qaLint() {
     return $this->_exec('./tasks/code_sniffer/vendor/bin/parallel-lint lib/ tests/ mailpoet.php');
   }
 
-  function qaLintJavascript() {
-    return $this->_exec('npm run lint');
+  public function qaLintJavascript() {
+    return $this->_exec('npm run check-types && npm run lint');
   }
 
-  function qaLintCss() {
-    return $this->_exec('npm run stylelint -- "assets/css/src/components/**/*.scss"');
+  public function qaLintCss() {
+    return $this->_exec('npm run stylelint-check -- "assets/css/src/**/*.scss"');
   }
 
-  function qaCodeSniffer($severity='errors') {
-    if ($severity === 'all') {
-      $severityFlag = '-w';
-    } else {
-      $severityFlag = '-n';
-    }
+  public function qaCodeSniffer($severity='errors') {
+    $severityFlag = $severity === 'all' ? '-w' : '-n';
+    $task = implode(' ', [
+      './tasks/code_sniffer/vendor/bin/phpcs',
+      '--extensions=php',
+      $severityFlag,
+      '--standard=tasks/code_sniffer/MailPoet',
+    ]);
+
     return $this->collectionBuilder()
-      ->taskExec(
-        './tasks/code_sniffer/vendor/bin/phpcs ' .
-        '--standard=./tasks/code_sniffer/MailPoet ' .
-        '--runtime-set testVersion 5.6-7.3 ' .
-        '--ignore=./lib/Util/Sudzy/*,./lib/Util/CSS.php,./lib/Util/XLSXWriter.php,' .
-        './lib/Util/pQuery/*,./lib/Config/PopulatorData/Templates/* ' .
-        'lib/ ' .
-        $severityFlag
+
+      // PHP >= 7.1 for lib & tests
+      ->taskExec($task)
+      ->rawArg('--runtime-set testVersion 7.1-7.4')
+      ->arg('--ignore=' . implode(',', [
+          'lib/Config/PopulatorData/Templates',
+          'tests/_data',
+          'tests/_output',
+          'tests/_support/_generated',
+        ])
       )
-      ->taskExec(
-        './tasks/code_sniffer/vendor/bin/phpcs ' .
-        '--standard=./tasks/code_sniffer/MailPoet ' .
-        '--runtime-set testVersion 5.6-7.3 ' .
-        '--ignore=./tests/unit/_bootstrap.php,./tests/unit/_fixtures.php,./tests/integration/_bootstrap.php,./tests/integration/_fixtures.php ' .
-        'tests/unit tests/integration tests/acceptance tests/DataFactories ' .
-        $severityFlag
+      ->args([
+        'lib',
+        'tests',
+      ])
+
+      // PHP >= 7.1 in plugin root directory
+      ->taskExec($task)
+      ->rawArg('--runtime-set testVersion 7.1-7.4')
+      ->rawArg('-l .')
+
+      // PHP >= 7.2 for dev tools, etc.
+      ->taskExec($task)
+      ->rawArg('--runtime-set testVersion 7.2-7.4')
+      ->arg('--ignore=' . implode(',', [
+          'prefixer/build',
+          'prefixer/vendor',
+          'tasks/code_sniffer/vendor',
+          'tasks/phpstan/vendor',
+          'tasks/makepot',
+          'tools/vendor',
+        ])
       )
+      ->args([
+        '.circleci',
+        'prefixer',
+        'tasks',
+        'tools',
+      ])
       ->run();
   }
 
-  function qaFixFile($filePath) {
+  public function qaFixFile($filePath) {
     if (substr($filePath, -4) === '.php') {
       // fix PHPCS rules
       return $this->collectionBuilder()
         ->taskExec(
           './tasks/code_sniffer/vendor/bin/phpcbf ' .
             '--standard=./tasks/code_sniffer/MailPoet ' .
-            '--runtime-set testVersion 5.6-7.3 ' .
+            '--runtime-set testVersion 7.1-7.4 ' .
             $filePath . ' -n'
         )
         ->run();
@@ -374,11 +457,22 @@ class RoboFile extends \Robo\Tasks {
         )
         ->run();
     }
+    if (substr($filePath, -4) === '.tsx' || substr($filePath, -3) === '.ts') {
+      // fix ESLint using TS rules
+      return $this->collectionBuilder()
+        ->taskExec(
+          'npx eslint -c .eslintrc.ts.json ' .
+            '--max-warnings 0 ' .
+            '--fix ' .
+            $filePath
+        )
+        ->run();
+    }
     if (substr($filePath, -8) === '.spec.js') {
       // fix ESLint using tests rules
       return $this->collectionBuilder()
         ->taskExec(
-          'npx eslint -c .eslintrc.tests.json ' .
+          'npx eslint -c .eslintrc.tests_newsletter_editor.json ' .
             '--max-warnings 0 ' .
             '--fix ' .
             $filePath
@@ -398,51 +492,74 @@ class RoboFile extends \Robo\Tasks {
     }
   }
 
-  function qaPhpstan() {
+  public function qaPhpstan() {
+    $dir = __DIR__;
+    $task = implode(' ', [
+      'WP_ROOT="' . getenv('WP_ROOT') . '"',
+      'php -d memory_limit=-1',
+      "$dir/tasks/phpstan/vendor/bin/phpstan analyse ",
+    ]);
+
     // PHPStan must be run out of main plugin directory to avoid its autoloading
     // from vendor/autoload.php where some dev dependencies cause conflicts.
-    $dir = __DIR__;
     return $this->collectionBuilder()
-      ->taskExec('rm -rf ' . __DIR__ . '/vendor/goaop')
-      ->taskExec('rm -rf ' . __DIR__ . '/vendor/nikic')
-      ->taskExec('cd ' . __DIR__ . ' && ./composer.phar dump-autoload')
-      ->taskExec(
-        'WP_ROOT="' . getenv('WP_ROOT') . '" ' .
-        'php -d memory_limit=2G ' .
-        "$dir/phpstan.phar analyse " .
-        "--configuration $dir/tasks/phpstan/phpstan.neon " .
-        '--level 5 ' .
-        "$dir/lib"
+      // temp dir
+      ->taskExec('mkdir -p ' . __DIR__ . '/temp')
+      ->taskExec('rm -rf ' . __DIR__ . '/temp/phpstan')
+      // lib
+      ->taskExec($task)
+      ->arg("$dir/lib")
+      ->dir(__DIR__ . '/tasks/phpstan')
+
+      // tests
+      ->taskExec($task)
+      ->rawArg('--configuration=phpstan-tests.neon')
+      ->rawArg(
+        implode(' ', [
+          "$dir/tests/_support",
+          "$dir/tests/DataFactories",
+          "$dir/tests/acceptance",
+          "$dir/tests/integration",
+          "$dir/tests/unit",
+        ])
       )
       ->dir(__DIR__ . '/tasks/phpstan')
-      ->taskExec('cd ' . __DIR__ . ' && ./composer.phar install')
+
       ->run();
   }
 
-  function svnCheckout() {
-    $svn_dir = ".mp_svn";
+  public function storybookBuild() {
+    return $this->_exec('npm run build-storybook');
+  }
+
+  public function storybookWatch() {
+    return $this->_exec('npm run storybook');
+  }
+
+  public function svnCheckout() {
+    $svnDir = ".mp_svn";
 
     $collection = $this->collectionBuilder();
 
     // Clean up the SVN dir for faster shallow checkout
-    if (file_exists($svn_dir)) {
+    if (file_exists($svnDir)) {
       $collection->taskExecStack()
-        ->exec('rm -rf ' . $svn_dir);
+        ->exec('rm -rf ' . $svnDir);
     }
 
     $collection->taskFileSystemStack()
-        ->mkdir($svn_dir);
+        ->mkdir($svnDir);
 
     return $collection->taskExecStack()
       ->stopOnFail()
-      ->dir($svn_dir)
+      ->dir($svnDir)
       ->exec('svn co https://plugins.svn.wordpress.org/mailpoet/ -N .')
       ->exec('svn up trunk')
       ->exec('svn up assets')
       ->run();
   }
 
-  function svnPushTemplates() {
+  public function svnPushTemplates() {
     $collection = $this->collectionBuilder();
     $this->svnCheckout();
     $awkCmd = '{print " --force \""$2"\""}';
@@ -451,76 +568,76 @@ class RoboFile extends \Robo\Tasks {
       ->stopOnFail()
       ->dir('.mp_svn')
       ->exec('cp -R ../plugin_repository/assets/newsletter-templates/* assets/newsletter-templates')
-      ->exec("svn st | grep ^! | awk '$awkCmd' | xargs $xargsFlag svn rm")
+      ->exec("svn st | grep ^! | awk '$awkCmd' | xargs $xargsFlag svn rm --keep-local")
       ->exec('svn add --force * --auto-props --parents --depth infinity -q')
       ->exec('svn commit -m "Push Templates for test"')
       ->run();
   }
 
-  function svnPublish() {
-    $svn_dir = ".mp_svn";
-    $plugin_version = $this->getPluginVersion('mailpoet.php');
-    $plugin_dist_name = 'mailpoet';
-    $plugin_dist_file = $plugin_dist_name . '.zip';
+  public function svnPublish() {
+    $svnDir = ".mp_svn";
+    $pluginVersion = $this->getPluginVersion('mailpoet.php');
+    $pluginDistName = 'mailpoet';
+    $pluginDistFile = $pluginDistName . '.zip';
 
-    if (!$plugin_version) {
+    if (!$pluginVersion) {
       throw new \Exception('Could not parse plugin version, check the plugin header');
     }
-    $this->say('Publishing version: ' . $plugin_version);
+    $this->say('Publishing version: ' . $pluginVersion);
 
     // Sanity checks
-    if (!is_readable($plugin_dist_file)) {
-      $this->say("Failed to access " . $plugin_dist_file);
+    if (!is_readable($pluginDistFile)) {
+      $this->say("Failed to access " . $pluginDistFile);
       return;
-    } elseif (!file_exists($svn_dir . "/.svn/")) {
-      $this->say("$svn_dir/.svn/ dir not found, is it a SVN repository?");
+    } elseif (!file_exists($svnDir . "/.svn/")) {
+      $this->say("$svnDir/.svn/ dir not found, is it a SVN repository?");
       return;
-    } elseif (file_exists($svn_dir . "/tags/" . $plugin_version)) {
-      $this->say("A SVN tag already exists: " . $plugin_version);
+    } elseif (file_exists($svnDir . "/tags/" . $pluginVersion)) {
+      $this->say("A SVN tag already exists: " . $pluginVersion);
       return;
     }
 
     $collection = $this->collectionBuilder();
 
     // Clean up tmp dirs if the previous run was halted
-    if (file_exists("$svn_dir/trunk_new") || file_exists("$svn_dir/trunk_old")) {
+    if (file_exists("$svnDir/trunk_new") || file_exists("$svnDir/trunk_old")) {
       $collection->taskFileSystemStack()
         ->stopOnFail()
-        ->remove(["$svn_dir/trunk_new", "$svn_dir/trunk_old"]);
+        ->remove(["$svnDir/trunk_new", "$svnDir/trunk_old"]);
     }
 
     // Extract the distributable zip to tmp trunk dir
-    $collection->taskExtract($plugin_dist_file)
-      ->to("$svn_dir/trunk_new")
+    $collection->taskExtract($pluginDistFile)
+      ->to("$svnDir/trunk_new")
       ->preserveTopDirectory(false);
 
     // Rename current trunk
-    if (file_exists("$svn_dir/trunk")) {
+    if (file_exists("$svnDir/trunk")) {
       $collection->taskFileSystemStack()
-        ->rename("$svn_dir/trunk", "$svn_dir/trunk_old");
+        ->rename("$svnDir/trunk", "$svnDir/trunk_old");
     }
 
     // Replace old trunk with a new one
     $collection->taskFileSystemStack()
       ->stopOnFail()
-      ->rename("$svn_dir/trunk_new", "$svn_dir/trunk")
-      ->remove("$svn_dir/trunk_old");
+      ->rename("$svnDir/trunk_new", "$svnDir/trunk")
+      ->remove("$svnDir/trunk_old");
 
     // Add new repository assets
     $collection->taskFileSystemStack()
-      ->mirror('./plugin_repository/assets', "$svn_dir/assets_new");
+      ->mirror('./plugin_repository/assets', "$svnDir/assets_new");
 
     // Rename current assets folder
-    if (file_exists("$svn_dir/assets")) {
+    if (file_exists("$svnDir/assets")) {
       $collection->taskFileSystemStack()
-        ->rename("$svn_dir/assets", "$svn_dir/assets_old");
+        ->rename("$svnDir/assets", "$svnDir/assets_old");
     }
 
     // Replace old assets with new ones
     $collection->taskFileSystemStack()
       ->stopOnFail()
-      ->rename("$svn_dir/assets_new", "$svn_dir/assets")
-      ->remove("$svn_dir/assets_old");
+      ->rename("$svnDir/assets_new", "$svnDir/assets")
+      ->remove("$svnDir/assets_old");
 
     // Windows compatibility
     $awkCmd = '{print " --force \""$2"\""}';
@@ -530,32 +647,32 @@ class RoboFile extends \Robo\Tasks {
     $collection->taskExecStack()
       ->stopOnFail()
       // Set SVN repo as working directory
-      ->dir($svn_dir)
+      ->dir($svnDir)
       // Remove files from SVN repo that have already been removed locally
-      ->exec("svn st | grep ^! | awk '$awkCmd' | xargs $xargsFlag svn rm")
+      ->exec("svn st | grep ^! | awk '$awkCmd' | xargs $xargsFlag svn rm --keep-local")
       // Recursively add files to SVN that haven't been added yet
       ->exec("svn add --force * --auto-props --parents --depth infinity -q");
 
     $result = $collection->run();
 
     if ($result->wasSuccessful()) {
-      $repo_url = "https://plugins.svn.wordpress.org/$plugin_dist_name";
-      $release_cmd = "svn ci -m \"Release $plugin_version\"";
-      $tag_cmd = "svn copy $repo_url/trunk $repo_url/tags/$plugin_version -m \"Tag $plugin_version\"";
-      $svn_login = getenv('WP_SVN_USERNAME');
-      $svn_password = getenv('WP_SVN_PASSWORD');
-      if ($svn_login && $svn_password) {
-        $release_cmd .= " --username $svn_login --password $svn_password";
-        $tag_cmd .= " --username $svn_login --password $svn_password";
+      $repoUrl = "https://plugins.svn.wordpress.org/$pluginDistName";
+      $releaseCmd = "svn ci -m \"Release $pluginVersion\"";
+      $tagCmd = "svn copy $repoUrl/trunk $repoUrl/tags/$pluginVersion -m \"Tag $pluginVersion\"";
+      $svnLogin = getenv('WP_SVN_USERNAME');
+      $svnPassword = getenv('WP_SVN_PASSWORD');
+      if ($svnLogin && $svnPassword) {
+        $releaseCmd .= " --username $svnLogin --password \"$svnPassword\"";
+        $tagCmd .= " --username $svnLogin --password \"$svnPassword\"";
       } else {
-        $release_cmd .= ' --force-interactive';
-        $tag_cmd .= ' --force-interactive';
+        $releaseCmd .= ' --force-interactive';
+        $tagCmd .= ' --force-interactive';
       }
       $result = $this->taskExecStack()
         ->stopOnFail()
-        ->dir($svn_dir)
-        ->exec($release_cmd)
-        ->exec($tag_cmd)
+        ->dir($svnDir)
+        ->exec($releaseCmd)
+        ->exec($tagCmd)
         ->run();
     }
 
@@ -563,7 +680,7 @@ class RoboFile extends \Robo\Tasks {
   }
 
   public function testAcceptanceGroupTests() {
-    return $this->taskSplitTestFilesByGroups(4)
+    return $this->taskSplitTestFilesByGroups(5)
       ->projectRoot('.')
       ->testsFrom('tests/acceptance')
       ->groupsTo('tests/acceptance/_groups/group_')
@@ -596,9 +713,9 @@ class RoboFile extends \Robo\Tasks {
     $jira = $this->createJiraController();
     $version = $jira->getVersion($this->releaseVersionGetNext($version));
     $issues = $jira->getIssuesDataForVersion($version);
-    $pull_requests_id = \MailPoetTasks\Release\JiraController::PULL_REQUESTS_ID;
+    $pullRequestsId = \MailPoetTasks\Release\JiraController::PULL_REQUESTS_ID;
     foreach ($issues as $issue) {
-      if (strpos($issue['fields'][$pull_requests_id], 'state=OPEN') !== false) {
+      if (strpos($issue['fields'][$pullRequestsId], 'state=OPEN') !== false) {
         $key = $issue['key'];
         $this->yell("Some pull request associated to task {$key} is not merged yet!", 40, 'red');
         exit(1);
@@ -608,11 +725,11 @@ class RoboFile extends \Robo\Tasks {
 
   public function releasePrepareGit() {
     // make sure working directory is clean
-    $git_status = $this->taskGitStack()
+    $gitStatus = $this->taskGitStack()
       ->printOutput(false)
       ->exec('git status --porcelain')
       ->run();
-    if (strlen(trim($git_status->getMessage())) > 0) {
+    if (strlen(trim($gitStatus->getMessage())) > 0) {
       $this->yell('Please make sure your working directory is clean before running release.', 40, 'red');
       exit(1);
     }
@@ -623,20 +740,20 @@ class RoboFile extends \Robo\Tasks {
       ->pull()
       ->run();
     // make sure release branch doesn't exist on github
-    $release_branch_status = $this->taskGitStack()
+    $releaseBranchStatus = $this->taskGitStack()
       ->printOutput(false)
       ->exec('git ls-remote --heads git@github.com:mailpoet/mailpoet.git release')
       ->run();
-    if (strlen(trim($release_branch_status->getMessage())) > 0) {
+    if (strlen(trim($releaseBranchStatus->getMessage())) > 0) {
       $this->yell('Delete old release branch before running release.', 40, 'red');
       exit(1);
     }
     // check if local branch with name "release" exists
-    $git_status = $this->taskGitStack()
+    $gitStatus = $this->taskGitStack()
       ->printOutput(false)
       ->exec('git rev-parse --verify release')
       ->run();
-    if ($git_status->wasSuccessful()) {
+    if ($gitStatus->wasSuccessful()) {
       // delete local "release" branch
       $this->taskGitStack()
         ->printOutput(false)
@@ -743,13 +860,13 @@ class RoboFile extends \Robo\Tasks {
       ->run();
   }
 
-  function releaseChangelogGet($version = null) {
+  public function releaseChangelogGet($version = null) {
     $outputs = $this->getChangelogController()->get($version);
     $this->say("Changelog \n{$outputs[0]} \n{$outputs[1]}\n");
     $this->say("IMPORTANT NOTES \n" . ($outputs[2] ?: 'none'));
   }
 
-  function releaseChangelogWrite($version = null) {
+  public function releaseChangelogWrite($version = null) {
     $this->say("Updating changelog");
     $outputs = $this->getChangelogController()->update($version);
     $this->say("Changelog \n{$outputs[0]} \n{$outputs[1]}\n\n");
@@ -757,44 +874,50 @@ class RoboFile extends \Robo\Tasks {
   }
 
   public function releaseDownloadZip() {
-    $circleci_controller = $this->createCircleCiController();
-    $path = $circleci_controller->downloadLatestBuild(self::ZIP_BUILD_PATH);
+    $circleciController = $this->createCircleCiController();
+    $path = $circleciController->downloadLatestBuild(self::ZIP_BUILD_PATH);
     $this->say('Release ZIP downloaded to: ' . $path);
     $this->say(sprintf('Release ZIP file size: %.2F MB', filesize($path) / pow(1024, 2)));
   }
 
   public function releasePublishGithub($version = null) {
-    $jira_controller = $this->createJiraController();
-    $version = $jira_controller->getVersion($version);
+    $jiraController = $this->createJiraController();
+    $version = $jiraController->getVersion($version);
     $changelog = $this->getChangelogController()->get($version['name']);
 
-    $github_controller = $this->createGitHubController();
-    $github_controller->publishRelease($version['name'], $changelog[1], self::ZIP_BUILD_PATH);
+    $githubController = $this->createGitHubController();
+    $githubController->publishRelease($version['name'], $changelog[1], self::ZIP_BUILD_PATH);
     $this->say("Release '$version[name]' was published to GitHub.");
   }
 
   public function releasePublishJira($version = null) {
     $version = $this->releaseVersionGetNext($version);
-    $jira_controller = $this->createJiraController();
-    $jira_version = $jira_controller->releaseVersion($version);
-    $this->say("JIRA version '$jira_version[name]' was released.");
+    $jiraController = $this->createJiraController();
+    $jiraVersion = $jiraController->releaseVersion($version);
+    $this->say("JIRA version '$jiraVersion[name]' was released.");
   }
 
   public function releasePublishSlack($version = null) {
-    $jira_controller = $this->createJiraController();
-    $version = $jira_controller->getVersion($version);
+    $jiraController = $this->createJiraController();
+    $version = $jiraController->getVersion($version);
     $changelog = $this->getChangelogController()->get($version['name']);
 
-    $slack_notifier = $this->createSlackNotifier();
-    $slack_notifier->notify($version['name'], $changelog[1], $version['id']);
+    $slackNotifier = $this->createSlackNotifier();
+    $slackNotifier->notify($version['name'], $changelog[1], $version['id']);
     $this->say("Release '$version[name]' info was published on Slack.");
+  }
+
+  public function generateData($generatorName = null) {
+    require_once __DIR__ . '/tests/DataGenerator/_bootstrap.php';
+    $generator = new \MailPoet\Test\DataGenerator\DataGenerator(new \Codeception\Lib\Console\Output([]));
+    $generator->run($generatorName);
   }
 
   protected function rsearch($folder, $extensions = []) {
     $dir = new RecursiveDirectoryIterator($folder);
     $iterator = new RecursiveIteratorIterator($dir);
 
-    $pattern = '/^.+\.(' . join($extensions, '|') . ')$/i';
+    $pattern = '/^.+\.(' . join('|', $extensions) . ')$/i';
 
     $files = new RegexIterator(
       $iterator,
@@ -833,6 +956,7 @@ class RoboFile extends \Robo\Tasks {
   protected function getReleaseVersionController() {
     return new \MailPoetTasks\Release\ReleaseVersionController(
       $this->createJiraController(),
+      $this->createGitHubController(),
       \MailPoetTasks\Release\JiraController::PROJECT_MAILPOET
     );
   }
@@ -887,13 +1011,27 @@ class RoboFile extends \Robo\Tasks {
   }
 
   private function execWithXDebug($command) {
-    $php_config = new \Composer\XdebugHandler\PhpConfig();
-    $php_config->useOriginal();
+    $phpConfig = new \Composer\XdebugHandler\PhpConfig();
+    $phpConfig->useOriginal();
 
     // exec command in subprocess with original settings
     passthru($command, $exitCode);
 
-    $php_config->usePersistent();
+    $phpConfig->usePersistent();
     return $exitCode;
+  }
+
+  private function createDoctrineEntityManager() {
+    define('ABSPATH', getenv('WP_ROOT') . '/');
+    if (\MailPoet\Config\Env::$dbPrefix === null) {
+      \MailPoet\Config\Env::$dbPrefix = ''; // ensure some prefix is set
+    }
+    $annotationReaderProvider = new \MailPoet\Doctrine\Annotations\AnnotationReaderProvider();
+    $configuration = (new \MailPoet\Doctrine\ConfigurationFactory(true, $annotationReaderProvider))->createConfiguration();
+    $platformClass = \MailPoet\Doctrine\ConnectionFactory::PLATFORM_CLASS;
+    return \MailPoetVendor\Doctrine\ORM\EntityManager::create([
+      'driver' => \MailPoet\Doctrine\ConnectionFactory::DRIVER,
+      'platform' => new $platformClass,
+    ], $configuration);
   }
 }

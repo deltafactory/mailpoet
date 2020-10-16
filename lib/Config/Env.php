@@ -1,112 +1,97 @@
 <?php
 
 namespace MailPoet\Config;
-use MailPoet\WP\Functions as WPFunctions;
 
-if (!defined('ABSPATH')) exit;
+use MailPoet\WP\Functions as WPFunctions;
 
 class Env {
   const NEWSLETTER_CONTENT_WIDTH = 1320;
 
-  static $version;
-  static $plugin_name;
-  static $plugin_path;
-  static $base_url;
-  static $file;
-  static $path;
-  static $views_path;
-  static $assets_path;
-  static $assets_url;
-  static $util_path;
-  static $temp_path;
-  static $cache_path;
-  static $temp_url;
-  static $languages_path;
-  static $lib_path;
-  static $plugin_prefix;
-  static $db_prefix;
-  static $db_source_name;
-  static $db_host;
-  static $db_socket;
-  static $db_port;
-  static $db_name;
-  static $db_username;
-  static $db_password;
-  static $db_charset;
-  static $db_collation;
-  static $db_charset_collate;
-  static $db_timezone_offset;
+  public static $version;
+  public static $pluginName;
+  public static $pluginPath;
+  public static $baseUrl;
+  public static $file;
+  public static $path;
+  public static $viewsPath;
+  public static $assetsPath;
+  public static $assetsUrl;
+  public static $utilPath;
+  public static $tempPath;
+  public static $cachePath;
+  public static $tempUrl;
+  public static $languagesPath;
+  public static $libPath;
+  public static $pluginPrefix;
+  public static $dbPrefix;
+  public static $dbHost;
+  public static $dbIsIpv6;
+  public static $dbSocket;
+  public static $dbPort;
+  public static $dbName;
+  public static $dbUsername;
+  public static $dbPassword;
+  public static $dbCharset;
+  public static $dbCollation;
+  public static $dbCharsetCollate;
+  public static $dbTimezoneOffset;
 
-  static function init($file, $version, $db_host, $db_user, $db_password, $db_name) {
+  // back compatibility for older Premium plugin with underscore naming
+  // (we need to allow it to activate so it can render an update notice)
+  public static $plugin_name; // phpcs:ignore Squiz.NamingConventions.ValidVariableName.MemberNotCamelCaps
+  public static $temp_path; // phpcs:ignore Squiz.NamingConventions.ValidVariableName.MemberNotCamelCaps
+
+  public static function init($file, $version, $dbHost, $dbUser, $dbPassword, $dbName) {
     self::$version = $version;
     self::$file = $file;
     self::$path = dirname(self::$file);
-    self::$plugin_name = 'mailpoet';
-    self::$plugin_path = 'mailpoet/mailpoet.php';
-    self::$base_url = WPFunctions::get()->pluginsUrl('', $file);
-    self::$views_path = self::$path . '/views';
-    self::$assets_path = self::$path . '/assets';
-    self::$assets_url = WPFunctions::get()->pluginsUrl('/assets', $file);
-    self::$util_path = self::$path . '/lib/Util';
-    $wp_upload_dir = WPFunctions::get()->wpUploadDir();
-    self::$temp_path = $wp_upload_dir['basedir'] . '/' . self::$plugin_name;
-    self::$cache_path = self::$temp_path . '/cache';
-    self::$temp_url = $wp_upload_dir['baseurl'] . '/' . self::$plugin_name;
-    self::$languages_path = self::$path . '/lang';
-    self::$lib_path = self::$path . '/lib';
-    self::$plugin_prefix = 'mailpoet_';
-    self::initDbParameters($db_host, $db_user, $db_password, $db_name);
+    self::$pluginName = 'mailpoet';
+    self::$pluginPath = 'mailpoet/mailpoet.php';
+    self::$baseUrl = WPFunctions::get()->pluginsUrl('', $file);
+    self::$viewsPath = self::$path . '/views';
+    self::$assetsPath = self::$path . '/assets';
+    self::$assetsUrl = WPFunctions::get()->pluginsUrl('/assets', $file);
+    self::$utilPath = self::$path . '/lib/Util';
+    $wpUploadDir = WPFunctions::get()->wpUploadDir();
+    self::$tempPath = $wpUploadDir['basedir'] . '/' . self::$pluginName;
+    self::$cachePath = WPFunctions::get()->applyFilters('mailpoet_template_cache_path', self::$tempPath . '/cache');
+    self::$tempUrl = $wpUploadDir['baseurl'] . '/' . self::$pluginName;
+    self::$languagesPath = self::$path . '/lang';
+    self::$libPath = self::$path . '/lib';
+    self::$pluginPrefix = 'mailpoet_';
+    self::initDbParameters($dbHost, $dbUser, $dbPassword, $dbName);
+
+    // back compatibility for older Premium plugin with underscore naming
+    self::$plugin_name = self::$pluginName; // phpcs:ignore Squiz.NamingConventions.ValidVariableName.NotCamelCaps
+    self::$temp_path = self::$tempPath; // phpcs:ignore Squiz.NamingConventions.ValidVariableName.NotCamelCaps
   }
 
   /**
    * @see https://codex.wordpress.org/Editing_wp-config.php#Set_Database_Host for possible DB_HOSTS values
    */
-  private static function initDbParameters($db_host, $db_user, $db_password, $db_name) {
-    $parsed_host = WPFunctions::get()->parseDbHost($db_host);
-    if ($parsed_host === false) {
+  private static function initDbParameters($dbHost, $dbUser, $dbPassword, $dbName) {
+    $parsedHost = WPFunctions::get()->parseDbHost($dbHost);
+    if ($parsedHost === false) {
       throw new \InvalidArgumentException('Invalid db host configuration.');
     }
-    list($host, $port, $socket, $is_ipv6) = $parsed_host;
+    list($host, $port, $socket, $isIpv6) = $parsedHost;
 
     global $wpdb;
-    self::$db_prefix = $wpdb->prefix . self::$plugin_prefix;
-    self::$db_host = $host;
-    self::$db_port = $port ?: 3306;
-    self::$db_socket = $socket;
-    self::$db_name = $db_name;
-    self::$db_username = $db_user;
-    self::$db_password = $db_password;
-    self::$db_charset = $wpdb->charset;
-    self::$db_collation = $wpdb->collate;
-    self::$db_charset_collate = $wpdb->get_charset_collate();
-    self::$db_source_name = self::dbSourceName(self::$db_host, self::$db_socket, self::$db_port, self::$db_charset, self::$db_name, $is_ipv6);
-    self::$db_timezone_offset = self::getDbTimezoneOffset();
+    self::$dbPrefix = $wpdb->prefix . self::$pluginPrefix;
+    self::$dbHost = $host;
+    self::$dbIsIpv6 = $isIpv6;
+    self::$dbPort = $port ?: 3306;
+    self::$dbSocket = $socket;
+    self::$dbName = $dbName;
+    self::$dbUsername = $dbUser;
+    self::$dbPassword = $dbPassword;
+    self::$dbCharset = $wpdb->charset;
+    self::$dbCollation = $wpdb->collate;
+    self::$dbCharsetCollate = $wpdb->get_charset_collate();
+    self::$dbTimezoneOffset = self::getDbTimezoneOffset();
   }
 
-  private static function dbSourceName($host, $socket, $port, $charset, $db_name, $is_ipv6) {
-    if ($is_ipv6) {
-      $host = "[$host]";
-    }
-    $source_name = [
-      'mysql:host=',
-      $host,
-      ';',
-      'port=',
-      $port,
-      ';',
-      'dbname=',
-      $db_name,
-    ];
-    if (!empty($socket)) {
-      $source_name[] = ';unix_socket=' . $socket;
-    }
-    if (!empty($charset)) {
-      $source_name[] = ';charset=' . $charset;
-    }
-    return implode('', $source_name);
-  }
-
-  static function getDbTimezoneOffset($offset = false) {
+  public static function getDbTimezoneOffset($offset = false) {
     $offset = ($offset) ? $offset : WPFunctions::get()->getOption('gmt_offset');
     $mins = $offset * 60;
     $sgn = ($mins < 0 ? -1 : 1);

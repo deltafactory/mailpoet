@@ -1,58 +1,77 @@
 <?php
+
 namespace MailPoet\Cron;
 
 use MailPoet\Cron\Workers\WorkersFactory;
-use MailPoet\Settings\SettingsController;
-
-if (!defined('ABSPATH')) exit;
 
 class Daemon {
   public $timer;
 
-  /** @var WorkersFactory */
-  private $workers_factory;
+  /** @var CronHelper */
+  private $cronHelper;
 
-  function __construct(WorkersFactory $workers_factory) {
+  /** @var CronWorkerRunner */
+  private $cronWorkerRunner;
+
+  /** @var WorkersFactory */
+  private $workersFactory;
+
+  public function __construct(
+    CronHelper $cronHelper,
+    CronWorkerRunner $cronWorkerRunner,
+    WorkersFactory $workersFactory
+  ) {
     $this->timer = microtime(true);
-    $this->workers_factory = $workers_factory;
+    $this->workersFactory = $workersFactory;
+    $this->cronWorkerRunner = $cronWorkerRunner;
+    $this->cronHelper = $cronHelper;
   }
 
-  function run($settings_daemon_data) {
-    $settings_daemon_data['run_started_at'] = time();
-    CronHelper::saveDaemon($settings_daemon_data);
+  public function run($settingsDaemonData) {
+    $settingsDaemonData['run_started_at'] = time();
+    $this->cronHelper->saveDaemon($settingsDaemonData);
 
     $errors = [];
     foreach ($this->getWorkers() as $worker) {
       try {
-        $worker->process();
+        if ($worker instanceof CronWorkerInterface) {
+          $this->cronWorkerRunner->run($worker);
+        } else {
+          $worker->process($this->timer); // BC for workers not implementing CronWorkerInterface
+        }
       } catch (\Exception $e) {
-        $worker_class_name_parts = explode('\\', get_class($worker));
+        $workerClassNameParts = explode('\\', get_class($worker));
         $errors[] = [
-          'worker' => end($worker_class_name_parts),
+          'worker' => end($workerClassNameParts),
           'message' => $e->getMessage(),
         ];
       }
     }
 
     if (!empty($errors)) {
-      CronHelper::saveDaemonLastError($errors);
+      $this->cronHelper->saveDaemonLastError($errors);
     }
 
     // Log successful execution
-    CronHelper::saveDaemonRunCompleted(time());
+    $this->cronHelper->saveDaemonRunCompleted(time());
   }
 
   private function getWorkers() {
-    yield $this->workers_factory->createMigrationWorker($this->timer);
-    yield $this->workers_factory->createStatsNotificationsWorker($this->timer);
-    yield $this->workers_factory->createScheduleWorker($this->timer);
-    yield $this->workers_factory->createQueueWorker($this->timer);
-    yield $this->workers_factory->createSendingServiceKeyCheckWorker($this->timer);
-    yield $this->workers_factory->createPremiumKeyCheckWorker($this->timer);
-    yield $this->workers_factory->createBounceWorker($this->timer);
-    yield $this->workers_factory->createExportFilesCleanupWorker($this->timer);
-    yield $this->workers_factory->createInactiveSubscribersWorker($this->timer);
-    yield $this->workers_factory->createWooCommerceSyncWorker($this->timer);
-    yield $this->workers_factory->createAuthorizedSendingEmailsCheckWorker($this->timer);
+    yield $this->workersFactory->createMigrationWorker();
+    yield $this->workersFactory->createStatsNotificationsWorker(); // not CronWorkerInterface compatible
+    yield $this->workersFactory->createScheduleWorker(); // not CronWorkerInterface compatible
+    yield $this->workersFactory->createQueueWorker(); // not CronWorkerInterface compatible
+    yield $this->workersFactory->createSendingServiceKeyCheckWorker();
+    yield $this->workersFactory->createPremiumKeyCheckWorker();
+    yield $this->workersFactory->createBounceWorker();
+    yield $this->workersFactory->createExportFilesCleanupWorker();
+    yield $this->workersFactory->createBeamerkWorker();
+    yield $this->workersFactory->createInactiveSubscribersWorker();
+    yield $this->workersFactory->createUnsubscribeTokensWorker();
+    yield $this->workersFactory->createWooCommerceSyncWorker();
+    yield $this->workersFactory->createAuthorizedSendingEmailsCheckWorker();
+    yield $this->workersFactory->createWooCommercePastOrdersWorker();
+    yield $this->workersFactory->createStatsNotificationsWorkerForAutomatedEmails();
+    yield $this->workersFactory->createSubscriberLinkTokensWorker();
   }
 }

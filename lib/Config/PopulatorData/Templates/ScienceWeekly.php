@@ -8,12 +8,12 @@ class ScienceWeekly {
   private $template_image_url;
   private $social_icon_url;
 
-  function __construct($assets_url) {
+  public function __construct($assets_url) {
      $this->template_image_url = 'https://ps.w.org/mailpoet/assets/newsletter-templates/science_weekly';
      $this->social_icon_url = $assets_url . '/img/newsletter_editor/social-icons';
   }
 
-  function get() {
+  public function get() {
     return [
       'name' => WPFunctions::get()->__("Science Weekly", 'mailpoet'),
       'categories' => json_encode(['notification', 'all']),
@@ -769,7 +769,7 @@ class ScienceWeekly {
                               2 =>
                                  [
                                   'type' => 'footer',
-                                  'text' => '<p><span style="color: #b1b6d1;"><a href="[link:subscription_unsubscribe_url]" style="color: #b1b6d1;">Unsubscribe</a> | <a href="[link:subscription_manage_url]" style="color: #b1b6d1;">Manage subscription</a></span><br />Add your postal address here!</p>',
+                                  'text' => '<p><span style="color: #b1b6d1;"><a href="[link:subscription_unsubscribe_url]" style="color: #b1b6d1;">'.WPFunctions::get()->__("Unsubscribe", 'mailpoet').'</a> | <a href="[link:subscription_manage_url]" style="color: #b1b6d1;">'.WPFunctions::get()->__("Manage your subscription", 'mailpoet').'</a></span><br />'.WPFunctions::get()->__("Add your postal address here!", 'mailpoet').'</p>',
                                   'styles' =>
                                      [
                                       'block' =>
@@ -1036,7 +1036,7 @@ class ScienceWeekly {
              ],
           'footer' =>
              [
-              'text' => '<p><a href="[link:subscription_unsubscribe_url]">Unsubscribe</a> | <a href="[link:subscription_manage_url]">Manage subscription</a><br />Add your postal address here!</p>',
+              'text' => '<p><a href="[link:subscription_unsubscribe_url]">'.WPFunctions::get()->__("Unsubscribe", 'mailpoet').'</a> | <a href="[link:subscription_manage_url]">'.WPFunctions::get()->__("Manage your subscription", 'mailpoet').'</a><br />'.WPFunctions::get()->__("Add your postal address here!", 'mailpoet').'</p>',
               'styles' =>
                  [
                   'block' =>
@@ -1162,7 +1162,7 @@ class ScienceWeekly {
              ],
           'header' =>
              [
-              'text' => 'Display problems?&nbsp;<a href="[link:newsletter_view_in_browser_url]">Open this email in your web browser.</a>',
+              'text' => '<a href="[link:newsletter_view_in_browser_url]">'.WPFunctions::get()->__("View this in your browser.", 'mailpoet').'</a>',
               'styles' =>
                  [
                   'block' =>

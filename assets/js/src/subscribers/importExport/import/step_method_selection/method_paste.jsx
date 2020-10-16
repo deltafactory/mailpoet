@@ -13,6 +13,7 @@ const MethodPaste = ({
   canFinish,
   onFinish,
   data,
+  onPrevious,
 }) => {
   const onChange = (e) => {
     onValueChange(e.target.value);
@@ -27,9 +28,10 @@ const MethodPaste = ({
             {ReactStringReplace(
               MailPoet.I18n.t('pasteDescription'),
               /\[link\](.*?)\[\/link\]/,
-              match => (
+              (match) => (
                 <a
                   href={`${kbLink}`}
+                  data-beacon-article="57ce079f903360649f6e56fc"
                   key="kb-link"
                   target="_blank"
                   rel="noopener noreferrer"
@@ -51,7 +53,7 @@ const MethodPaste = ({
       </label>
       <PreviousNextStepButtons
         canGoNext={canFinish}
-        hidePrevious
+        onPreviousAction={onPrevious}
         onNextAction={onFinish}
       />
     </>
@@ -60,6 +62,7 @@ const MethodPaste = ({
 
 MethodPaste.propTypes = {
   onFinish: PropTypes.func,
+  onPrevious: PropTypes.func,
   canFinish: PropTypes.bool.isRequired,
   onValueChange: PropTypes.func.isRequired,
   data: PropTypes.string,
@@ -67,6 +70,7 @@ MethodPaste.propTypes = {
 
 MethodPaste.defaultProps = {
   onFinish: () => {},
+  onPrevious: () => {},
   data: '',
 };
 

@@ -3,9 +3,7 @@
 namespace MailPoet\Listing;
 
 class BulkActionClassStub {
-
-  function bulkTestAction() {
+  public function bulkTestAction() {
 
   }
-
 }

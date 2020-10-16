@@ -3,34 +3,35 @@
 namespace MailPoet\Test\Acceptance;
 
 class TemplatesPagesLoadCest {
-  function loadTemplatesPage(\AcceptanceTester $I) {
-    $I->wantTo('Confirm template page loads and tabs can be clicked through');
-    $I->login();
-    $I->activateWooCommerce();
+  public function loadTemplatesPage(\AcceptanceTester $i) {
+    $i->wantTo('Confirm template page loads and tabs can be clicked through');
+    $i->login();
+    $i->activateWooCommerce();
     //get to Template Selection page
-    $I->amOnMailpoetPage('Emails');
-    $I->click('[data-automation-id="new_email"]');
-    $I->click('[data-automation-id="create_standard"]');
-    $I->waitForText('Select a responsive template');
+    $i->amOnMailpoetPage('Emails');
+    $i->click('[data-automation-id="create_standard"]');
+    $i->waitForElement('[data-automation-id="email_template_selection_heading"]');
+    $templateTab = '[data-automation-id="templates-standard"]';
+    $i->waitForElement($templateTab);
+    $i->click($templateTab);
     //Standard email templates tab
-    $I->waitForElement('[data-automation-id="select_template_8"]');
-    $I->waitForElement('[data-automation-id="select_template_14"]');
-    $I->waitForElement('[data-automation-id="select_template_23"]');
+    $i->waitForElement('[data-automation-id="select_template_8"]');
+    $i->waitForElement('[data-automation-id="select_template_14"]');
+    $i->waitForElement('[data-automation-id="select_template_23"]');
     //Post Notification templates tab
-    $I->click('Post Notifications');
-    $I->see('Post Notifications', ['css' => 'a.current']);
-    $I->waitForElement('[data-automation-id="select_template_5"]');
-    $I->waitForElement('[data-automation-id="select_template_8"]');
+    $i->click('Post Notifications');
+    $i->see('Post Notifications', ['css' => '.mailpoet-categories-item.active']);
+    $i->waitForElement('[data-automation-id="select_template_5"]');
+    $i->waitForElement('[data-automation-id="select_template_8"]');
     //Welcome Emails templates tab
-    $I->click('Welcome Emails');
-    $I->see('Welcome Emails', ['css' => 'a.current']);
-    $I->waitForElement('[data-automation-id="select_template_5"]');
-    $I->waitForElement('[data-automation-id="select_template_9"]');
+    $i->click('Welcome Emails');
+    $i->see('Welcome Emails', ['css' => '.mailpoet-categories-item.active']);
+    $i->waitForElement('[data-automation-id="select_template_5"]');
+    $i->waitForElement('[data-automation-id="select_template_9"]');
     //WooCommerce templates tab
-    $I->click('WooCommerce Emails');
-    $I->see('WooCommerce Emails', ['css' => 'a.current']);
-    $I->waitForElement('[data-automation-id="select_template_5"]');
-    $I->waitForElement('[data-automation-id="select_template_2"]');
+    $i->click('WooCommerce Emails');
+    $i->see('WooCommerce Emails', ['css' => '.mailpoet-categories-item.active']);
+    $i->waitForElement('[data-automation-id="select_template_5"]');
+    $i->waitForElement('[data-automation-id="select_template_2"]');
   }
-
 }

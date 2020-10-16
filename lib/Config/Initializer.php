@@ -3,30 +3,32 @@
 namespace MailPoet\Config;
 
 use MailPoet\API\JSON\API;
+use MailPoet\AutomaticEmails\AutomaticEmails;
 use MailPoet\Cron\CronTrigger;
+use MailPoet\PostEditorBlocks\PostEditorBlock;
 use MailPoet\Router;
 use MailPoet\Settings\SettingsController;
 use MailPoet\Util\ConflictResolver;
 use MailPoet\Util\Helpers;
 use MailPoet\Util\Notices\PermanentNotices;
-use MailPoet\WP\Notice as WPNotice;
-use MailPoetVendor\Psr\Container\ContainerInterface;
+use MailPoet\WooCommerce\Helper as WooCommerceHelper;
+use MailPoet\WooCommerce\TransactionalEmailHooks as WCTransactionalEmails;
 use MailPoet\WP\Functions as WPFunctions;
-
-if (!defined('ABSPATH')) exit;
+use MailPoet\WP\Notice as WPNotice;
 
 require_once(ABSPATH . 'wp-admin/includes/plugin.php');
 
 class Initializer {
+  public $automaticEmails;
 
   /** @var AccessControl */
-  private $access_control;
+  private $accessControl;
 
   /** @var Renderer */
   private $renderer;
 
   /** @var RendererFactory */
-  private $renderer_factory;
+  private $rendererFactory;
 
   /** @var API */
   private $api;
@@ -50,16 +52,34 @@ class Initializer {
   private $menu;
 
   /** @var CronTrigger */
-  private $cron_trigger;
+  private $cronTrigger;
 
   /** @var PermanentNotices */
-  private $permanent_notices;
+  private $permanentNotices;
+
+  /** @var Shortcodes */
+  private $shortcodes;
+
+  /** @var DatabaseInitializer */
+  private $databaseInitializer;
+
+  /** @var WCTransactionalEmails */
+  private $wcTransactionalEmails;
+
+  /** @var WooCommerceHelper */
+  private $wcHelper;
+
+  /** @var \MailPoet\PostEditorBlocks\PostEditorBlock */
+  private $postEditorBlock;
+
+  /** @var Localizer */
+  private $localizer;
 
   const INITIALIZED = 'MAILPOET_INITIALIZED';
 
-  function __construct(
-    RendererFactory $renderer_factory,
-    AccessControl $access_control,
+  public function __construct(
+    RendererFactory $rendererFactory,
+    AccessControl $accessControl,
     API $api,
     Activator $activator,
     SettingsController $settings,
@@ -67,11 +87,17 @@ class Initializer {
     Hooks $hooks,
     Changelog $changelog,
     Menu $menu,
-    CronTrigger $cron_trigger,
-    PermanentNotices $permanent_notices
+    CronTrigger $cronTrigger,
+    PermanentNotices $permanentNotices,
+    Shortcodes $shortcodes,
+    DatabaseInitializer $databaseInitializer,
+    WCTransactionalEmails $wcTransactionalEmails,
+    PostEditorBlock $postEditorBlock,
+    WooCommerceHelper $wcHelper,
+    Localizer $localizer
   ) {
-      $this->renderer_factory = $renderer_factory;
-      $this->access_control = $access_control;
+      $this->rendererFactory = $rendererFactory;
+      $this->accessControl = $accessControl;
       $this->api = $api;
       $this->activator = $activator;
       $this->settings = $settings;
@@ -79,29 +105,30 @@ class Initializer {
       $this->hooks = $hooks;
       $this->changelog = $changelog;
       $this->menu = $menu;
-      $this->cron_trigger = $cron_trigger;
-      $this->permanent_notices = $permanent_notices;
+      $this->cronTrigger = $cronTrigger;
+      $this->permanentNotices = $permanentNotices;
+      $this->shortcodes = $shortcodes;
+      $this->databaseInitializer = $databaseInitializer;
+      $this->wcTransactionalEmails = $wcTransactionalEmails;
+      $this->wcHelper = $wcHelper;
+      $this->postEditorBlock = $postEditorBlock;
+      $this->localizer = $localizer;
   }
 
-  function init() {
-    $requirements_check_results = $this->checkRequirements();
-
-    if (!$requirements_check_results[RequirementsChecker::TEST_PDO_EXTENSION] ||
-      !$requirements_check_results[RequirementsChecker::TEST_VENDOR_SOURCE]
-    ) {
-      return;
-    }
-
+  public function init() {
     // load translations
     $this->setupLocalizer();
 
     try {
-      $this->setupDB();
+      $this->databaseInitializer->initializeConnection();
     } catch (\Exception $e) {
       return WPNotice::displayError(Helpers::replaceLinkTags(
         WPFunctions::get()->__('Unable to connect to the database (the database is unable to open a file or folder), the connection is likely not configured correctly. Please read our [link] Knowledge Base article [/link] for steps how to resolve it.', 'mailpoet'),
-        '//beta.docs.mailpoet.com/article/200-solving-database-connection-issues',
-        ['target' => '_blank']
+        'https://kb.mailpoet.com/article/200-solving-database-connection-issues',
+        [
+          'target' => '_blank',
+          'data-beacon-article' => '596de7db2c7d3a73488b2f8d',
+        ]
       ));
     }
 
@@ -143,36 +170,29 @@ class Initializer {
       new DeferredAdminNotices,
       'printAndClean',
     ]);
+    $this->hooks->initEarlyHooks();
   }
 
-  function checkRequirements() {
-    $requirements = new RequirementsChecker();
-    return $requirements->checkAllRequirements();
-  }
-
-  function runActivator() {
+  public function runActivator() {
     return $this->activator->activate();
   }
 
-  function setupDB() {
-    $database = new Database();
-    $database->init();
-  }
-
-  function preInitialize() {
+  public function preInitialize() {
     try {
-      $this->renderer = $this->renderer_factory->getRenderer();
+      $this->renderer = $this->rendererFactory->getRenderer();
       $this->setupWidget();
+      $this->hooks->init();
+      $this->setupWoocommerceTransactionalEmails();
     } catch (\Exception $e) {
       $this->handleFailedInitialization($e);
     }
   }
 
-  function setupWidget() {
+  public function setupWidget() {
     WPFunctions::get()->registerWidget('\MailPoet\Form\Widget');
   }
 
-  function initialize() {
+  public function initialize() {
     try {
       $this->maybeDbUpdate();
       $this->setupInstaller();
@@ -193,6 +213,8 @@ class Initializer {
 
       $this->setupPermanentNotices();
       $this->setupDeactivationSurvey();
+      $this->setupAutomaticEmails();
+      $this->postEditorBlock->init();
 
       WPFunctions::get()->doAction('mailpoet_initialized', MAILPOET_VERSION);
     } catch (\Exception $e) {
@@ -202,75 +224,72 @@ class Initializer {
     define(self::INITIALIZED, true);
   }
 
-  function maybeDbUpdate() {
+  public function maybeDbUpdate() {
     try {
-      $current_db_version = $this->settings->get('db_version');
+      $currentDbVersion = $this->settings->get('db_version');
     } catch (\Exception $e) {
-      $current_db_version = null;
+      $currentDbVersion = null;
     }
 
     // if current db version and plugin version differ
-    if (version_compare($current_db_version, Env::$version) !== 0) {
+    if (version_compare($currentDbVersion, Env::$version) !== 0) {
       $this->runActivator();
     }
   }
 
-  function setupInstaller() {
+  public function setupInstaller() {
     $installer = new Installer(
       Installer::PREMIUM_PLUGIN_SLUG
     );
     $installer->init();
   }
 
-  function setupUpdater() {
+  public function setupUpdater() {
     $slug = Installer::PREMIUM_PLUGIN_SLUG;
-    $plugin_file = Installer::getPluginFile($slug);
-    if (empty($plugin_file) || !defined('MAILPOET_PREMIUM_VERSION')) {
+    $pluginFile = Installer::getPluginFile($slug);
+    if (empty($pluginFile) || !defined('MAILPOET_PREMIUM_VERSION')) {
       return false;
     }
     $updater = new Updater(
-      $plugin_file,
+      $pluginFile,
       $slug,
       MAILPOET_PREMIUM_VERSION
     );
     $updater->init();
   }
 
-  function setupLocalizer() {
-    $localizer = new Localizer();
-    $localizer->init();
+  public function setupLocalizer() {
+    $this->localizer->init();
   }
 
-  function setupCapabilities() {
+  public function setupCapabilities() {
     $caps = new Capabilities($this->renderer);
     $caps->init();
   }
 
-  function setupShortcodes() {
-    $shortcodes = new Shortcodes();
-    $shortcodes->init();
+  public function setupShortcodes() {
+    $this->shortcodes->init();
   }
 
-  function setupImages() {
+  public function setupImages() {
     WPFunctions::get()->addImageSize('mailpoet_newsletter_max', Env::NEWSLETTER_CONTENT_WIDTH);
   }
 
-  function setupCronTrigger() {
+  public function setupCronTrigger() {
     // setup cron trigger only outside of cli environment
     if (php_sapi_name() !== 'cli') {
-      $this->cron_trigger->init();
+      $this->cronTrigger->init();
     }
   }
 
-  function setupConflictResolver() {
-    $conflict_resolver = new ConflictResolver();
-    $conflict_resolver->init();
+  public function setupConflictResolver() {
+    $conflictResolver = new ConflictResolver();
+    $conflictResolver->init();
   }
 
-  function postInitialize() {
+  public function postInitialize() {
     if (!defined(self::INITIALIZED)) return;
     try {
-      $this->hooks->init();
       $this->api->init();
       $this->router->init();
       $this->setupUserLocale();
@@ -279,47 +298,82 @@ class Initializer {
     }
   }
 
-  function setupUserLocale() {
+  public function setupUserLocale() {
     if (get_user_locale() === WPFunctions::get()->getLocale()) return;
-    WPFunctions::get()->unloadTextdomain(Env::$plugin_name);
-    $localizer = new Localizer();
-    $localizer->init();
+    WPFunctions::get()->unloadTextdomain(Env::$pluginName);
+    $this->localizer->init();
   }
 
-  function setupPages() {
+  public function setupPages() {
     $pages = new \MailPoet\Settings\Pages();
     $pages->init();
   }
 
-  function setupPrivacyPolicy() {
-    $privacy_policy = new PrivacyPolicy();
-    $privacy_policy->init();
+  public function setupPrivacyPolicy() {
+    $privacyPolicy = new PrivacyPolicy();
+    $privacyPolicy->init();
   }
 
-  function setupPersonalDataExporters() {
+  public function setupPersonalDataExporters() {
     $exporters = new PersonalDataExporters();
     $exporters->init();
   }
 
-  function setupPersonalDataErasers() {
+  public function setupPersonalDataErasers() {
     $erasers = new PersonalDataErasers();
     $erasers->init();
   }
 
-  function setupPermanentNotices() {
-    $this->permanent_notices->init();
+  public function setupPermanentNotices() {
+    $this->permanentNotices->init();
   }
 
-  function handleFailedInitialization($exception) {
+  public function handleFailedInitialization($exception) {
     // check if we are able to add pages at this point
     if (function_exists('wp_get_current_user')) {
-      Menu::addErrorPage($this->access_control);
+      Menu::addErrorPage($this->accessControl);
     }
     return WPNotice::displayError($exception);
   }
 
-  function setupDeactivationSurvey() {
+  public function setupDeactivationSurvey() {
     $survey = new DeactivationSurvey($this->renderer);
     $survey->init();
+  }
+
+  public function setupAutomaticEmails() {
+    $automaticEmails = new AutomaticEmails();
+    $automaticEmails->init();
+    $this->automaticEmails = $automaticEmails->getAutomaticEmails();
+
+    WPFunctions::get()->addAction(
+      'mailpoet_newsletters_translations_after',
+      [$this, 'includeAutomaticEmailsData']
+    );
+
+    WPFunctions::get()->addAction(
+      'mailpoet_newsletter_editor_after_javascript',
+      [$this, 'includeAutomaticEmailsData']
+    );
+  }
+
+  private function setupWoocommerceTransactionalEmails() {
+    $wcEnabled = $this->wcHelper->isWooCommerceActive();
+    $optInEnabled = $this->settings->get('woocommerce.use_mailpoet_editor', false);
+    if ($wcEnabled) {
+      $this->wcTransactionalEmails->enableEmailSettingsSyncToWooCommerce();
+      if ($optInEnabled) {
+        $this->wcTransactionalEmails->useTemplateForWoocommerceEmails();
+      }
+    }
+  }
+
+  public function includeAutomaticEmailsData() {
+    $data = [
+      'automatic_emails' => $this->automaticEmails,
+      'woocommerce_optin_on_checkout' => $this->settings->get('woocommerce.optin_on_checkout.enabled', false),
+    ];
+
+    echo $this->renderer->render('automatic_emails.html', $data);
   }
 }

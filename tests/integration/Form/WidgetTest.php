@@ -8,7 +8,7 @@ use MailPoet\Util\pQuery\pQuery;
 use MailPoet\WP\Functions as WPFunctions;
 
 class WidgetTest extends \MailPoetTest {
-  function testItAllowsModifyingRenderedFormWidgetViaHook() {
+  public function testItAllowsModifyingRenderedFormWidgetViaHook() {
     $form = Form::createOrUpdate(
       [
         'name' => 'Test Form',
@@ -18,19 +18,22 @@ class WidgetTest extends \MailPoetTest {
             'id' => 'email',
           ],
         ],
+        'settings' => [
+          'success_message' => 'Hello!',
+        ],
       ]
     );
-    $form_widget = new Widget();
+    $formWidget = new Widget();
 
     // form target is set to _self by default
-    $rendered_form_widget = $form_widget->widget(
+    $renderedFormWidget = $formWidget->widget(
       [],
       [
         'form' => $form->id,
         'form_type' => 'html',
       ]
     );
-    $DOM = pQuery::parseStr($rendered_form_widget);
+    $DOM = pQuery::parseStr($renderedFormWidget);
     expect($DOM->query('form')->attr('target'))->equals('_self');
 
     // form target is modified to _top via hook
@@ -41,14 +44,14 @@ class WidgetTest extends \MailPoetTest {
         return $form;
       }
     );
-    $rendered_form_widget = $form_widget->widget(
+    $renderedFormWidget = $formWidget->widget(
       [],
       [
         'form' => $form->id,
         'form_type' => 'html',
       ]
     );
-    $DOM = pQuery::parseStr($rendered_form_widget);
+    $DOM = pQuery::parseStr($renderedFormWidget);
     expect($DOM->query('form')->attr('target'))->equals('_top');
   }
 }

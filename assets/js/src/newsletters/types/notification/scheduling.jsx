@@ -59,13 +59,13 @@ class NotificationScheduling extends React.Component {
     this.handleValueChanges(changes);
   }
 
-  handleTimeOfDayChange = event => this.handleValueChanges({ timeOfDay: event.target.value });
+  handleTimeOfDayChange = (event) => this.handleValueChanges({ timeOfDay: event.target.value });
 
-  handleWeekDayChange = event => this.handleValueChanges({ weekDay: event.target.value });
+  handleWeekDayChange = (event) => this.handleValueChanges({ weekDay: event.target.value });
 
-  handleMonthDayChange = event => this.handleValueChanges({ monthDay: event.target.value });
+  handleMonthDayChange = (event) => this.handleValueChanges({ monthDay: event.target.value });
 
-  handleNthWeekDayChange = event => this.handleValueChanges({ nthWeekDay: event.target.value });
+  handleNthWeekDayChange = (event) => this.handleValueChanges({ nthWeekDay: event.target.value });
 
   render() {
     const value = this.getCurrentValue();
@@ -122,11 +122,16 @@ class NotificationScheduling extends React.Component {
           onValueChange={this.handleIntervalChange}
           automationId="newsletter_interval_type"
         />
+        <div className="mailpoet-gap" />
 
-        {nthWeekDaySelection}
-        {monthDaySelection}
-        {weekDaySelection}
-        {timeOfDaySelection}
+        <div className="mailpoet-grid-column mailpoet-flex">
+          {nthWeekDaySelection}
+          {monthDaySelection}
+          {weekDaySelection}
+          {timeOfDaySelection}
+        </div>
+
+        {value.intervalType !== 'immediately' && <div className="mailpoet-gap" />}
       </div>
     );
   }

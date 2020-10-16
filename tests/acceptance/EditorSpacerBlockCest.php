@@ -5,30 +5,22 @@ namespace MailPoet\Test\Acceptance;
 use MailPoet\Test\DataFactories\Newsletter;
 
 class EditorSpacerBlockCest {
-  function addSpacer(\AcceptanceTester $I) {
-    $I->wantTo('add spacer block to newsletter');
-    $newsletterTitle = 'Spacer Block Newsletter';
+  public function addSpacer(\AcceptanceTester $i) {
+    $i->wantTo('add spacer block to newsletter');
     $spacerResizeHandle = '[data-automation-id="spacer_resize_handle"]';
     $spacerInEditor = '[data-automation-id="spacer"]';
     $spacerSettingsAssertion = '[data-automation-id="spacer_done_button"]';
-    (new Newsletter())
-      ->withSubject($newsletterTitle)
+    $newsletter = (new Newsletter())
       ->loadBodyFrom('newsletterWithText.json')
       ->create();
-    $I->login();
-    $I->amOnMailpoetPage('Emails');
-    $I->waitForText($newsletterTitle);
-    $I->clickItemRowActionByItemName($newsletterTitle, 'Edit');
-    // Create divider block
-    $I->waitForText('Spacer');
-    $I->waitForElementNotVisible('.velocity-animating');
-    $I->dragAndDrop('#automation_editor_block_spacer', '#mce_1');
+    $i->login();
+    $i->amEditingNewsletter($newsletter->id);
+    $i->dragAndDrop('#automation_editor_block_spacer', '#mce_1');
     //Open settings by clicking on block
-    $I->moveMouseOver($spacerInEditor, 3, 2);
-    $I->waitForElementVisible($spacerResizeHandle);
-    $I->click($spacerInEditor);
-    $I->waitForElementVisible($spacerSettingsAssertion);
-    $I->click($spacerSettingsAssertion);
+    $i->moveMouseOver($spacerInEditor, 3, 2);
+    $i->waitForElementVisible($spacerResizeHandle);
+    $i->click($spacerInEditor);
+    $i->waitForElementVisible($spacerSettingsAssertion);
+    $i->click($spacerSettingsAssertion);
   }
-
 }

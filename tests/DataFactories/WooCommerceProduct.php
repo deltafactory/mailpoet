@@ -16,7 +16,7 @@ class WooCommerceProduct {
   const TYPE_EXTERNAL = 'external';
   const TYPE_VARIABLE = 'variable';
 
-  function __construct(\AcceptanceTester $tester) {
+  public function __construct(\AcceptanceTester $tester) {
     $this->tester = $tester;
     $this->data = [
       'name' => 'Product',
@@ -35,7 +35,7 @@ class WooCommerceProduct {
    * @param string $name
    * @return $this
    */
-  function withName($name) {
+  public function withName($name) {
     return $this->update('name', $name);
   }
 
@@ -43,7 +43,7 @@ class WooCommerceProduct {
    * @param string $description
    * @return $this
    */
-  function withDescription($description) {
+  public function withDescription($description) {
     return $this->update('description', $description);
   }
 
@@ -51,7 +51,7 @@ class WooCommerceProduct {
    * @param string $shortDescription
    * @return $this
    */
-  function withShortDescription($shortDescription) {
+  public function withShortDescription($shortDescription) {
     return $this->update('shortDescription', $shortDescription);
   }
 
@@ -59,7 +59,7 @@ class WooCommerceProduct {
    * @param string $type
    * @return $this
    */
-  function withType($type) {
+  public function withType($type) {
     return $this->update('type', $type);
   }
 
@@ -67,7 +67,7 @@ class WooCommerceProduct {
    * @param string $sku
    * @return $this
    */
-  function withSku($sku) {
+  public function withSku($sku) {
     return $this->update('sku', $sku);
   }
 
@@ -75,7 +75,7 @@ class WooCommerceProduct {
    * @param int $price
    * @return $this
    */
-  function withPrice($price) {
+  public function withPrice($price) {
     return $this->update('price', $price);
   }
 
@@ -83,7 +83,7 @@ class WooCommerceProduct {
    * @param array $ids
    * @return $this
    */
-  function withCategoryIds($ids) {
+  public function withCategoryIds($ids) {
     $ids = array_map(function($id){
       return ['id' => $id];
     }, $ids);
@@ -94,73 +94,73 @@ class WooCommerceProduct {
    * @param array $ids
    * @return $this
    */
-  function withTagIds($ids) {
+  public function withTagIds($ids) {
     $ids = array_map(function($id){
       return ['id' => $id];
     }, $ids);
-    return $this->update('tagIds', $id);
+    return $this->update('tagIds', $ids);
   }
 
   /**
    * @param array $images
    * @return $this
    */
-  function withImages($images) {
+  public function withImages($images) {
     $images = array_map(function($src){
       return ['src' => $src];
     }, $images);
     return $this->update('images', $images);
   }
 
-  function create() {
-    $create_command = "wc product create --porcelain --allow-root --user=admin";
-    $create_command .= " --name=\"{$this->data['name']}\"";
-    $create_command .= " --type=\"{$this->data['type']}\"";
-    $create_command .= " --regular_price={$this->data['price']}";
+  public function create() {
+    $createCommand = ['wc', 'product', 'create', '--porcelain', '--user=admin'];
+    $createCommand[] = "--name={$this->data['name']}";
+    $createCommand[] = "--type={$this->data['type']}";
+    $createCommand[] = "--regular_price={$this->data['price']}";
     if ($this->data['description']) {
-      $create_command .= " --description=\"{$this->data['description']}\"";
+      $createCommand[] = "--description={$this->data['description']}";
     }
     if ($this->data['shortDescription']) {
-      $create_command .= " --short_description=\"{$this->data['shortDescription']}\"";
+      $createCommand[] = "--short_description={$this->data['shortDescription']}";
     }
     if ($this->data['sku']) {
-      $create_command .= " --sku=\"{$this->data['sku']}\"";
+      $createCommand[] = "--sku={$this->data['sku']}";
     } else {
-      $create_command .= ' --sku="WC_PR_' . bin2hex(random_bytes(7)) . '"'; // phpcs:ignore
+      $create_command[] = '--sku=WC_PR_' . bin2hex(random_bytes(7)); // phpcs:ignore
     }
     if ($this->data['categoryIds']) {
-      $create_command .= " --categories='" . json_encode($this->data['categoryIds']) . "'";
+      $createCommand[] = '--categories=' . json_encode($this->data['categoryIds']);
     }
     if ($this->data['tagIds']) {
-      $create_command .= " --tags='" . json_encode($this->data['tagIds']) . "'";
+      $createCommand[] = '--tags=' . json_encode($this->data['tagIds']);
     }
     if ($this->data['images']) {
-      $create_command .= " --images='" . json_encode($this->data['images']) . "'";
+      $createCommand[] = '--images=' . json_encode($this->data['images']);
     }
-    $create_output = $this->tester->cliToArray($create_command);
-    $product_out = $this->tester->cliToArray("wc product get $create_output[0] --format=json --allow-root --user=admin");
-    return json_decode($product_out[0], true);
+    $createOutput = $this->tester->cliToArray($createCommand);
+    $productOut = $this->tester->cliToArray(['wc', 'product', 'get', $createOutput[0], '--format=json', '--user=admin']);
+    return json_decode($productOut[0], true);
   }
 
-  function createCategory($name) {
-    $create_output = $this->tester->cliToArray("wc product_cat create --porcelain --allow-root --user=admin --name=\"{$name}\"");
-    return $create_output[0];
+  public function createCategory($name) {
+    $createOutput = $this->tester->cliToArray(['wc', 'product_cat', 'create', '--porcelain', '--user=admin', "--name=$name"]);
+    return $createOutput[0];
   }
 
-  function createTag($name) {
-    $create_output = $this->tester->cliToArray("wc product_tag create --porcelain --allow-root --user=admin --name=\"{$name}\"");
-    return $create_output[0];
+  public function createTag($name) {
+    $createOutput = $this->tester->cliToArray(['wc', 'product_tag', 'create', '--porcelain', '--user=admin', "--name=$name"]);
+    return $createOutput[0];
   }
 
   /**
    * @param int $id
    */
-  function delete($id) {
-    $this->tester->cliToArray("wc product delete $id --force=1 --allow-root --user=admin");
+  public function delete($id) {
+    $this->tester->cliToArray(['wc', 'product', 'delete', $id, '--force=1', '--user=admin']);
   }
 
-  function deleteAll() {
-    $list = $this->tester->cliToArray("wc product list --format=json --allow-root --user=admin --fields=id");
+  public function deleteAll() {
+    $list = $this->tester->cliToArray(['wc', 'product', 'list', '--format=json', '--user=admin', '--fields=id']);
     foreach (json_decode($list[0], true) as $item) {
       $this->delete($item['id']);
     }

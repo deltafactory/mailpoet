@@ -21,20 +21,20 @@ class Subscriber {
   }
 
   /**
-   * @param string $first_name
+   * @param string $firstName
    * @return $this
    */
-  public function withFirstName($first_name) {
-    $this->data['first_name'] = $first_name;
+  public function withFirstName($firstName) {
+    $this->data['first_name'] = $firstName;
     return $this;
   }
 
   /**
-   * @param string $last_name
+   * @param string $lastName
    * @return $this
    */
-  public function withLastName($last_name) {
-    $this->data['last_name'] = $last_name;
+  public function withLastName($lastName) {
+    $this->data['last_name'] = $lastName;
     return $this;
   }
 
@@ -53,6 +53,15 @@ class Subscriber {
    */
   public function withStatus($status) {
     $this->data['status'] = $status;
+    return $this;
+  }
+
+  /**
+   * @param int $count
+   * @return $this
+   */
+  public function withCountConfirmations($count) {
+    $this->data['count_confirmations'] = $count;
     return $this;
   }
 
@@ -79,5 +88,4 @@ class Subscriber {
     }
     return $subscriber;
   }
-
 }

@@ -8,12 +8,12 @@ class RssSimpleNews {
   private $template_image_url;
   private $social_icon_url;
 
-  function __construct($assets_url) {
+  public function __construct($assets_url) {
     $this->template_image_url = 'https://ps.w.org/mailpoet/assets/newsletter-templates/rss-simple-news';
     $this->social_icon_url = $assets_url . '/img/newsletter_editor/social-icons';
   }
 
-  function get() {
+  public function get() {
     return [
       'name' => WPFunctions::get()->__("Stripped RSS Style Layout", 'mailpoet'),
       'categories' => json_encode(['notification', 'all']),
@@ -448,8 +448,8 @@ class RssSimpleNews {
                                  [
                                   'type' => 'text',
                                   'text' => '<p><span style="color: #808080;"><strong>RSS Simple</strong></span></p>
-<p><span style="color: #808080; font-size: 11px;"><strong><a href="[link:subscription_unsubscribe_url]">Unsubscribe</a><span>&nbsp;|&nbsp;</span><a href="[link:subscription_manage_url]">Manage subscription</a></strong></span></p>
-<p><span style="color: #808080; font-size: 11px;"><strong><span>Add your postal address here!</span></strong></span></p>',
+<p><span style="color: #808080; font-size: 11px;"><strong><a href="[link:subscription_unsubscribe_url]">'.WPFunctions::get()->__("Unsubscribe", 'mailpoet').'</a><span>&nbsp;|&nbsp;</span><a href="[link:subscription_manage_url]">'.WPFunctions::get()->__("Manage your subscription", 'mailpoet').'</a></strong></span></p>
+<p><span style="color: #808080; font-size: 11px;"><strong><span>'.WPFunctions::get()->__("Add your postal address here!", 'mailpoet').'</span></strong></span></p>',
                                  ],
                              ],
                          ],
@@ -686,7 +686,7 @@ class RssSimpleNews {
              ],
           'footer' =>
              [
-              'text' => '<p><a href="[link:subscription_unsubscribe_url]">Unsubscribe</a> | <a href="[link:subscription_manage_url]">Manage subscription</a><br />Add your postal address here!</p>',
+              'text' => '<p><a href="[link:subscription_unsubscribe_url]">'.WPFunctions::get()->__("Unsubscribe", 'mailpoet').'</a> | <a href="[link:subscription_manage_url]">'.WPFunctions::get()->__("Manage your subscription", 'mailpoet').'</a><br />'.WPFunctions::get()->__("Add your postal address here!", 'mailpoet').'</p>',
               'styles' =>
                  [
                   'block' =>
@@ -809,7 +809,7 @@ class RssSimpleNews {
              ],
           'header' =>
              [
-              'text' => 'Display problems?&nbsp;<a href="[link:newsletter_view_in_browser_url]">Open this email in your web browser.</a>',
+              'text' => '<a href="[link:newsletter_view_in_browser_url]">'.WPFunctions::get()->__("View this in your browser.", 'mailpoet').'</a>',
               'styles' =>
                  [
                   'block' =>

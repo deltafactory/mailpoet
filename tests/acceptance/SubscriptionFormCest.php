@@ -11,81 +11,116 @@ class SubscriptionFormCest {
   const CONFIRMATION_MESSAGE_TIMEOUT = 20;
 
   /** @var string */
-  private $subscriber_email;
+  private $subscriberEmail;
 
-  function __construct() {
-    $this->subscriber_email = 'test-form@example.com';
+  public function __construct() {
+    $this->subscriberEmail = 'test-form@example.com';
   }
 
-  function _before() {
+  public function _before(\AcceptanceTester $i) {
     $settings = new Settings();
     $settings
       ->withConfirmationEmailSubject()
       ->withConfirmationEmailBody()
       ->withConfirmationEmailEnabled();
+
+    $i->havePostInDatabase([
+      'post_author' => 1,
+      'post_type' => 'page',
+      'post_name' => 'form-test',
+      'post_title' => 'Form Test',
+      'post_content' => '
+        Regular form:
+          [mailpoet_form id="1"]
+        Iframe form:
+          <iframe class="mailpoet_form_iframe" id="mailpoet_form_iframe" tabindex="0" src="http://test.local?mailpoet_form_iframe=1" width="100%" height="100%" frameborder="0" marginwidth="0" marginheight="0" scrolling="no"></iframe>
+      ',
+      'post_status' => 'publish',
+    ]);
   }
 
-  function subscriptionFormWidget(\AcceptanceTester $I) {
-    $form_name = 'Subscription Acceptance Test Form';
-    $form_factory = new Form();
-    $form = $form_factory->withName($form_name)->create();
-    $I->wantTo('Subscribe using form widget');
+  public function subscriptionFormWidget(\AcceptanceTester $i) {
+    $formName = 'Subscription Acceptance Test Form';
+    $formFactory = new Form();
+    $form = $formFactory->withName($formName)->create();
+    $i->wantTo('Subscribe using form widget');
 
-    $I->cli('widget add mailpoet_form sidebar-1 2 --form=' . $form->id . ' --title="Subscribe to Our Newsletter" --allow-root');
+    $i->cli(['widget', 'add', 'mailpoet_form', 'sidebar-1', '2', "--form=$form->id", '--title=Subscribe to Our Newsletter']);
     //login to avoid time limit for subscribing
-    $I->login();
-    $I->amOnPage('/');
-    $I->fillField('[data-automation-id="form_email"]', $this->subscriber_email);
-    $I->click('.mailpoet_submit');
-    $I->waitForText('Check your inbox or spam folder to confirm your subscription.', self::CONFIRMATION_MESSAGE_TIMEOUT, '.mailpoet_validate_success');
-    $I->seeNoJSErrors();
-
-    $I->cli('widget reset sidebar-1 --allow-root');
+    $i->login();
+    $i->amOnPage('/');
+    $i->fillField('[data-automation-id="form_email"]', $this->subscriberEmail);
+    $i->click('.mailpoet_submit');
+    $i->waitForText('Check your inbox or spam folder to confirm your subscription.', self::CONFIRMATION_MESSAGE_TIMEOUT, '.mailpoet_validate_success');
+    $i->seeNoJSErrors();
   }
 
-  function subscriptionFormShortcode(\AcceptanceTester $I) {
-    $I->wantTo('Subscribe using form shortcode');
+  public function subscriptionFormShortcode(\AcceptanceTester $i) {
+    $i->wantTo('Subscribe using form shortcode');
 
-    $I->amOnPage('/form-test');
-    $I->fillField('[data-automation-id="form_email"]', $this->subscriber_email);
-    $I->scrollTo('.mailpoet_submit');
-    $I->click('.mailpoet_submit');
-    $I->waitForText('Check your inbox or spam folder to confirm your subscription.', self::CONFIRMATION_MESSAGE_TIMEOUT, '.mailpoet_validate_success');
-    $I->seeNoJSErrors();
-    $I->seeCurrentUrlEquals('/form-test/');
+    $i->amOnPage('/form-test');
+    $i->fillField('[data-automation-id="form_email"]', $this->subscriberEmail);
+    $i->scrollTo('.mailpoet_submit');
+    $i->click('.mailpoet_submit');
+    $i->waitForText('Check your inbox or spam folder to confirm your subscription.', self::CONFIRMATION_MESSAGE_TIMEOUT, '.mailpoet_validate_success');
+    $i->seeNoJSErrors();
+    $i->seeCurrentUrlEquals('/form-test/');
   }
 
-  function subscriptionFormIframe(\AcceptanceTester $I) {
-    $I->wantTo('Subscribe using iframe form');
+  public function subscriptionFormIframe(\AcceptanceTester $i) {
+    $i->wantTo('Subscribe using iframe form');
 
-    $I->amOnPage('/form-test');
-    $I->switchToIframe('mailpoet_form_iframe');
-    $I->fillField('[data-automation-id="form_email"]', $this->subscriber_email);
-    $I->click('.mailpoet_submit');
-    $I->waitForText('Check your inbox or spam folder to confirm your subscription.', self::CONFIRMATION_MESSAGE_TIMEOUT, '.mailpoet_validate_success');
-    $I->seeNoJSErrors();
+    $i->amOnPage('/form-test');
+    $i->executeJS('window.scrollTo(0, document.body.scrollHeight);');
+    $i->switchToIframe('#mailpoet_form_iframe');
+    $i->fillField('[data-automation-id="form_email"]', $this->subscriberEmail);
+    $i->scrollTo('.mailpoet_submit');
+    $i->click('.mailpoet_submit');
+    $i->waitForText('Check your inbox or spam folder to confirm your subscription.', self::CONFIRMATION_MESSAGE_TIMEOUT, '.mailpoet_validate_success');
+    $i->seeNoJSErrors();
   }
 
   /**
    * @depends subscriptionFormWidget
    */
-  function subscriptionConfirmation(\AcceptanceTester $I) {
-    $I->amOnMailboxAppPage();
-    $I->click(Locator::contains('span.subject', 'Confirm your subscription'));
-    $I->switchToIframe('preview-html');
-    $I->click('Click here to confirm your subscription');
-    $I->switchToNextTab();
-    $I->see('You have subscribed');
-    $I->seeNoJSErrors();
+  public function subscriptionConfirmation(\AcceptanceTester $i) {
+    $i->amOnPage('/form-test');
+    $i->fillField('[data-automation-id="form_email"]', $this->subscriberEmail);
+    $i->scrollTo('.mailpoet_submit');
+    $i->click('.mailpoet_submit');
+    $i->waitForText('Check your inbox or spam folder to confirm your subscription.', self::CONFIRMATION_MESSAGE_TIMEOUT, '.mailpoet_validate_success');
 
-    $I->amOnUrl(\AcceptanceTester::WP_URL);
-    $I->login();
-    $I->amOnMailpoetPage('Subscribers');
-    $I->waitForText($this->subscriber_email);
-    $I->see('Subscribed', Locator::contains('tr', $this->subscriber_email));
+    $i->checkEmailWasReceived('Confirm your subscription');
+    $i->click(Locator::contains('span.subject', 'Confirm your subscription'));
+    $i->switchToIframe('#preview-html');
+    $i->click('I confirm my subscription!');
+    $i->switchToNextTab();
+    $i->see('You have subscribed');
+    $i->seeNoJSErrors();
+
+    $i->amOnUrl(\AcceptanceTester::WP_URL);
+    $i->login();
+    $i->amOnMailpoetPage('Subscribers');
+    $i->waitForText($this->subscriberEmail);
+    $i->see('Subscribed', Locator::contains('tr', $this->subscriberEmail));
   }
 
-  function _after(\AcceptanceTester $I) {
-    $I->cli('db query "TRUNCATE TABLE mp_mailpoet_subscriber_ips" --allow-root');
+  public function subscriptionAfterDisablingConfirmation(\AcceptanceTester $i) {
+    $i->wantTo('Disable sign-up confirmation then subscribe and see a different message');
+    $i->login();
+    $i->amOnMailPoetPage('Settings');
+    $i->click('[data-automation-id="signup_settings_tab"]');
+    $i->waitForText('Enable sign-up confirmation');
+    $i->click('[data-automation-id="disable_signup_confirmation"]');
+    $i->acceptPopup();
+    $i->click('[data-automation-id="settings-submit-button"]');
+    $i->waitForText('Settings saved');
+    $i->amOnPage('/form-test');
+    $i->scrollTo('.mailpoet_form_iframe');
+    $i->switchToIframe('#mailpoet_form_iframe');
+    $i->fillField('[data-automation-id="form_email"]', $this->subscriberEmail);
+    $i->click('.mailpoet_submit');
+    $i->waitForText("You’ve been successfully subscribed to our newsletter!", self::CONFIRMATION_MESSAGE_TIMEOUT, '.mailpoet_validate_success');
+    $i->seeNoJSErrors();
   }
 }

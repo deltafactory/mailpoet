@@ -2,95 +2,83 @@
 
 namespace MailPoet\Test\Acceptance;
 
-use Carbon\Carbon;
+use Codeception\Scenario;
 use MailPoet\Test\DataFactories\Newsletter;
 use MailPoet\Test\DataFactories\Settings;
+use MailPoetVendor\Carbon\Carbon;
 
 class AuthorizedEmailAddressesValidationCest {
-  function authorizedEmailsValidation(\AcceptanceTester $I) {
-    $unauthorized_sending_email = 'unauthorized1@email.com';
-    $unauthorized_confirmation_email = 'unauthorized2@email.com';
-    $error_message_prefix = 'Sending all of your emails has been paused because your email address ';
-    $error_notice_element = '[data-notice="unauthorized-email-addresses-notice"]';
+  public function _before(\AcceptanceTester $i, Scenario $scenario) {
+    if (!getenv('WP_TEST_MAILER_MAILPOET_API')) {
+      $scenario->skip("Skipping, 'WP_TEST_MAILER_MAILPOET_API' not set.");
+    }
+  }
+
+  public function authorizedEmailsValidation(\AcceptanceTester $i) {
+    $unauthorizedSendingEmail = 'unauthorized1@email.com';
+    $errorMessagePrefix = 'Sending all of your emails has been paused because your email address ';
+    $errorNoticeElement = '[data-notice="unauthorized-email-addresses-notice"]';
     $settings = new Settings();
     $settings->withSendingMethodMailPoet();
     $settings->withInstalledAt(new Carbon('2019-03-07'));
-    $I->wantTo('Check that emails are validated on setting change');
-    $I->login();
-    $I->amOnMailPoetPage('Settings');
-    $I->cantSee($error_message_prefix);
+    $i->wantTo('Check that emails are validated on setting change');
+    $i->login();
+    $i->amOnMailPoetPage('Settings');
+    $i->cantSee($errorMessagePrefix);
 
-    // Both default sender and confirmation emails are invalid
-    $I->fillField('[data-automation-id="settings-page-from-email-field"]', $unauthorized_sending_email);
-    $I->click('[data-automation-id="signup_settings_tab"]');
-    $I->fillField('[data-automation-id="signup_confirmation_email_from_email"]', $unauthorized_confirmation_email);
-    $I->click('[data-automation-id="settings-submit-button"]');
-    $I->waitForText('Settings saved');
-    $I->reloadPage();
-    $I->canSee($error_message_prefix, $error_notice_element);
-    $I->canSee($unauthorized_sending_email, $error_notice_element);
-    $I->canSee($unauthorized_confirmation_email, $error_notice_element);
+    // default sender is invalid
+    $i->fillField('[data-automation-id="from-email-field"]', $unauthorizedSendingEmail);
+    $i->click('[data-automation-id="settings-submit-button"]');
+    $i->waitForText('Settings saved');
+    $i->reloadPage();
+    $i->canSee($errorMessagePrefix, $errorNoticeElement);
+    $i->canSee($unauthorizedSendingEmail, $errorNoticeElement);
 
-    // Only confirmation email is invalid after default sender is fixed
-    $I->click('[data-automation-id="basic_settings_tab"]');
-    $I->fillField('[data-automation-id="settings-page-from-email-field"]', \AcceptanceTester::AUTHORIZED_SENDING_EMAIL);
-    $I->click('[data-automation-id="signup_settings_tab"]');
-    $I->fillField('[data-automation-id="signup_confirmation_email_from_email"]', $unauthorized_confirmation_email);
-    $I->click('[data-automation-id="settings-submit-button"]');
-    $I->waitForText('Settings saved');
-    $I->reloadPage();
-    $I->canSee($error_message_prefix, $error_notice_element);
-    $I->canSee($unauthorized_confirmation_email, $error_notice_element);
-    $I->cantSee($unauthorized_sending_email, $error_notice_element);
-
-    // Error message disappears after both emails are replaced with authorized emails
-    $I->click('[data-automation-id="signup_settings_tab"]');
-    $I->fillField('[data-automation-id="signup_confirmation_email_from_email"]', \AcceptanceTester::AUTHORIZED_SENDING_EMAIL);
-    $I->click('[data-automation-id="settings-submit-button"]');
-    $I->waitForText('Settings saved');
-    $I->reloadPage();
-    $I->cantSee($error_message_prefix);
-    $settings->withSendingMethodSmtpMailhog();
+    // Error message disappears after email is replaced with authorized email
+    $i->fillField('[data-automation-id="from-email-field"]', \AcceptanceTester::AUTHORIZED_SENDING_EMAIL);
+    $i->click('[data-automation-id="settings-submit-button"]');
+    $i->waitForText('Settings saved');
+    $i->reloadPage();
+    $i->cantSee($errorMessagePrefix);
   }
 
-  function authorizedEmailsInNewslettersValidation(\AcceptanceTester $I) {
+  public function authorizedEmailsInNewslettersValidation(\AcceptanceTester $i) {
     $subject = 'Subject Unauthorized Welcome Email';
     (new Newsletter())->withSubject($subject)
       ->withActiveStatus()
-      ->withWelcomeType()
+      ->withWelcomeTypeForSegment()
       ->withSenderAddress('unauthorized1@email.com')
       ->create();
     $settings = new Settings();
     $settings->withSendingMethodMailPoet();
     $settings->withInstalledAt(new Carbon('2019-03-07'));
-    $I->wantTo('Check that emails are validated on setting change');
-    $I->login();
+    $i->wantTo('Check that emails are validated on setting change');
+    $i->login();
 
     // Save settings to trigger initial validation
-    $I->amOnMailPoetPage('Settings');
-    $I->click('[data-automation-id="settings-submit-button"]');
-    $I->waitForText('Settings saved');
+    $i->amOnMailPoetPage('Settings');
+    $i->click('[data-automation-id="settings-submit-button"]');
+    $i->waitForText('Settings saved');
 
     // Error notice is visible
-    $I->amOnMailPoetPage('Emails');
-    $update_link_text = 'Update the from address of ' . $subject;
-    $I->waitForText('Your automatic emails have been paused, because some email addresses haven’t been authorized yet.');
-    $I->waitForText($update_link_text);
+    $i->amOnMailPoetPage('Emails');
+    $updateLinkText = 'Update the from address of ' . $subject;
+    $i->waitForText('Your automatic emails have been paused because some email addresses haven’t been authorized yet.');
+    $i->waitForText($updateLinkText);
 
     // Setting the correct address will fix the error
-    $I->click($update_link_text);
-    $I->switchToNextTab();
-    $I->waitForElement('[name="sender_address"]');
-    $I->fillField('[name="sender_address"]', \AcceptanceTester::AUTHORIZED_SENDING_EMAIL);
-    $I->click('Activate');
-    $I->waitForListingItemsToLoad();
-    $I->cantSee('Your automatic emails have been paused, because some email addresses haven’t been authorized yet.');
-    $I->cantSee('Update the from address of Subject 1');
-    $settings->withSendingMethodSmtpMailhog();
+    $i->click($updateLinkText);
+    $i->switchToNextTab();
+    $i->waitForElement('[name="sender_address"]');
+    $i->fillField('[name="sender_address"]', \AcceptanceTester::AUTHORIZED_SENDING_EMAIL);
+    $i->click('Activate');
+    $i->waitForListingItemsToLoad();
+    $i->cantSee('Your automatic emails have been paused because some email addresses haven’t been authorized yet.');
+    $i->cantSee('Update the from address of Subject 1');
   }
 
-  function validationBeforeSendingNewsletter(\AcceptanceTester $I) {
-    $I->wantTo('Validate from address before sending newsletter');
+  public function validationBeforeSendingNewsletter(\AcceptanceTester $i) {
+    $i->wantTo('Validate from address before sending newsletter');
 
     $settings = new Settings();
     $settings->withSendingMethodMailPoet();
@@ -99,15 +87,13 @@ class AuthorizedEmailAddressesValidationCest {
         ->withSubject('Invalid from address')
         ->create();
 
-    $I->login();
-    $I->amEditingNewsletter($newsletter->id);
-    $I->click('Next');
-    $I->waitForText('Sender');
-    $I->fillField('[name="sender_address"]', 'unauthorized@email.com');
-    $I->selectOptionInSelect2('WordPress Users');
-    $I->click('Send');
-    $I->waitForElement('.parsley-invalidFromAddress');
-
-    $settings->withSendingMethodSmtpMailhog();
+    $i->login();
+    $i->amEditingNewsletter($newsletter->id);
+    $i->click('Next');
+    $i->waitForText('Sender');
+    $i->fillField('[name="sender_address"]', 'unauthorized@email.com');
+    $i->selectOptionInSelect2('WordPress Users');
+    $i->click('Send');
+    $i->waitForElement('.parsley-invalidFromAddress');
   }
 }

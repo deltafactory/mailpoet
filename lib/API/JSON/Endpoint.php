@@ -5,21 +5,24 @@ namespace MailPoet\API\JSON;
 use MailPoet\Config\AccessControl;
 use MailPoet\WP\Functions as WPFunctions;
 
-if (!defined('ABSPATH')) exit;
-
 abstract class Endpoint {
+  const TYPE_POST = 'POST';
+  const TYPE_GET = 'GET';
+
   public $permissions = [
     'global' => AccessControl::PERMISSION_MANAGE_SETTINGS,
     'methods' => [],
   ];
 
-  function successResponse(
+  protected static $getMethods = [];
+
+  public function successResponse(
     $data = [], $meta = [], $status = Response::STATUS_OK
   ) {
     return new SuccessResponse($data, $meta, $status);
   }
 
-  function errorResponse(
+  public function errorResponse(
     $errors = [], $meta = [], $status = Response::STATUS_NOT_FOUND
   ) {
     if (empty($errors)) {
@@ -30,12 +33,21 @@ abstract class Endpoint {
     return new ErrorResponse($errors, $meta, $status);
   }
 
-  function badRequest($errors = [], $meta = []) {
+  public function badRequest($errors = [], $meta = []) {
     if (empty($errors)) {
       $errors = [
         Error::BAD_REQUEST => WPFunctions::get()->__('Invalid request parameters', 'mailpoet'),
       ];
     }
     return new ErrorResponse($errors, $meta, Response::STATUS_BAD_REQUEST);
+  }
+
+  public function isMethodAllowed($name, $type) {
+    // Block GET requests on POST endpoints, but allow POST requests on GET endpoints (some plugins
+    // change REQUEST_METHOD to POST on GET requests, which caused them to be blocked)
+    if ($type === self::TYPE_GET && !in_array($name, static::$getMethods)) {
+      return false;
+    }
+    return true;
   }
 }

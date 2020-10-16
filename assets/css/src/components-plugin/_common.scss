@@ -1,0 +1,81 @@
+.clearfix {
+  @include clearfix();
+}
+
+.relative-holder {
+  position: relative;
+}
+
+a:focus {
+  outline: 0 none !important;
+}
+
+.nav-tab:focus {
+  box-shadow: none;
+}
+
+.mailpoet_success {
+  color: #090;
+}
+
+.mailpoet_error {
+  color: #900;
+}
+
+.mailpoet_hidden {
+  display: none;
+}
+
+.mailpoet_spaced_block {
+  margin: 1em 0;
+}
+
+.mailpoet_centered {
+  text-align: center;
+}
+
+/* double class is intentional here, we need to be very specific here to
+   something wrapping our warning message could override its style */
+p.sender_email_address_warning.sender_email_address_warning,
+p.sender_email_address_warning.sender_email_address_warning a {
+  align-self: flex-start;
+  color: #900;
+  text-align: left;
+}
+
+p.sender_email_address_warning:first-child {
+  margin-top: 1em;
+}
+
+.button.mailpoet-button-bigger {
+  font-size: 1.5em;
+  height: 46px;
+  padding: 10px 18px;
+}
+
+// Fix for select 2 placeholder padding rendering issue in Chrome
+.select2-container .select2-search--inline,
+.select2-container .select2-search--inline .select2-search__field {
+  max-width: 100%;
+}
+
+.widefat {
+  margin-bottom: $grid-gap;
+}
+
+.mailpoet_subscribers_in_plan {
+  font-size: 18px;
+  margin-bottom: 1em;
+  margin-top: 1em;
+
+  .mailpoet_subscribers_in_plan_spacer {
+    display: inline-block;
+    width: 20px;
+  }
+
+  .tooltip {
+    position: relative;
+    top: -1px;
+    vertical-align: middle;
+  }
+}

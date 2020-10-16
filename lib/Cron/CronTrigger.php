@@ -1,40 +1,56 @@
 <?php
+
 namespace MailPoet\Cron;
 
+use MailPoet\Cron\Triggers\MailPoet;
+use MailPoet\Cron\Triggers\WordPress;
 use MailPoet\Settings\SettingsController;
 
-if (!defined('ABSPATH')) exit;
-
 class CronTrigger {
-  /** @var SettingsController */
-  private $settings;
+  const METHOD_LINUX_CRON = 'Linux Cron';
+  const METHOD_MAILPOET = 'MailPoet';
+  const METHOD_WORDPRESS = 'WordPress';
 
-  public static $available_methods = [
-    'mailpoet' => 'MailPoet',
-    'wordpress' => 'WordPress',
-    'linux_cron' => 'Linux Cron',
+  const METHODS = [
+    'mailpoet' => self::METHOD_MAILPOET,
+    'wordpress' => self::METHOD_WORDPRESS,
+    'linux_cron' => self::METHOD_LINUX_CRON,
     'none' => 'Disabled',
   ];
+
   const DEFAULT_METHOD = 'WordPress';
   const SETTING_NAME = 'cron_trigger';
 
-  function __construct(SettingsController $settings) {
+  /** @var MailPoet */
+  private $mailpoetTrigger;
+
+  /** @var WordPress */
+  private $wordpressTrigger;
+
+  /** @var SettingsController */
+  private $settings;
+
+  public function __construct(
+    MailPoet $mailpoetTrigger,
+    WordPress $wordpressTrigger,
+    SettingsController $settings
+  ) {
+    $this->mailpoetTrigger = $mailpoetTrigger;
+    $this->wordpressTrigger = $wordpressTrigger;
     $this->settings = $settings;
   }
 
-  function init() {
-    $current_method = $this->settings->get(self::SETTING_NAME . '.method');
+  public function init() {
+    $currentMethod = $this->settings->get(self::SETTING_NAME . '.method');
     try {
-      $trigger_class = __NAMESPACE__ . '\Triggers\\' . $current_method;
-      return (class_exists($trigger_class)) ?
-        $trigger_class::run() :
-        false;
+      if ($currentMethod === self::METHOD_MAILPOET) {
+        return $this->mailpoetTrigger->run();
+      } elseif ($currentMethod === self::METHOD_WORDPRESS) {
+        return $this->wordpressTrigger->run();
+      }
+      return false;
     } catch (\Exception $e) {
       // cron exceptions should not prevent the rest of the site from loading
     }
-  }
-
-  static function getAvailableMethods() {
-    return self::$available_methods;
   }
 }

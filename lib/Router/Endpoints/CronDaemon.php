@@ -6,14 +6,12 @@ use MailPoet\Config\AccessControl;
 use MailPoet\Cron\CronHelper;
 use MailPoet\Cron\DaemonHttpRunner;
 
-if (!defined('ABSPATH')) exit;
-
 class CronDaemon {
   const ENDPOINT = 'cron_daemon';
   const ACTION_RUN = 'run';
   const ACTION_PING = 'ping';
   const ACTION_PING_RESPONSE = 'pingResponse';
-  public $allowed_actions = [
+  public $allowedActions = [
     self::ACTION_RUN,
     self::ACTION_PING,
     self::ACTION_PING_RESPONSE,
@@ -24,21 +22,25 @@ class CronDaemon {
   ];
 
   /** @var DaemonHttpRunner */
-  private $daemon_runner;
+  private $daemonRunner;
 
-  function __construct(DaemonHttpRunner $daemon_runner) {
-    $this->daemon_runner = $daemon_runner;
+  /** @var CronHelper */
+  private $cronHelper;
+
+  public function __construct(DaemonHttpRunner $daemonRunner, CronHelper $cronHelper) {
+    $this->daemonRunner = $daemonRunner;
+    $this->cronHelper = $cronHelper;
   }
 
-  function run($data) {
-    $this->daemon_runner->run($data);
+  public function run($data) {
+    $this->daemonRunner->run($data);
   }
 
-  function ping() {
-     die(CronHelper::pingDaemon());
+  public function ping() {
+     die($this->cronHelper->pingDaemon());
   }
 
-  function pingResponse() {
-    $this->daemon_runner->ping();
+  public function pingResponse() {
+    $this->daemonRunner->ping();
   }
 }

@@ -13,12 +13,12 @@ class NewsletterClicksExporterTest extends \MailPoetTest {
   /** @var NewsletterClicksExporter */
   private $exporter;
 
-  function _before() {
+  public function _before() {
     parent::_before();
     $this->exporter = new NewsletterClicksExporter();
   }
 
-  function testExportWorksWhenSubscriberNotFound() {
+  public function testExportWorksWhenSubscriberNotFound() {
     $result = $this->exporter->export('email.that@doesnt.exists');
     expect($result)->internalType('array');
     expect($result)->hasKey('data');
@@ -27,7 +27,7 @@ class NewsletterClicksExporterTest extends \MailPoetTest {
     expect($result['done'])->equals(true);
   }
 
-  function testExportWorksForSubscriberWithNoNewsletters() {
+  public function testExportWorksForSubscriberWithNoNewsletters() {
     Subscriber::createOrUpdate([
       'email' => 'email.that@has.no.newsletters',
     ]);
@@ -39,7 +39,7 @@ class NewsletterClicksExporterTest extends \MailPoetTest {
     expect($result['done'])->equals(true);
   }
 
-  function testExportReturnsData() {
+  public function testExportReturnsData() {
     $subscriber = Subscriber::createOrUpdate([
       'email' => 'email@with.clicks',
     ]);
@@ -78,5 +78,4 @@ class NewsletterClicksExporterTest extends \MailPoetTest {
     expect($result['data'][0]['data'])->contains(['name' => 'URL', 'value' => 'Link url']);
     expect($result['data'][0]['data'])->contains(['name' => 'Timestamp of the click event', 'value' => '2018-01-02 15:16:17']);
   }
-
 }

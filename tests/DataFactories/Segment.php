@@ -2,7 +2,7 @@
 
 namespace MailPoet\Test\DataFactories;
 
-use Carbon\Carbon;
+use MailPoetVendor\Carbon\Carbon;
 
 class Segment {
 
@@ -44,5 +44,4 @@ class Segment {
   public function create() {
     return \MailPoet\Models\Segment::createOrUpdate($this->data);
   }
-
 }

@@ -1,50 +1,51 @@
 <?php
+
 namespace MailPoet\Newsletter\Shortcodes\Categories;
 
 use MailPoet\Models\Subscriber as SubscriberModel;
 use MailPoet\Models\SubscriberCustomField;
 use MailPoet\WP\Functions as WPFunctions;
 
-if (!defined('ABSPATH')) exit;
-
 class Subscriber {
   /**
    * @param \MailPoet\Models\Subscriber|false|mixed $subscriber
    */
-  static function process(
-    $shortcode_details,
+  public static function process(
+    $shortcodeDetails,
     $newsletter,
     $subscriber
   ) {
-    if ($subscriber !== false && !is_object($subscriber)) return $shortcode_details['shortcode'];
-    $default_value = ($shortcode_details['action_argument'] === 'default') ?
-      $shortcode_details['action_argument_value'] :
+    if ($subscriber !== false && !($subscriber instanceof SubscriberModel)) {
+      return $shortcodeDetails['shortcode'];
+    }
+    $defaultValue = ($shortcodeDetails['action_argument'] === 'default') ?
+      $shortcodeDetails['action_argument_value'] :
       '';
-    switch ($shortcode_details['action']) {
+    switch ($shortcodeDetails['action']) {
       case 'firstname':
-        return (!empty($subscriber->first_name)) ? $subscriber->first_name : $default_value;
+        return (!empty($subscriber->firstName)) ? $subscriber->firstName : $defaultValue;
       case 'lastname':
-        return (!empty($subscriber->last_name)) ? $subscriber->last_name : $default_value;
+        return (!empty($subscriber->lastName)) ? $subscriber->lastName : $defaultValue;
       case 'email':
         return ($subscriber) ? $subscriber->email : false;
       case 'displayname':
-        if ($subscriber && $subscriber->wp_user_id) {
-          $wp_user = WPFunctions::get()->getUserdata($subscriber->wp_user_id);
-          return $wp_user->user_login;
+        if ($subscriber && $subscriber->wpUserId) {
+          $wpUser = WPFunctions::get()->getUserdata($subscriber->wpUserId);
+          return $wpUser->user_login; // phpcs:ignore Squiz.NamingConventions.ValidVariableName.NotCamelCaps
         }
-        return $default_value;
+        return $defaultValue;
       case 'count':
         return SubscriberModel::filter('subscribed')
           ->count();
       default:
-        if (preg_match('/cf_(\d+)/', $shortcode_details['action'], $custom_field) &&
+        if (preg_match('/cf_(\d+)/', $shortcodeDetails['action'], $customField) &&
           !empty($subscriber->id)
         ) {
-          $custom_field = SubscriberCustomField
+          $customField = SubscriberCustomField
             ::where('subscriber_id', $subscriber->id)
-            ->where('custom_field_id', $custom_field[1])
+            ->where('custom_field_id', $customField[1])
             ->findOne();
-          return ($custom_field) ? $custom_field->value : false;
+          return ($customField instanceof SubscriberCustomField) ? $customField->value : false;
         }
         return false;
     }

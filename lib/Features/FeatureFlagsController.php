@@ -2,41 +2,49 @@
 
 namespace MailPoet\Features;
 
-use MailPoet\Models\FeatureFlag;
-use function MailPoet\Util\array_column;
+use MailPoet\Entities\FeatureFlagEntity;
 
 class FeatureFlagsController {
-  /** @var FeaturesController */
-  private $features_controller;
 
-  function __construct(FeaturesController $features_controller) {
-    $this->features_controller = $features_controller;
+  /** @var FeaturesController */
+  private $featuresController;
+
+  /** @var FeatureFlagsRepository */
+  private $featureFlagsRepository;
+
+  public function __construct(FeaturesController $featuresController, FeatureFlagsRepository $featureFlagsRepository) {
+    $this->featuresController = $featuresController;
+    $this->featureFlagsRepository = $featureFlagsRepository;
   }
 
-  function set($name, $value) {
-    if (!$this->features_controller->exists($name)) {
+  public function set($name, $value) {
+    if (!$this->featuresController->exists($name)) {
       throw new \RuntimeException("Feature '$name' does not exist'");
     }
 
-    $result = FeatureFlag::createOrUpdate([
-      'name' => $name,
-      'value' => $value ,
-    ]);
-
-    if ($result->getErrors()) {
-      throw new \RuntimeException("Error when saving feature '$name''");
-    }
+    $this->featureFlagsRepository->createOrUpdate(['name' => $name, 'value' => $value]);
   }
 
-  function getAll() {
-    $flags = FeatureFlag::findArray();
-    $flagsMap = array_combine(array_column($flags, 'name'), $flags);
+  public function getAll() {
+    $flags = $this->featureFlagsRepository->findAll();
+    $flagsMap = array_combine(
+      array_map(
+        function (FeatureFlagEntity $flag) {
+          return $flag->getName();
+        },
+        $flags
+      ),
+      $flags
+    );
+    if ($flagsMap === false) {
+      $flagsMap = [];
+    }
 
     $output = [];
-    foreach ($this->features_controller->getDefaults() as $name => $default) {
+    foreach ($this->featuresController->getDefaults() as $name => $default) {
       $output[] = [
         'name' => $name,
-        'value' => isset($flagsMap[$name]) ? (bool)$flagsMap[$name]['value'] : $default,
+        'value' => isset($flagsMap[$name]) ? (bool)$flagsMap[$name]->getValue() : $default,
         'default' => $default,
       ];
     }

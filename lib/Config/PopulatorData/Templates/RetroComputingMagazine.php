@@ -8,12 +8,12 @@ class RetroComputingMagazine {
   private $template_image_url;
   private $social_icon_url;
 
-  function __construct($assets_url) {
+  public function __construct($assets_url) {
     $this->template_image_url = 'https://ps.w.org/mailpoet/assets/newsletter-templates/retro_computing_magazine';
     $this->social_icon_url = $assets_url . '/img/newsletter_editor/social-icons';
   }
 
-  function get() {
+  public function get() {
     return [
       'name' => WPFunctions::get()->__("Retro Computing Magazine", 'mailpoet'),
       'categories' => json_encode(['standard', 'all']),
@@ -160,7 +160,7 @@ class RetroComputingMagazine {
                               0 =>
                                  [
                                   'type' => 'header',
-                                  'text' => '<p><span style="color: #ffffff;">Display problems? <a href="[link:newsletter_view_in_browser_url]" style="color: #ffffff;">Open this email in your web browser.</a></span></p>',
+                                  'text' => '<p><span style="color: #ffffff;"><a href="[link:newsletter_view_in_browser_url]" style="color: #ffffff;">'.WPFunctions::get()->__("View this in your browser.", 'mailpoet').'</a></span></p>',
                                   'styles' =>
                                      [
                                       'block' =>
@@ -589,7 +589,7 @@ class RetroComputingMagazine {
                               3 =>
                                  [
                                   'type' => 'footer',
-                                  'text' => '<p><a href="[link:subscription_unsubscribe_url]">Unsubscribe</a> | <a href="[link:subscription_manage_url]">Manage your subscription</a><br />Add your postal address here!</p>',
+                                  'text' => '<p><a href="[link:subscription_unsubscribe_url]">'.WPFunctions::get()->__("Unsubscribe", 'mailpoet').'</a> | <a href="[link:subscription_manage_url]">'.WPFunctions::get()->__("Manage your subscription", 'mailpoet').'</a><br />'.WPFunctions::get()->__("Add your postal address here!", 'mailpoet').'</p>',
                                   'styles' =>
                                      [
                                       'block' =>

@@ -8,8 +8,6 @@ use MailPoet\Config\AccessControl;
 use MailPoet\Features\FeatureFlagsController;
 use MailPoet\Features\FeaturesController;
 
-if (!defined('ABSPATH')) exit;
-
 class FeatureFlags extends APIEndpoint {
 
   public $permissions = [
@@ -17,24 +15,24 @@ class FeatureFlags extends APIEndpoint {
   ];
 
   /** @var FeaturesController */
-  private $features_controller;
+  private $featuresController;
 
   /** @var FeatureFlagsController */
-  private $feature_flags_controller;
+  private $featureFlagsController;
 
-  function __construct(FeaturesController $features_controller, FeatureFlagsController $feature_flags) {
-    $this->features_controller = $features_controller;
-    $this->feature_flags_controller = $feature_flags;
+  public function __construct(FeaturesController $featuresController, FeatureFlagsController $featureFlags) {
+    $this->featuresController = $featuresController;
+    $this->featureFlagsController = $featureFlags;
   }
 
-  function getAll() {
-    $feature_flags = $this->feature_flags_controller->getAll();
-    return $this->successResponse($feature_flags);
+  public function getAll() {
+    $featureFlags = $this->featureFlagsController->getAll();
+    return $this->successResponse($featureFlags);
   }
 
-  function set(array $flags) {
+  public function set(array $flags) {
     foreach ($flags as $name => $value) {
-      if (!$this->features_controller->exists($name)) {
+      if (!$this->featuresController->exists($name)) {
         return $this->badRequest([
           APIError::BAD_REQUEST => "Feature '$name' does not exist'",
         ]);
@@ -42,7 +40,7 @@ class FeatureFlags extends APIEndpoint {
     }
 
     foreach ($flags as $name => $value) {
-      $this->feature_flags_controller->set($name, (bool)$value);
+      $this->featureFlagsController->set($name, (bool)$value);
     }
     return $this->successResponse([]);
   }

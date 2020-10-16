@@ -1,13 +1,13 @@
 <?php
+
 namespace MailPoet\Models;
 
+use MailPoet\Util\Helpers;
 use MailPoet\WP\Functions as WPFunctions;
 
-if (!defined('ABSPATH')) exit;
-
 /**
- * @property int $task_id
- * @property int $subscriber_id
+ * @property int $taskId
+ * @property int $subscriberId
  * @property int $processed
  * @property int $failed
  * @property string $error
@@ -23,14 +23,14 @@ class ScheduledTaskSubscriber extends Model {
   const SENDING_STATUS_FAILED = 'failed';
   const SENDING_STATUS_UNPROCESSED = 'unprocessed';
 
-  public static $_table = MP_SCHEDULED_TASK_SUBSCRIBERS_TABLE;
-  public static $_id_column = ['task_id', 'subscriber_id'];
+  public static $_table = MP_SCHEDULED_TASK_SUBSCRIBERS_TABLE; // phpcs:ignore PSR2.Classes.PropertyDeclaration
+  public static $_id_column = ['task_id', 'subscriber_id']; // phpcs:ignore Squiz.NamingConventions.ValidVariableName.MemberNotCamelCaps,PSR2.Classes.PropertyDeclaration
 
-  function task() {
+  public function task() {
     return $this->hasOne(__NAMESPACE__ . '\ScheduledTask', 'id', 'task_id');
   }
 
-  static function createOrUpdate($data = []) {
+  public static function createOrUpdate($data = []) {
     if (!is_array($data) || empty($data['task_id']) || empty($data['subscriber_id'])) {
       return;
     }
@@ -42,42 +42,42 @@ class ScheduledTaskSubscriber extends Model {
     ]);
   }
 
-  static function setSubscribers($task_id, array $subscriber_ids) {
-    static::clearSubscribers($task_id);
-    return static::addSubscribers($task_id, $subscriber_ids);
+  public static function setSubscribers($taskId, array $subscriberIds) {
+    static::clearSubscribers($taskId);
+    return static::addSubscribers($taskId, $subscriberIds);
   }
 
   /**
    * For large batches use MailPoet\Segments\SubscribersFinder::addSubscribersToTaskFromSegments()
    */
-  static function addSubscribers($task_id, array $subscriber_ids) {
-    foreach ($subscriber_ids as $subscriber_id) {
+  public static function addSubscribers($taskId, array $subscriberIds) {
+    foreach ($subscriberIds as $subscriberId) {
       self::createOrUpdate([
-        'task_id' => $task_id,
-        'subscriber_id' => $subscriber_id,
+        'task_id' => $taskId,
+        'subscriber_id' => $subscriberId,
       ]);
     }
   }
 
-  static function clearSubscribers($task_id) {
-    return self::where('task_id', $task_id)->deleteMany();
+  public static function clearSubscribers($taskId) {
+    return self::where('task_id', $taskId)->deleteMany();
   }
 
-  static function getUnprocessedCount($task_id) {
-    return self::getCount($task_id, self::STATUS_UNPROCESSED);
+  public static function getUnprocessedCount($taskId) {
+    return self::getCount($taskId, self::STATUS_UNPROCESSED);
   }
 
-  static function getProcessedCount($task_id) {
-    return self::getCount($task_id, self::STATUS_PROCESSED);
+  public static function getProcessedCount($taskId) {
+    return self::getCount($taskId, self::STATUS_PROCESSED);
   }
 
-  static function getTotalCount($task_id) {
-    return self::getCount($task_id);
+  public static function getTotalCount($taskId) {
+    return self::getCount($taskId);
   }
 
-  static function listingQuery($data) {
+  public static function listingQuery($data) {
     $group = isset($data['group']) ? $data['group'] : 'all';
-    return self::join(Subscriber::$_table, ["subscriber_id", "=", "subscribers.id"], "subscribers")
+    $query = self::join(Subscriber::$_table, ["subscriber_id", "=", "subscribers.id"], "subscribers")
       ->filter($group, $data['params'])
       ->select('error', 'error')
       ->select('failed', 'failed')
@@ -87,9 +87,22 @@ class ScheduledTaskSubscriber extends Model {
       ->select('subscribers.id', 'subscriberId')
       ->select('subscribers.last_name', 'lastName')
       ->select('subscribers.first_name', 'firstName');
+    if (isset($data['search'])) {
+      $search = trim($data['search']);
+      $search = Helpers::escapeSearch($search);
+      if (strlen($search) === 0) {
+        return $query;
+      }
+      $search = '%' . $search . '%';
+      return $query->whereRaw(
+        '(`subscribers`.`email` LIKE ? OR `subscribers`.`first_name` LIKE ? OR `subscribers`.`last_name` LIKE ?)',
+        [$search, $search, $search]
+      );
+    }
+    return $query;
   }
 
-  static function groups($data) {
+  public static function groups($data) {
     $params = $data['params'];
     return [
       [
@@ -115,29 +128,29 @@ class ScheduledTaskSubscriber extends Model {
     ];
   }
 
-  static function all($orm, $params) {
+  public static function all($orm, $params) {
     return $orm->whereIn('task_id', $params['task_ids']);
   }
 
-  static function sent($orm, $params) {
+  public static function sent($orm, $params) {
     return $orm->filter('all', $params)
       ->where('processed', self::STATUS_PROCESSED)
       ->where('failed', self::FAIL_STATUS_OK);
   }
 
-  static function failed($orm, $params) {
+  public static function failed($orm, $params) {
     return $orm->filter('all', $params)
       ->where('processed', self::STATUS_PROCESSED)
       ->where('failed', self::FAIL_STATUS_FAILED);
   }
 
-  static function unprocessed($orm, $params) {
+  public static function unprocessed($orm, $params) {
     return $orm->filter('all', $params)
       ->where('processed', self::STATUS_UNPROCESSED);
   }
 
-  private static function getCount($task_id, $processed = null) {
-    $orm = self::where('task_id', $task_id);
+  private static function getCount($taskId, $processed = null) {
+    $orm = self::where('task_id', $taskId);
     if (!is_null($processed)) {
       $orm->where('processed', $processed);
     }

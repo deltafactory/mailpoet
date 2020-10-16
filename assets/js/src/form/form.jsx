@@ -5,31 +5,9 @@ import FormField from 'form/fields/field.jsx';
 import jQuery from 'jquery';
 import PropTypes from 'prop-types';
 import { withRouter } from 'react-router-dom';
+import { Button } from 'common';
 
 class Form extends React.Component {
-  static defaultProps = {
-    params: {},
-    errors: undefined,
-    fields: undefined,
-    item: undefined,
-    onItemLoad: undefined,
-    isValid: undefined,
-    onSuccess: undefined,
-    onChange: undefined,
-    loading: false,
-    beforeFormContent: undefined,
-    afterFormContent: undefined,
-    children: undefined,
-    id: '',
-    onSubmit: undefined,
-    automationId: '',
-    messages: {
-      onUpdate: () => { /* no-op */ },
-      onCreate: () => { /* no-op */ },
-    },
-    endpoint: undefined,
-  };
-
   constructor(props) {
     super(props);
     this.formRef = React.createRef();
@@ -52,15 +30,15 @@ class Form extends React.Component {
     }
   }
 
-  componentWillReceiveProps(props) {
-    if (props.params.id === undefined) {
+  componentDidUpdate() {
+    if (this.props.params.id === undefined && this.state.loading) {
       setImmediate(() => {
         this.setState({
           loading: false,
           item: {},
         });
       });
-      if (props.item === undefined) {
+      if (this.props.item === undefined) {
         this.formRef.current.reset();
       }
     }
@@ -175,7 +153,7 @@ class Form extends React.Component {
   render() {
     let errors;
     if (this.getErrors() !== undefined) {
-      errors = this.getErrors().map(error => (
+      errors = this.getErrors().map((error) => (
         <div className="mailpoet_notice notice inline error is-dismissible" key={`error-${error.message}`}>
           <p>{ error.message }</p>
         </div>
@@ -224,12 +202,12 @@ class Form extends React.Component {
       actions = this.props.children;
     } else {
       actions = (
-        <input
-          className="button button-primary"
+        <Button
           type="submit"
-          value={MailPoet.I18n.t('save')}
-          disabled={this.state.loading}
-        />
+          isDisabled={this.state.loading}
+        >
+          {MailPoet.I18n.t('save')}
+        </Button>
       );
     }
 
@@ -249,13 +227,14 @@ class Form extends React.Component {
         >
           { errors }
 
-          <table className="form-table">
-            <tbody>
-              {fields}
-            </tbody>
-          </table>
+          <div className="mailpoet-form-grid">
+            {fields}
 
-          { actions }
+            <div className="mailpoet-form-actions">
+              { actions }
+            </div>
+          </div>
+
         </form>
         { afterFormContent }
       </div>
@@ -289,6 +268,29 @@ Form.propTypes = {
   history: PropTypes.shape({
     push: PropTypes.func.isRequired,
   }).isRequired,
+};
+
+Form.defaultProps = {
+  params: {},
+  errors: undefined,
+  fields: undefined,
+  item: undefined,
+  onItemLoad: undefined,
+  isValid: undefined,
+  onSuccess: undefined,
+  onChange: undefined,
+  loading: false,
+  beforeFormContent: undefined,
+  afterFormContent: undefined,
+  children: undefined,
+  id: '',
+  onSubmit: undefined,
+  automationId: '',
+  messages: {
+    onUpdate: () => { /* no-op */ },
+    onCreate: () => { /* no-op */ },
+  },
+  endpoint: undefined,
 };
 
 export default withRouter(Form);

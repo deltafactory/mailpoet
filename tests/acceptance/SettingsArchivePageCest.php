@@ -6,38 +6,65 @@ use MailPoet\Test\DataFactories\Newsletter;
 use MailPoet\Test\DataFactories\Segment;
 
 class SettingsArchivePageCest {
-  function createArchivePageNoSentNewsletters(\AcceptanceTester $I) {
-    $I->wantTo('Create page with MP archive shortcode, showing no sent newsletters');
-    $segment_factory = new Segment();
-    $segment = $segment_factory->withName('Empty Send')->create();
+  public function createArchivePageNoSentNewsletters(\AcceptanceTester $i) {
+    $i->wantTo('Create page with MP archive shortcode, showing no sent newsletters');
+    $segmentFactory = new Segment();
+    $segment = $segmentFactory->withName('Empty Send')->create();
     $pageTitle = 'EmptyNewsletterArchive';
-    $pageContent = escapeshellarg("[mailpoet_archive segments=\"$segment->id\"]");
-    $I->cli("post create --allow-root --post_type=page --post_status=publish --post_title=$pageTitle --post_content=$pageContent");
-    $I->login();
-    $I->amOnPage('/wp-admin/edit.php?post_type=page');
-    $I->waitForText($pageTitle);
-    $I->click($pageTitle);
-    //see live page with shortcode output
-    $I->click('View Page');
-    $I->waitForText($pageTitle);
-    $I->waitForText('Oops! There are no newsletters to display.');
+    $pageContent = "[mailpoet_archive segments=\"$segment->id\"]";
+    $postUrl = $i->createPost($pageTitle, $pageContent);
+    $i->login();
+    $i->amOnUrl($postUrl);
+    $i->waitForText($pageTitle);
+    $i->waitForText('Oops! There are no newsletters to display.');
   }
-  function createArchivePageWithSentNewsletters(\AcceptanceTester $I) {
-    $I->wantTo('Create page with MP archive shortcode, showing sent newsletters');
-    $segment_factory = new Segment();
-    $segment2 = $segment_factory->withName('SentNewsletters')->create();
+
+  public function createArchivePageWithSentNewsletters(\AcceptanceTester $i) {
+    $i->wantTo('Create page with MP archive shortcode, showing sent newsletters');
+    $segmentFactory = new Segment();
+    $segment2 = $segmentFactory->withName('SentNewsletters')->create();
     $newsletterFactory = new Newsletter();
     $newsletterFactory->withSubject('SentNewsletter')->withSentStatus()->withSendingQueue()->withSegments([$segment2])->create();
     $pageTitle2 = 'SentNewsletterArchive';
-    $pageContent2 = escapeshellarg("[mailpoet_archive segments=\"$segment2->id\"]");
-    $I->cli("post create --allow-root --post_type=page --post_status=publish --post_title=$pageTitle2 --post_content=$pageContent2");
-    $I->login();
-    $I->amOnPage('/wp-admin/edit.php?post_type=page');
-    $I->waitForText($pageTitle2);
-    $I->click($pageTitle2);
-    //see live page with shortcode output
-    $I->click('View Page');
-    $I->waitForText($pageTitle2);
-    $I->waitForText('SentNewsletter');
+    $pageContent2 = "[mailpoet_archive segments=\"$segment2->id\"]";
+    $postUrl = $i->createPost($pageTitle2, $pageContent2);
+    $i->login();
+    $i->amOnUrl($postUrl);
+    $i->waitForText($pageTitle2);
+    $i->waitForText('SentNewsletter');
+  }
+
+  public function createArchivePageWithVariousStatusNewsletters(\AcceptanceTester $i) {
+    $i->wantTo('Create page with MP archive shortcode, showing only sent newsletters but having various in database');
+    $segmentFactory = new Segment();
+    $segment3 = $segmentFactory->withName('SentNewsletters')->create();
+    $newsletterFactory = new Newsletter();
+    $newsletterFactory->withSubject('SentNewsletter')->withSentStatus()->withSendingQueue()->withSegments([$segment3])->create();
+    $newsletterFactory->withSubject('DraftNewsletter')->withDraftStatus()->withScheduledQueue()->withSegments([$segment3])->create();
+    $newsletterFactory->withSubject('ScheduledNewsletter')->withScheduledStatus()->withScheduledQueue()->withSegments([$segment3])->create();
+    $pageTitle3 = 'SentNewsletterArchive';
+    $pageContent3 = "[mailpoet_archive segments=\"$segment3->id\"]";
+    $postUrl = $i->createPost($pageTitle3, $pageContent3);
+    $i->login();
+    $i->amOnUrl($postUrl);
+    $i->waitForText($pageTitle3);
+    $i->waitForText('SentNewsletter');
+    $i->dontSee('DraftNewsletter');
+    $i->dontSee('ScheduledNewsletter');
+    $newsletterFactory->withSubject('SentNewsletter2')->withDraftStatus()->withSendingQueue()->withSegments([$segment3])->create();
+    $newsletterFactory->withSubject('SentNewsletter3')->withDraftStatus()->withSendingQueue()->withSegments([$segment3])->create();
+    $i->reloadPage();
+    $i->waitForText('SentNewsletter');
+    $i->waitForText('SentNewsletter2');
+    $i->waitForText('SentNewsletter3');
+    $i->amOnMailpoetPage('Emails');
+    $i->waitForText('SentNewsletter3');
+    $i->clickItemRowActionByItemName('SentNewsletter3', 'Move to trash');
+    $i->waitForText('1 email was moved to the trash.');
+    $i->amOnUrl($postUrl);
+    $i->waitForText($pageTitle3);
+    $i->waitForText('SentNewsletter');
+    $i->waitForText('SentNewsletter2');
+    $i->dontSee('SentNewsletter3');
   }
 }

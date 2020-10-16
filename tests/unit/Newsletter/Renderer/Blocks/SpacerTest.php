@@ -1,4 +1,5 @@
 <?php
+
 namespace MailPoet\Newsletter\Renderer\Blocks;
 
 class SpacerTest extends \MailPoetUnitTest {
@@ -13,22 +14,22 @@ class SpacerTest extends \MailPoetUnitTest {
     ],
   ];
 
-  function testItRendersCorrectly() {
-    $output = Spacer::render($this->block);
-    $expected_result = '
+  public function testItRendersCorrectly() {
+    $output = (new Spacer)->render($this->block);
+    $expectedResult = '
       <tr>
         <td class="mailpoet_spacer" height="13" valign="top"></td>
       </tr>';
-    expect($output)->equals($expected_result);
+    expect($output)->equals($expectedResult);
   }
 
-  function testsItRendersWithBackground() {
+  public function testsItRendersWithBackground() {
     $this->block['styles']['block']['backgroundColor'] = "#ffffff";
-    $output = Spacer::render($this->block);
-    $expected_result = '
+    $output = (new Spacer)->render($this->block);
+    $expectedResult = '
       <tr>
         <td class="mailpoet_spacer" bgcolor="#ffffff" height="13" valign="top"></td>
       </tr>';
-    expect($output)->equals($expected_result);
+    expect($output)->equals($expectedResult);
   }
 }

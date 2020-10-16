@@ -9,6 +9,7 @@ import Loading from './loading.jsx';
 
 const SECONDS_WAITING_FOR_SUCCESS = 20;
 const SECONDS_MINIMUIM_LOADING_SCREEN_DISPLAYED = 6;
+const SUCCESS_IMAGE_INDEX = Math.floor(Math.random() * 4);
 
 function successPageClosed() {
   return MailPoet.Ajax.post({
@@ -29,9 +30,13 @@ function renderSuccess(newsletter, testingPassed) {
   }
   return (
     <Success
-      illustrationImageUrl={window.mailpoet_congratulations_success_image}
+      illustrationImageUrl={window.mailpoet_congratulations_success_images[SUCCESS_IMAGE_INDEX]}
+      MSSPitchIllustrationUrl={window.mailpoet_congratulations_success_images[SUCCESS_IMAGE_INDEX]}
       successClicked={successPageClosed}
       newsletter={newsletter}
+      isWoocommerceActive={window.mailpoet_woocommerce_active}
+      subscribersCount={window.mailpoet_subscribers_count}
+      mailpoetAccountUrl={window.mailpoet_account_url}
     />
   );
 }
@@ -77,8 +82,10 @@ class Congratulate extends React.Component {
     this.tick();
   }
 
-  componentWillReceiveProps(props) {
-    this.loadNewsletter(props.match.params.id);
+  componentDidUpdate(prevProps) {
+    if (prevProps.match.params.id !== this.props.match.params.id) {
+      this.loadNewsletter(this.props.match.params.id);
+    }
   }
 
   tick() {
@@ -105,7 +112,7 @@ class Congratulate extends React.Component {
         id,
       },
     })
-      .done(response => this.newsletterLoaded(response.data));
+      .done((response) => this.newsletterLoaded(response.data));
   }
 
   newsletterLoaded(newsletter) {
@@ -120,7 +127,7 @@ class Congratulate extends React.Component {
 
   renderContent() {
     if (this.state.loading || !this.state.minimumLoadingTimePassed) {
-      return renderLoading(!!this.state.newsletter);
+      return renderLoading(!this.state.newsletter);
     }
     if (this.state.error) {
       return renderFail();
@@ -129,7 +136,16 @@ class Congratulate extends React.Component {
   }
 
   render() {
-    return (<div className="newsletter_congratulate_page">{this.renderContent()}</div>);
+    return (
+      <>
+        {/* eslint-disable-next-line react/no-danger */}
+        <style dangerouslySetInnerHTML={{ __html: 'body { background: #fff; overflow-x: hidden; }' }} />
+        <div className="mailpoet-congratulate">
+          <div className="mailpoet-gap-large" />
+          {this.renderContent()}
+        </div>
+      </>
+    );
   }
 }
 

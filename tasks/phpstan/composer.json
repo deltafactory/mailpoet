@@ -1,0 +1,19 @@
+{
+    "require": {
+        "phpstan/phpstan": "0.12.48",
+        "phpstan/phpstan-doctrine": "0.12.20",
+        "phpstan/phpstan-phpunit": "0.12.6"
+    },
+    "autoload": {
+        "psr-4": {
+            "MailPoet\\PHPStan\\Extensions\\": "extensions"
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "scripts": {
+        "post-install-cmd": "php prefix-phpstan-doctrine.php",
+        "post-update-cmd": "php prefix-phpstan-doctrine.php"
+    }
+}

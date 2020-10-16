@@ -6,8 +6,9 @@ import Marionette from 'backbone.marionette';
 import $ from 'jquery';
 import Blob from 'blob';
 import FileSaver from 'file-saver';
-import * as Thumbnail from 'common/thumbnail.jsx';
+import * as Thumbnail from 'common/thumbnail.ts';
 import _ from 'underscore';
+import SuperModel from 'backbone.supermodel/build/backbone.supermodel';
 
 var Module = {};
 var saveTimeout;
@@ -20,6 +21,10 @@ Module.save = function () {
 
   // Stringify to enable transmission of primitive non-string value types
   if (!_.isUndefined(json.body)) {
+    if (json.body.blockDefaults) {
+      delete json.body.blockDefaults.woocommerceHeading;
+      delete json.body.blockDefaults.woocommerceContent;
+    }
     json.body = JSON.stringify(json.body);
   }
 
@@ -56,8 +61,7 @@ Module.save = function () {
     }
     App.getChannel().trigger('afterEditorSave', json, response);
   }).fail(function (response) {
-    // TODO: Handle saving errors
-    App.getChannel().trigger('afterEditorSave', {}, response);
+    App.getChannel().trigger('editorSaveFailed', {}, response);
   });
 };
 
@@ -107,6 +111,8 @@ Module.SaveView = Marionette.View.extend({
   templateContext: function () {
     return {
       wrapperClass: this.wrapperClass,
+      isWoocommerceTransactional: this.model.isWoocommerceTransactional(),
+      woocommerceCustomizerEnabled: App.getConfig().get('woocommerceCustomizerEnabled'),
     };
   },
   events: {
@@ -119,12 +125,16 @@ Module.SaveView = Marionette.View.extend({
     /* Export template */
     'click .mailpoet_save_export': 'showExportTemplate',
     'click .mailpoet_export_template': 'exportTemplate',
+    /* WooCommerce */
+    'click .mailpoet_save_activate_wc_customizer_button': 'activateWooCommerceCustomizer',
+    'click .mailpoet_show_preview': 'showPreview',
   },
 
   initialize: function () {
     this.setDropdownDirectionDown();
     App.getChannel().on('beforeEditorSave', this.beforeSave, this);
     App.getChannel().on('afterEditorSave', this.afterSave, this);
+    App.getChannel().on('editorSaveFailed', this.handleSavingErrors, this);
   },
   setDropdownDirectionDown: function () {
     this.wrapperClass = 'mailpoet_save_dropdown_down';
@@ -146,8 +156,11 @@ Module.SaveView = Marionette.View.extend({
   afterSave: function (json) {
     this.validateNewsletter(json);
     // Update 'Last saved timer'
-    this.$('.mailpoet_editor_last_saved').removeClass('mailpoet_hidden');
+    this.$('.mailpoet_editor_last_saved .mailpoet_autosaved_message').removeClass('mailpoet_hidden');
     this.$('.mailpoet_autosaved_at').text('');
+  },
+  handleSavingErrors: function () {
+    this.showError(MailPoet.I18n.t('newsletterSavingError'));
   },
   showSaveOptions: function () {
     this.$('.mailpoet_save_show_options').addClass('mailpoet_save_show_options_active');
@@ -237,6 +250,56 @@ Module.SaveView = Marionette.View.extend({
       this.hideExportTemplate();
     }
   },
+  showPreview: function () {
+    var json = App.toJSON();
+
+    // Stringify to enable transmission of primitive non-string value types
+    if (!_.isUndefined(json.body)) {
+      json.body = JSON.stringify(json.body);
+    }
+
+    MailPoet.Modal.loading(true);
+
+    MailPoet.Ajax.post({
+      api_version: window.mailpoet_api_version,
+      endpoint: 'newsletters',
+      action: 'showPreview',
+      data: json,
+    }).always(function () {
+      MailPoet.Modal.loading(false);
+    }).done(function (response) {
+      this.previewView = new Module.NewsletterPreviewView({
+        model: new Module.NewsletterPreviewModel(),
+        previewType: window.localStorage.getItem(App.getConfig().get('newsletterPreview.previewTypeLocalStorageKey')),
+        previewUrl: response.meta.preview_url,
+      });
+
+      this.previewView.render();
+
+      MailPoet.Modal.popup({
+        template: '',
+        element: this.previewView.$el,
+        minWidth: '95%',
+        height: '100%',
+        title: MailPoet.I18n.t('newsletterPreview'),
+        onCancel: function () {
+          this.previewView.destroy();
+          this.previewView = null;
+        }.bind(this),
+      });
+
+      MailPoet.trackEvent('Editor > Browser Preview', {
+        'MailPoet Free version': window.mailpoet_version,
+      });
+    }.bind(this)).fail(function (response) {
+      if (response.errors.length > 0) {
+        MailPoet.Notice.error(
+          response.errors.map(function (error) { return error.message; }),
+          { scroll: true }
+        );
+      }
+    });
+  },
   next: function () {
     this.hideSaveOptions();
     if (!this.$('.mailpoet_save_next').hasClass('button-disabled')) {
@@ -248,22 +311,37 @@ Module.SaveView = Marionette.View.extend({
   },
   validateNewsletter: function (jsonObject) {
     var body = '';
+    var newsletter = App.getNewsletter();
+    var content;
     if (!App._contentContainer.isValid()) {
       this.showValidationError(App._contentContainer.validationError);
       return;
     }
 
     if (jsonObject && jsonObject.body && jsonObject.body.content) {
+      content = jsonObject.body.content;
       body = JSON.stringify(jsonObject.body.content);
+      if (!content.blocks || !Array.isArray(content.blocks) || (content.blocks.length === 0)) {
+        this.showValidationError(MailPoet.I18n.t('newsletterIsEmpty'));
+        return;
+      }
+    } else {
+      // Newsletter body object is missing. This logic shouldn't normally be triggered because
+      // validation should not be invoked if saving errors occur, but in case it does happen,
+      // this message is better than the validation-specific ones like "no unsubscribe link".
+      this.handleSavingErrors();
+      return;
     }
+
     if (App.getConfig().get('validation.validateUnsubscribeLinkPresent')
         && body.indexOf('[link:subscription_unsubscribe_url]') < 0
-        && body.indexOf('[link:subscription_unsubscribe]') < 0) {
+        && body.indexOf('[link:subscription_unsubscribe]') < 0
+        && newsletter.get('status') !== 'sent') {
       this.showValidationError(MailPoet.I18n.t('unsubscribeLinkMissing'));
       return;
     }
 
-    if ((App.getNewsletter().get('type') === 'notification')
+    if ((newsletter.get('type') === 'notification')
         && body.indexOf('"type":"automatedLatestContent"') < 0
         && body.indexOf('"type":"automatedLatestContentLayout"') < 0
     ) {
@@ -271,18 +349,46 @@ Module.SaveView = Marionette.View.extend({
       return;
     }
 
+    if (newsletter.get('type') === 'standard' && newsletter.get('status') === 'sent') {
+      this.showValidationError(MailPoet.I18n.t('emailAlreadySent'));
+      return;
+    }
+
     this.hideValidationError();
   },
-  showValidationError: function (message) {
+  showError: function (message) {
     var $el = this.$('.mailpoet_save_error');
-    $el.text(message);
+    $el.html(message.replace(/\. /g, '.<br>'));
     $el.removeClass('mailpoet_hidden');
-
+  },
+  hideError: function () {
+    this.$('.mailpoet_save_error').addClass('mailpoet_hidden');
+  },
+  showValidationError: function (message) {
+    this.showError(message);
     this.$('.mailpoet_save_next').addClass('button-disabled');
   },
   hideValidationError: function () {
-    this.$('.mailpoet_save_error').addClass('mailpoet_hidden');
+    this.hideError();
     this.$('.mailpoet_save_next').removeClass('button-disabled');
+  },
+  activateWooCommerceCustomizer: function () {
+    var $el = $('.mailpoet_save_woocommerce_customizer_disabled');
+    return MailPoet.Ajax.post({
+      api_version: window.mailpoet_api_version,
+      endpoint: 'settings',
+      action: 'set',
+      data: {
+        'woocommerce.use_mailpoet_editor': 1,
+      },
+    }).done(function () {
+      $el.addClass('mailpoet_hidden');
+      MailPoet.trackEvent('Editor > WooCommerce email customizer enabled', {
+        'MailPoet Free version': window.mailpoet_version,
+      });
+    }).fail(function (response) {
+      MailPoet.Notice.showApiErrorNotice(response, { scroll: true });
+    });
   },
 });
 
@@ -331,6 +437,141 @@ Module.beforeExitWithUnsavedChanges = function (e) {
   return undefined;
 };
 
+Module.NewsletterPreviewModel = SuperModel.extend({
+  defaults: {
+    previewSendingError: false,
+    previewSendingSuccess: false,
+    sendingPreview: false,
+  },
+});
+
+Module.NewsletterPreviewView = Marionette.View.extend({
+  className: 'mailpoet_browser_preview_wrapper',
+  getTemplate: function () { return window.templates.newsletterPreview; },
+  modelEvents: {
+    change: 'render',
+  },
+  events: function () {
+    return {
+      'change .mailpoet_browser_preview_type': 'changeBrowserPreviewType',
+      'click #mailpoet_send_preview': 'sendPreview',
+    };
+  },
+  initialize: function (options) {
+    this.previewType = options.previewType || 'mobile';
+    this.previewUrl = options.previewUrl;
+    this.width = '100%';
+    this.height = '100%';
+  },
+  templateContext: function () {
+    return {
+      previewType: this.previewType,
+      previewUrl: this.previewUrl,
+      width: this.width,
+      height: this.height,
+      email: this.$('#mailpoet_preview_to_email').val() || window.currentUserEmail,
+      previewSendingError: this.model.get('previewSendingError'),
+      sendingPreview: this.model.get('sendingPreview'),
+      mssKeyPendingApproval: window.mailpoet_mss_key_pending_approval,
+    };
+  },
+  changeBrowserPreviewType: function (event) {
+    var value = $(event.target).val();
+
+    if (value === 'mobile') {
+      this.$('.mailpoet_browser_preview_container').addClass('mailpoet_browser_preview_container_mobile');
+      this.$('.mailpoet_browser_preview_container').removeClass('mailpoet_browser_preview_container_desktop');
+      this.$('.mailpoet_browser_preview_container').removeClass('mailpoet_browser_preview_container_send_to_email');
+    } else if (value === 'desktop') {
+      this.$('.mailpoet_browser_preview_container').addClass('mailpoet_browser_preview_container_desktop');
+      this.$('.mailpoet_browser_preview_container').removeClass('mailpoet_browser_preview_container_mobile');
+      this.$('.mailpoet_browser_preview_container').removeClass('mailpoet_browser_preview_container_send_to_email');
+    } else {
+      this.$('.mailpoet_browser_preview_container').addClass('mailpoet_browser_preview_container_send_to_email');
+      this.$('.mailpoet_browser_preview_container').removeClass('mailpoet_browser_preview_container_desktop');
+      this.$('.mailpoet_browser_preview_container').removeClass('mailpoet_browser_preview_container_mobile');
+    }
+
+    window.localStorage.setItem(App.getConfig().get('newsletterPreview.previewTypeLocalStorageKey'), value);
+    this.previewType = value;
+  },
+  sendPreview: function () {
+    // get form data
+    var that = this;
+    var $emailField = this.$('#mailpoet_preview_to_email');
+    var data = {
+      subscriber: $emailField.val(),
+      id: App.getNewsletter().get('id'),
+    };
+
+    if (data.subscriber.length <= 0) {
+      MailPoet.Notice.error(
+        MailPoet.I18n.t('newsletterPreviewEmailMissing'),
+        {
+          positionAfter: $emailField,
+          scroll: true,
+        }
+      );
+      return false;
+    }
+
+    this.model.set('previewSendingError', false);
+    this.model.set('previewSendingSuccess', false);
+    this.model.set('sendingPreview', true);
+    // save before sending
+    App.getChannel().request('save').always(function () {
+      CommunicationComponent.previewNewsletter(data).done(function () {
+        that.model.set('sendingPreview', false);
+        that.model.set('previewSendingSuccess', true);
+        MailPoet.trackEvent('Editor > Preview sent', {
+          'MailPoet Free version': window.mailpoet_version,
+          'Domain name': data.subscriber.substring(data.subscriber.indexOf('@') + 1),
+        });
+      }).fail(function (response) {
+        that.model.set('sendingPreview', false);
+        that.model.set('previewSendingError', true);
+        let errorHtml = `<p>${MailPoet.I18n.t('newsletterPreviewError')}</p>`;
+        if (response.errors.length > 0) {
+          const errors = response.errors.map(function (error) {
+            let errorMessage = `
+              <p>
+                ${MailPoet.I18n.t('newsletterPreviewErrorNotice').replace('%$1s', window.config.mtaMethod)}:
+                <i>${error.message}</i>
+              </p>
+            `;
+            if (window.config.mtaMethod === 'PHPMail') {
+              errorMessage += `
+                <p>${MailPoet.I18n.t('newsletterPreviewErrorCheckConfiguration')}</p>
+                <br />
+                <p>${MailPoet.I18n.t('newsletterPreviewErrorUseSendingService')}</p>
+                <p>
+                  <a
+                    href=${MailPoet.MailPoetComUrlFactory.getFreePlanUrl({ utm_campaign: 'sending-error' })}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    ${MailPoet.I18n.t('newsletterPreviewErrorSignUpForSendingService')}
+                  </a>
+                </p>
+              `;
+            } else {
+              const checkSettingsNotice = MailPoet.I18n.t('newsletterPreviewErrorCheckSettingsNotice').replace(
+                /\[link\](.*?)\[\/link\]/g,
+                '<a href="?page=mailpoet-settings#mta" key="check-sending">$1</a>'
+              );
+              errorMessage += `<p>${checkSettingsNotice}</p>`;
+            }
+            return errorMessage;
+          });
+          errorHtml = errors.join('');
+        }
+        document.getElementById('mailpoet_preview_sending_error').innerHTML = errorHtml;
+      });
+    });
+    return undefined;
+  },
+});
+
 App.on('before:start', function (BeforeStartApp) {
   var Application = BeforeStartApp;
   Application.save = Module.save;
@@ -343,8 +584,9 @@ App.on('before:start', function (BeforeStartApp) {
 });
 
 App.on('start', function (BeforeStartApp) {
-  var topSaveView = new Module.SaveView();
-  var bottomSaveView = new Module.SaveView();
+  var model = BeforeStartApp.getNewsletter();
+  var topSaveView = new Module.SaveView({ model: model });
+  var bottomSaveView = new Module.SaveView({ model: model });
   bottomSaveView.setDropdownDirectionUp();
 
   BeforeStartApp._appView.showChildView('topRegion', topSaveView);

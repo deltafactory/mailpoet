@@ -2,20 +2,21 @@
 
 namespace MailPoet\API\JSON\v1;
 
-use Carbon\Carbon;
 use MailPoet\API\JSON\Endpoint as APIEndpoint;
 use MailPoet\API\JSON\Error as APIError;
 use MailPoet\Config\AccessControl;
+use MailPoet\Config\ServicesChecker;
 use MailPoet\Cron\Workers\InactiveSubscribers;
 use MailPoet\Cron\Workers\WooCommerceSync;
+use MailPoet\Mailer\MailerLog;
+use MailPoet\Models\Form;
 use MailPoet\Models\ScheduledTask;
 use MailPoet\Services\AuthorizedEmailsController;
 use MailPoet\Services\Bridge;
 use MailPoet\Settings\SettingsController;
+use MailPoet\WooCommerce\TransactionalEmails;
 use MailPoet\WP\Functions as WPFunctions;
-use MailPoet\Models\Form;
-
-if (!defined('ABSPATH')) exit;
+use MailPoetVendor\Carbon\Carbon;
 
 class Settings extends APIEndpoint {
 
@@ -26,28 +27,37 @@ class Settings extends APIEndpoint {
   private $bridge;
 
   /** @var AuthorizedEmailsController */
-  private $authorized_emails_controller;
+  private $authorizedEmailsController;
+
+  /** @var TransactionalEmails */
+  private $wcTransactionalEmails;
+
+  /** @var ServicesChecker */
+  private $servicesChecker;
 
   public $permissions = [
     'global' => AccessControl::PERMISSION_MANAGE_SETTINGS,
   ];
 
-
   public function __construct(
     SettingsController $settings,
     Bridge $bridge,
-    AuthorizedEmailsController $authorized_emails_controller
+    AuthorizedEmailsController $authorizedEmailsController,
+    TransactionalEmails $wcTransactionalEmails,
+    ServicesChecker $servicesChecker
   ) {
     $this->settings = $settings;
     $this->bridge = $bridge;
-    $this->authorized_emails_controller = $authorized_emails_controller;
+    $this->authorizedEmailsController = $authorizedEmailsController;
+    $this->wcTransactionalEmails = $wcTransactionalEmails;
+    $this->servicesChecker = $servicesChecker;
   }
 
-  function get() {
+  public function get() {
     return $this->successResponse($this->settings->getAll());
   }
 
-  function set($settings = []) {
+  public function set($settings = []) {
     if (empty($settings)) {
       return $this->badRequest(
         [
@@ -55,42 +65,77 @@ class Settings extends APIEndpoint {
             WPFunctions::get()->__('You have not specified any settings to be saved.', 'mailpoet'),
         ]);
     } else {
-      $old_settings = $this->settings->getAll();
-      // Will be uncommented on task [MAILPOET-1998]
-      // $signup_confirmation = $this->settings->get('signup_confirmation.enabled');
+      $oldSettings = $this->settings->getAll();
+      $signupConfirmation = $this->settings->get('signup_confirmation.enabled');
       foreach ($settings as $name => $value) {
         $this->settings->set($name, $value);
       }
 
-      $this->onSettingsChange($old_settings, $this->settings->getAll());
+      $this->onSettingsChange($oldSettings, $this->settings->getAll());
 
-      $this->bridge->onSettingsSave($settings);
-      $this->authorized_emails_controller->onSettingsSave($settings);
-      // Will be uncommented on task [MAILPOET-1998]
-      // if ($signup_confirmation !== $this->settings->get('signup_confirmation.enabled')) {
-      //   Form::updateSuccessMessages();
-      // }
+      // when pending approval, leave this to cron / Key Activation tab logic
+      if (!$this->servicesChecker->isMailPoetAPIKeyPendingApproval()) {
+        $this->bridge->onSettingsSave($settings);
+      }
+
+      $this->authorizedEmailsController->onSettingsSave($settings);
+      if ($signupConfirmation !== $this->settings->get('signup_confirmation.enabled')) {
+        Form::updateSuccessMessages();
+      }
       return $this->successResponse($this->settings->getAll());
     }
   }
 
-  private function onSettingsChange($old_settings, $new_settings) {
+  public function setAuthorizedFromAddress($data = []) {
+    $address = $data['address'] ?? null;
+    if (!$address) {
+      return $this->badRequest([
+        APIError::BAD_REQUEST => WPFunctions::get()->__('No email address specified.', 'mailpoet'),
+      ]);
+    }
+    $address = trim($address);
+
+    try {
+      $this->authorizedEmailsController->setFromEmailAddress($address);
+    } catch (\InvalidArgumentException $e) {
+      return $this->badRequest([
+        APIError::UNAUTHORIZED => WPFunctions::get()->__('Can’t use this email yet! Please authorize it first.', 'mailpoet'),
+      ]);
+    }
+
+    if (!$this->servicesChecker->isMailPoetAPIKeyPendingApproval()) {
+      MailerLog::resumeSending();
+    }
+    return $this->successResponse();
+  }
+
+  private function onSettingsChange($oldSettings, $newSettings) {
     // Recalculate inactive subscribers
-    $old_inactivation_interval = $old_settings['deactivate_subscriber_after_inactive_days'];
-    $new_inactivation_interval = $new_settings['deactivate_subscriber_after_inactive_days'];
-    if ($old_inactivation_interval !== $new_inactivation_interval) {
+    $oldInactivationInterval = $oldSettings['deactivate_subscriber_after_inactive_days'];
+    $newInactivationInterval = $newSettings['deactivate_subscriber_after_inactive_days'];
+    if ($oldInactivationInterval !== $newInactivationInterval) {
       $this->onInactiveSubscribersIntervalChange();
     }
 
+    $oldSendingMethod = $oldSettings['mta_group'];
+    $newSendingMethod = $newSettings['mta_group'];
+    if (($oldSendingMethod !== $newSendingMethod) && ($newSendingMethod === 'mailpoet')) {
+      $this->onMSSActivate($newSettings);
+    }
+
     // Sync WooCommerce Customers list
-    $old_subscribe_old_woocommerce_customers = isset($old_settings['mailpoet_subscribe_old_woocommerce_customers']['enabled'])
-      ? $old_settings['mailpoet_subscribe_old_woocommerce_customers']['enabled']
+    $oldSubscribeOldWoocommerceCustomers = isset($oldSettings['mailpoet_subscribe_old_woocommerce_customers']['enabled'])
+      ? $oldSettings['mailpoet_subscribe_old_woocommerce_customers']['enabled']
       : '0';
-    $new_subscribe_old_woocommerce_customers = isset($new_settings['mailpoet_subscribe_old_woocommerce_customers']['enabled'])
-      ? $new_settings['mailpoet_subscribe_old_woocommerce_customers']['enabled']
+    $newSubscribeOldWoocommerceCustomers = isset($newSettings['mailpoet_subscribe_old_woocommerce_customers']['enabled'])
+      ? $newSettings['mailpoet_subscribe_old_woocommerce_customers']['enabled']
       : '0';
-    if ($old_subscribe_old_woocommerce_customers !== $new_subscribe_old_woocommerce_customers) {
+    if ($oldSubscribeOldWoocommerceCustomers !== $newSubscribeOldWoocommerceCustomers) {
       $this->onSubscribeOldWoocommerceCustomersChange();
+    }
+
+    if (!empty($newSettings['woocommerce']['use_mailpoet_editor'])) {
+      $this->wcTransactionalEmails->init();
     }
   }
 
@@ -98,13 +143,13 @@ class Settings extends APIEndpoint {
     $task = ScheduledTask::where('type', WooCommerceSync::TASK_TYPE)
       ->whereRaw('status = ?', [ScheduledTask::STATUS_SCHEDULED])
       ->findOne();
-    if (!$task) {
+    if (!($task instanceof ScheduledTask)) {
       $task = ScheduledTask::create();
       $task->type = WooCommerceSync::TASK_TYPE;
       $task->status = ScheduledTask::STATUS_SCHEDULED;
     }
     $datetime = Carbon::createFromTimestamp(WPFunctions::get()->currentTime('timestamp'));
-    $task->scheduled_at = $datetime->subMinute();
+    $task->scheduledAt = $datetime->subMinute();
     $task->save();
   }
 
@@ -112,13 +157,30 @@ class Settings extends APIEndpoint {
     $task = ScheduledTask::where('type', InactiveSubscribers::TASK_TYPE)
       ->whereRaw('status = ?', [ScheduledTask::STATUS_SCHEDULED])
       ->findOne();
-    if (!$task) {
+    if (!($task instanceof ScheduledTask)) {
       $task = ScheduledTask::create();
       $task->type = InactiveSubscribers::TASK_TYPE;
       $task->status = ScheduledTask::STATUS_SCHEDULED;
     }
-    $datetime = Carbon::createFromTimestamp(WPFunctions::get()->currentTime('timestamp'));
-    $task->scheduled_at = $datetime->subMinute();
+    $datetime = Carbon::createFromTimestamp((int)WPFunctions::get()->currentTime('timestamp'));
+    $task->scheduledAt = $datetime->subMinute();
     $task->save();
+  }
+
+  private function onMSSActivate($newSettings) {
+    // see mailpoet/assets/js/src/wizard/create_sender_settings.jsx:freeAddress
+    $domain = str_replace('www.', '', $_SERVER['HTTP_HOST']);
+    if (
+      isset($newSettings['sender']['address'])
+      && !empty($newSettings['reply_to']['address'])
+      && ($newSettings['sender']['address'] === ('wordpress@' . $domain))
+    ) {
+      $sender = [
+        'name' => $newSettings['reply_to']['name'] ?? '',
+        'address' => $newSettings['reply_to']['address'],
+      ];
+      $this->settings->set('sender', $sender);
+      $this->settings->set('reply_to', null);
+    }
   }
 }

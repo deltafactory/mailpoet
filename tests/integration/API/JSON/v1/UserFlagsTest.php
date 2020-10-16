@@ -1,37 +1,38 @@
 <?php
+
 namespace MailPoet\Test\API\JSON\v1;
 
 use Codeception\Stub;
-use MailPoet\API\JSON\Response as APIResponse;
 use MailPoet\API\JSON\Error as APIError;
+use MailPoet\API\JSON\Response as APIResponse;
 use MailPoet\API\JSON\v1\UserFlags;
-use MailPoet\Models\UserFlag;
+use MailPoet\Entities\UserFlagEntity;
 use MailPoet\Settings\UserFlagsController;
-use MailPoet\WP\Functions as WPFunctions;
+use MailPoet\Settings\UserFlagsRepository;
 
 class UserFlagsTest extends \MailPoetTest {
 
-  /** @var Settings */
+  /** @var UserFlags */
   private $endpoint;
 
   /** @var UserFlagsController */
-  private $user_flags;
+  private $userFlags;
 
-  function _before() {
-    parent::_before();
-    UserFlag::deleteMany();
-    $this->user_flags = Stub::make(new UserFlagsController, [
+  public function _before() {
+    $this->cleanup();
+    $this->userFlags = Stub::make(UserFlagsController::class, [
+      'userFlagsRepository' => $this->diContainer->get(UserFlagsRepository::class),
       'defaults' => [
         'flag_1' => 'default_value_1',
         'flag_2' => 'default_value_2',
       ],
-    ]);    
-    $this->user_flags->set('flag_1', 'value_1');
-    $this->endpoint = new UserFlags($this->user_flags);
+    ]);
+    $this->userFlags->set('flag_1', 'value_1');
+    $this->endpoint = new UserFlags($this->userFlags);
   }
 
-  function testItCanSetUserFlags() {
-    $new_flags = [
+  public function testItCanSetUserFlags() {
+    $newFlags = [
       'flag_1' => 'new_value_1',
       'flag_3' => 'new_value_3',
     ];
@@ -40,18 +41,27 @@ class UserFlagsTest extends \MailPoetTest {
     expect($response->errors[0]['error'])->equals(APIError::BAD_REQUEST);
     expect($response->status)->equals(APIResponse::STATUS_BAD_REQUEST);
 
-    expect($this->user_flags->getAll())->equals([
+    expect($this->userFlags->getAll())->equals([
       'flag_1' => 'value_1',
       'flag_2' => 'default_value_2',
     ]);
 
-    $response = $this->endpoint->set($new_flags);
+    $response = $this->endpoint->set($newFlags);
     expect($response->status)->equals(APIResponse::STATUS_OK);
 
-    expect($this->user_flags->getAll())->equals([
+    expect($this->userFlags->getAll())->equals([
       'flag_1' => 'new_value_1',
       'flag_2' => 'default_value_2',
       'flag_3' => 'new_value_3',
     ]);
+  }
+
+  public function _after() {
+    $this->cleanup();
+  }
+
+  private function cleanup() {
+    $tableName = $this->entityManager->getClassMetadata(UserFlagEntity::class)->getTableName();
+    $this->entityManager->getConnection()->executeUpdate("TRUNCATE $tableName");
   }
 }

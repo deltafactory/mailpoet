@@ -2,18 +2,18 @@
 
 namespace MailPoet\Tasks;
 
-use Carbon\Carbon;
 use MailPoet\Cron\Workers\Scheduler;
+use MailPoet\Models\Newsletter;
 use MailPoet\Models\ScheduledTask;
 use MailPoet\Models\SendingQueue;
 use MailPoet\Newsletter\Url as NewsletterUrl;
+use MailPoetVendor\Carbon\Carbon;
 
-class State
-{
+class State {
   /**
    * @return array
    */
-  function getCountsPerStatus() {
+  public function getCountsPerStatus() {
     $stats = [
       ScheduledTask::STATUS_COMPLETED => 0,
       ScheduledTask::STATUS_PAUSED => 0,
@@ -39,7 +39,7 @@ class State
   /**
    * @return array
    */
-  function getLatestTasks(
+  public function getLatestTasks(
     $type = null,
     $statuses = [
       ScheduledTask::STATUS_COMPLETED,
@@ -50,6 +50,7 @@ class State
     $tasks = [];
     foreach ($statuses as $status) {
       $query = ScheduledTask::orderByDesc('created_at')
+        ->orderByAsc('id') // consistent order for tasks with equal timestamps
         ->whereNull('deleted_at')
         ->limit($limit);
       if ($type) {
@@ -81,20 +82,24 @@ class State
       'id' => (int)$task->id,
       'type' => $task->type,
       'priority' => (int)$task->priority,
-      'updated_at' => Carbon::createFromTimeString($task->updated_at)->timestamp,
-      'scheduled_at' => $task->scheduled_at ? Carbon::createFromTimeString($task->scheduled_at)->timestamp : null,
+      'updated_at' => Carbon::createFromTimeString((string)$task->updatedAt)->timestamp,
+      'scheduled_at' => $task->scheduledAt ? Carbon::createFromTimeString($task->scheduledAt)->timestamp : null,
       'status' => $task->status,
-      'newsletter' => $queue && $newsletter ? [
-        'newsletter_id' => (int)$queue->newsletter_id,
+      'newsletter' => (($queue instanceof SendingQueue) && ($newsletter instanceof Newsletter)) ? [
+        'newsletter_id' => (int)$queue->newsletterId,
         'queue_id' => (int)$queue->id,
-        'subject' => $queue->newsletter_rendered_subject ?: $newsletter->subject,
+        'subject' => $queue->newsletterRenderedSubject ?: $newsletter->subject,
         'preview_url' => NewsletterUrl::getViewInBrowserUrl(
-          NewsletterUrl::TYPE_LISTING_EDITOR,
           $newsletter,
           null,
           $queue
         ),
-      ] : null,
+      ] : [
+        'newsletter_id' => null,
+        'queue_id' => null,
+        'subject' => null,
+        'preview_url' => null,
+      ],
     ];
   }
 }

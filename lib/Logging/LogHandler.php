@@ -2,9 +2,9 @@
 
 namespace MailPoet\Logging;
 
-use Carbon\Carbon;
-use MailPoetVendor\Monolog\Handler\AbstractProcessingHandler;
 use MailPoet\Models\Log;
+use MailPoetVendor\Carbon\Carbon;
+use MailPoetVendor\Monolog\Handler\AbstractProcessingHandler;
 
 class LogHandler extends AbstractProcessingHandler {
 
@@ -18,6 +18,14 @@ class LogHandler extends AbstractProcessingHandler {
    * Logs older than this many days will be deleted
    */
   const DAYS_TO_KEEP_LOGS = 30;
+
+  /** @var callable|null */
+  private $randFunction;
+
+  public function __construct($level = \MailPoetVendor\Monolog\Logger::DEBUG, $bubble = \true, $randFunction = null) {
+    parent::__construct($level, $bubble);
+    $this->randFunction = $randFunction;
+  }
 
   protected function write(array $record) {
     $model = $this->createNewLogModel();
@@ -39,6 +47,9 @@ class LogHandler extends AbstractProcessingHandler {
   }
 
   private function getRandom() {
+    if ($this->randFunction) {
+      return call_user_func($this->randFunction, 0, 100);
+    }
     return rand(0, 100);
   }
 
@@ -46,5 +57,4 @@ class LogHandler extends AbstractProcessingHandler {
     Log::whereLt('created_at', Carbon::create()->subDays(self::DAYS_TO_KEEP_LOGS)->toDateTimeString())
        ->deleteMany();
   }
-
 }

@@ -2,20 +2,28 @@
 
 namespace MailPoet\Test\DataFactories;
 
-use MailPoet\Models\FeatureFlag as FeatureFlagModel;
+use MailPoet\DI\ContainerWrapper;
+use MailPoet\Features\FeatureFlagsRepository;
 
 class Features {
 
-  function withFeatureEnabled($name) {
-    FeatureFlagModel::createOrUpdate([
+  /** @var FeatureFlagsRepository */
+  private $flags;
+
+  public function __construct() {
+    $this->flags = ContainerWrapper::getInstance(WP_DEBUG)->get(FeatureFlagsRepository::class);
+  }
+
+  public function withFeatureEnabled($name) {
+    $this->flags->createOrUpdate([
       'name' => $name,
       'value' => true,
     ]);
     return $this;
   }
 
-  function withFeatureDisabled($name) {
-    FeatureFlagModel::createOrUpdate([
+  public function withFeatureDisabled($name) {
+    $this->flags->createOrUpdate([
       'name' => $name,
       'value' => false,
     ]);

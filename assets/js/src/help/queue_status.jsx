@@ -8,8 +8,8 @@ import TasksListDataRow from './tasks_list/tasks_list_data_row.jsx';
 const QueueStatus = (props) => {
   const status = props.status_data;
   return (
-    <div>
-      <h2>{MailPoet.I18n.t('systemStatusQueueTitle')}</h2>
+    <>
+      <h4>{MailPoet.I18n.t('systemStatusQueueTitle')}</h4>
       <KeyValueTable
         max_width="400px"
         rows={[
@@ -46,15 +46,15 @@ const QueueStatus = (props) => {
           },
         ]}
       />
-      <h4>{MailPoet.I18n.t('scheduledTasks')}</h4>
-      <TasksList show_scheduled_at tasks={status.latestTasks.filter(task => (task.status === 'scheduled'))} />
+      <h5>{MailPoet.I18n.t('scheduledTasks')}</h5>
+      <TasksList show_scheduled_at tasks={status.latestTasks.filter((task) => (task.status === 'scheduled'))} />
 
-      <h4>{MailPoet.I18n.t('runningTasks')}</h4>
-      <TasksList tasks={status.latestTasks.filter(task => (task.status === null))} />
+      <h5>{MailPoet.I18n.t('runningTasks')}</h5>
+      <TasksList tasks={status.latestTasks.filter((task) => (task.status === null))} />
 
-      <h4>{MailPoet.I18n.t('completedTasks')}</h4>
-      <TasksList tasks={status.latestTasks.filter(task => (task.status === 'completed'))} />
-    </div>
+      <h5>{MailPoet.I18n.t('completedTasks')}</h5>
+      <TasksList tasks={status.latestTasks.filter((task) => (task.status === 'completed'))} />
+    </>
   );
 };
 

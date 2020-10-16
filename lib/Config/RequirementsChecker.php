@@ -1,52 +1,37 @@
 <?php
+
 namespace MailPoet\Config;
 
 use MailPoet\Util\Helpers;
-use MailPoet\WP\Notice as WPNotice;
-
 use MailPoet\WP\Functions as WPFunctions;
-
-if (!defined('ABSPATH')) exit;
-
+use MailPoet\WP\Notice as WPNotice;
 
 class RequirementsChecker {
   const TEST_FOLDER_PERMISSIONS = 'TempAndCacheFolderCreation';
   const TEST_PDO_EXTENSION = 'PDOExtension';
-  const TEST_MBSTRING_EXTENSION = 'MbstringExtension';
   const TEST_XML_EXTENSION = 'XmlExtension';
   const TEST_VENDOR_SOURCE = 'VendorSource';
 
-  public $display_error_notice;
-  public $vendor_classes = [
-    '\ORM',
-    '\Model',
-    '\Swift_Mailer',
-    '\Swift_SmtpTransport',
-    '\Swift_Message',
-    '\Carbon\Carbon',
-    '\Sudzy\ValidModel',
-    '\Sudzy\ValidationException',
-    '\Sudzy\Engine',
+  public $displayErrorNotice;
+  public $vendorClasses = [
     '\pQuery',
     '\Cron\CronExpression',
     '\Html2Text\Html2Text',
-    '\csstidy',
   ];
 
-  function __construct($display_error_notice = true) {
-    $this->display_error_notice = $display_error_notice;
+  public function __construct($displayErrorNotice = true) {
+    $this->displayErrorNotice = $displayErrorNotice;
   }
 
-  function checkAllRequirements() {
-    $available_tests = [
+  public function checkAllRequirements() {
+    $availableTests = [
       self::TEST_PDO_EXTENSION,
       self::TEST_FOLDER_PERMISSIONS,
-      self::TEST_MBSTRING_EXTENSION,
       self::TEST_XML_EXTENSION,
       self::TEST_VENDOR_SOURCE,
     ];
     $results = [];
-    foreach ($available_tests as $test) {
+    foreach ($availableTests as $test) {
       $callback = [$this, 'check' . $test];
       if (is_callable($callback)) {
         $results[$test] = call_user_func($callback);
@@ -55,22 +40,22 @@ class RequirementsChecker {
     return $results;
   }
 
-  function checkTempAndCacheFolderCreation() {
+  public function checkTempAndCacheFolderCreation() {
     $paths = [
-      'temp_path' => Env::$temp_path,
-      'cache_path' => Env::$cache_path,
+      'temp_path' => Env::$tempPath,
+      'cache_path' => Env::$cachePath,
     ];
     if (!is_dir($paths['cache_path']) && !wp_mkdir_p($paths['cache_path'])) {
       $error = Helpers::replaceLinkTags(
         WPFunctions::get()->__('MailPoet requires write permissions inside the /wp-content/uploads folder. Please read our [link]instructions[/link] on how to resolve this issue.', 'mailpoet'),
-        '//beta.docs.mailpoet.com/article/152-minimum-requirements-for-mailpoet-3#folder_permissions',
+        'https://kb.mailpoet.com/article/152-minimum-requirements-for-mailpoet-3#folder_permissions',
         ['target' => '_blank']
       );
       return $this->processError($error);
     }
     foreach ($paths as $path) {
-      $index_file = $path . '/index.php';
-      if (!file_exists($index_file)) {
+      $indexFile = $path . '/index.php';
+      if (!file_exists($indexFile)) {
         file_put_contents(
           $path . '/index.php',
           str_replace('\n', PHP_EOL, '<?php\n\n// Silence is golden')
@@ -80,37 +65,30 @@ class RequirementsChecker {
     return true;
   }
 
-  function checkPDOExtension() {
+  public function checkPDOExtension() {
     if (extension_loaded('pdo') && extension_loaded('pdo_mysql')) return true;
     $error = Helpers::replaceLinkTags(
       WPFunctions::get()->__('MailPoet requires a PDO_MYSQL PHP extension. Please read our [link]instructions[/link] on how to resolve this issue.', 'mailpoet'),
-      '//beta.docs.mailpoet.com/article/152-minimum-requirements-for-mailpoet-3#php_extension',
+      'https://kb.mailpoet.com/article/152-minimum-requirements-for-mailpoet-3#php_extension',
       ['target' => '_blank']
     );
     return $this->processError($error);
   }
 
-  function checkMbstringExtension() {
-    if (!extension_loaded('mbstring')) {
-      require_once Env::$util_path . '/Polyfills.php';
-    }
-    return true;
-  }
-
-  function checkXmlExtension() {
+  public function checkXmlExtension() {
     if (extension_loaded('xml')) return true;
     $error = Helpers::replaceLinkTags(
       WPFunctions::get()->__('MailPoet requires an XML PHP extension. Please read our [link]instructions[/link] on how to resolve this issue.', 'mailpoet'),
-      '//beta.docs.mailpoet.com/article/152-minimum-requirements-for-mailpoet-3#php_extension',
+      'https://kb.mailpoet.com/article/152-minimum-requirements-for-mailpoet-3#php_extension',
       ['target' => '_blank']
     );
     return $this->processError($error);
   }
 
-  function checkVendorSource() {
-    foreach ($this->vendor_classes as $dependency) {
-      $dependency_path = $this->getDependencyPath($dependency);
-      if (!$dependency_path) {
+  public function checkVendorSource() {
+    foreach ($this->vendorClasses as $dependency) {
+      $dependencyPath = $this->getDependencyPath($dependency);
+      if (!$dependencyPath) {
         $error = sprintf(
           WPFunctions::get()->__('A MailPoet dependency (%s) does not appear to be loaded correctly, thus MailPoet will not work correctly. Please reinstall the plugin.', 'mailpoet'),
           $dependency
@@ -120,12 +98,12 @@ class RequirementsChecker {
       }
 
       $pattern = '#' . preg_quote(Env::$path) . '[\\\/]#';
-      $is_loaded_by_plugin = preg_match($pattern, $dependency_path);
-      if (!$is_loaded_by_plugin) {
+      $isLoadedByPlugin = preg_match($pattern, $dependencyPath);
+      if (!$isLoadedByPlugin) {
         $error = sprintf(
           WPFunctions::get()->__('MailPoet has detected a dependency conflict (%s) with another plugin (%s), which may cause unexpected behavior. Please disable the offending plugin to fix this issue.', 'mailpoet'),
           $dependency,
-          $dependency_path
+          $dependencyPath
         );
 
         return $this->processError($error);
@@ -135,17 +113,17 @@ class RequirementsChecker {
     return true;
   }
 
-  private function getDependencyPath($namespaced_class) {
+  private function getDependencyPath($namespacedClass) {
     try {
-      $reflector = new \ReflectionClass($namespaced_class);
+      $reflector = new \ReflectionClass($namespacedClass);
       return $reflector->getFileName();
     } catch (\ReflectionException $ex) {
       return false;
     }
   }
 
-  function processError($error) {
-    if ($this->display_error_notice) {
+  public function processError($error) {
+    if ($this->displayErrorNotice) {
       WPNotice::displayError($error);
     }
     return false;

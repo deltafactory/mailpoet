@@ -6,65 +6,65 @@ use Codeception\Stub;
 use Codeception\Stub\Expected;
 use MailPoet\Config\AccessControl;
 use MailPoet\DI\ContainerConfigurator;
-use MailPoet\WP\Functions as WPFunctions;
-use MailPoetVendor\Symfony\Component\DependencyInjection\Container;
 use MailPoet\DI\ContainerFactory;
 use MailPoet\Router\Endpoints\RouterTestMockEndpoint;
 use MailPoet\Router\Router;
+use MailPoetVendor\Symfony\Component\DependencyInjection\Container;
 
 require_once('RouterTestMockEndpoint.php');
 
 class RouterTest extends \MailPoetTest {
-  public $access_control;
-  public $router_data;
+  public $router;
+  public $accessControl;
+  public $routerData;
   /** @var Container */
   private $container;
 
-  function _before() {
+  public function _before() {
     parent::_before();
-    $this->router_data = [
+    $this->routerData = [
       Router::NAME => '',
       'endpoint' => 'router_test_mock_endpoint',
       'action' => 'test',
-      'data' => base64_encode(json_encode(['data' => 'dummy data'])),
+      'data' => base64_encode((string)json_encode(['data' => 'dummy data'])),
     ];
-    $this->access_control = new AccessControl(new WPFunctions());
-    $container_factory = new ContainerFactory(new ContainerConfigurator());
-    $this->container = $container_factory->getConfiguredContainer();
+    $this->accessControl = new AccessControl();
+    $containerFactory = new ContainerFactory(new ContainerConfigurator());
+    $this->container = $containerFactory->getConfiguredContainer();
     $this->container->register(RouterTestMockEndpoint::class)->setPublic(true);
     $this->container->compile();
-    $this->router = new Router($this->access_control, $this->container, $this->router_data);
+    $this->router = new Router($this->accessControl, $this->container, $this->routerData);
   }
 
-  function testItCanGetAPIDataFromGetRequest() {
+  public function testItCanGetAPIDataFromGetRequest() {
     $data = ['data' => 'dummy data'];
     $url = 'http://example.com/?' . Router::NAME . '&endpoint=view_in_browser&action=view&data='
-      . base64_encode(json_encode($data));
-    parse_str(parse_url($url, PHP_URL_QUERY), $_GET);
-    $router = new Router($this->access_control, $this->container);
-    expect($router->api_request)->equals(true);
+      . base64_encode((string)json_encode($data));
+    parse_str((string)parse_url($url, PHP_URL_QUERY), $_GET);
+    $router = new Router($this->accessControl, $this->container);
+    expect($router->apiRequest)->equals(true);
     expect($router->endpoint)->equals('viewInBrowser');
-    expect($router->endpoint_action)->equals('view');
+    expect($router->endpointAction)->equals('view');
     expect($router->data)->equals($data);
   }
 
-  function testItContinuesExecutionWhenAPIRequestNotDetected() {
-    $router_data = $this->router_data;
-    unset($router_data[Router::NAME]);
+  public function testItContinuesExecutionWhenAPIRequestNotDetected() {
+    $routerData = $this->routerData;
+    unset($routerData[Router::NAME]);
     $router = Stub::construct(
       '\MailPoet\Router\Router',
-      [$this->access_control, $this->container, $router_data]
+      [$this->accessControl, $this->container, $routerData]
     );
     $result = $router->init();
     expect($result)->null();
   }
 
-  function testItTerminatesRequestWhenEndpointNotFound() {
-    $router_data = $this->router_data;
-    $router_data['endpoint'] = 'invalid_endpoint';
+  public function testItTerminatesRequestWhenEndpointNotFound() {
+    $routerData = $this->routerData;
+    $routerData['endpoint'] = 'invalid_endpoint';
     $router = Stub::construct(
       '\MailPoet\Router\Router',
-      [$this->access_control, $this->container, $router_data],
+      [$this->accessControl, $this->container, $routerData],
       [
         'terminateRequest' => function($code, $error) {
           return [
@@ -83,12 +83,12 @@ class RouterTest extends \MailPoetTest {
     );
   }
 
-  function testItTerminatesRequestWhenEndpointActionNotFound() {
-    $router_data = $this->router_data;
-    $router_data['action'] = 'invalid_action';
+  public function testItTerminatesRequestWhenEndpointActionNotFound() {
+    $routerData = $this->routerData;
+    $routerData['action'] = 'invalid_action';
     $router = Stub::construct(
       '\MailPoet\Router\Router',
-      [$this->access_control, $this->container, $router_data],
+      [$this->accessControl, $this->container, $routerData],
       [
         'terminateRequest' => function($code, $error) {
           return [
@@ -107,14 +107,14 @@ class RouterTest extends \MailPoetTest {
     );
   }
 
-  function testItValidatesGlobalPermission() {
+  public function testItValidatesGlobalPermission() {
     $router = $this->router;
 
     $permissions = [
       'global' => AccessControl::PERMISSION_MANAGE_SETTINGS,
     ];
-    $access_control = Stub::make(
-      new AccessControl(new WPFunctions()),
+    $accessControl = Stub::make(
+      new AccessControl(),
       [
         'validatePermission' => Expected::once(function($cap) {
           expect($cap)->equals(AccessControl::PERMISSION_MANAGE_SETTINGS);
@@ -122,11 +122,11 @@ class RouterTest extends \MailPoetTest {
         }),
       ]
     );
-    $router->access_control = $access_control;
+    $router->accessControl = $accessControl;
     expect($router->validatePermissions(null, $permissions))->false();
 
-    $access_control = Stub::make(
-      new AccessControl(new WPFunctions()),
+    $accessControl = Stub::make(
+      new AccessControl(),
       [
         'validatePermission' => Expected::once(function($cap) {
           expect($cap)->equals(AccessControl::PERMISSION_MANAGE_SETTINGS);
@@ -134,11 +134,11 @@ class RouterTest extends \MailPoetTest {
         }),
       ]
     );
-    $router->access_control = $access_control;
+    $router->accessControl = $accessControl;
     expect($router->validatePermissions(null, $permissions))->true();
   }
 
-  function testItValidatesEndpointActionPermission() {
+  public function testItValidatesEndpointActionPermission() {
     $router = $this->router;
 
     $permissions = [
@@ -148,8 +148,8 @@ class RouterTest extends \MailPoetTest {
       ],
     ];
 
-    $access_control = Stub::make(
-      new AccessControl(new WPFunctions()),
+    $accessControl = Stub::make(
+      new AccessControl(),
       [
         'validatePermission' => Expected::once(function($cap) {
           expect($cap)->equals(AccessControl::PERMISSION_MANAGE_SETTINGS);
@@ -157,11 +157,11 @@ class RouterTest extends \MailPoetTest {
         }),
       ]
     );
-    $router->access_control = $access_control;
+    $router->accessControl = $accessControl;
     expect($router->validatePermissions('test', $permissions))->false();
 
-    $access_control = Stub::make(
-      new AccessControl(new WPFunctions()),
+    $accessControl = Stub::make(
+      new AccessControl(),
       [
         'validatePermission' => Expected::once(function($cap) {
           expect($cap)->equals(AccessControl::PERMISSION_MANAGE_SETTINGS);
@@ -169,17 +169,17 @@ class RouterTest extends \MailPoetTest {
         }),
       ]
     );
-    $router->access_control = $access_control;
+    $router->accessControl = $accessControl;
     expect($router->validatePermissions('test', $permissions))->true();
   }
 
-  function testItValidatesPermissionBeforeProcessingEndpointAction() {
+  public function testItValidatesPermissionBeforeProcessingEndpointAction() {
     $router = Stub::construct(
       '\MailPoet\Router\Router',
-      [$this->access_control, $this->container, $this->router_data],
+      [$this->accessControl, $this->container, $this->routerData],
       [
         'validatePermissions' => function($action, $permissions) {
-          expect($action)->equals($this->router_data['action']);
+          expect($action)->equals($this->routerData['action']);
           expect($permissions)->equals(
             [
               'global' => AccessControl::NO_ACCESS_RESTRICTION,
@@ -195,10 +195,10 @@ class RouterTest extends \MailPoetTest {
     );
   }
 
-  function testItReturnsForbiddenResponseWhenPermissionFailsValidation() {
+  public function testItReturnsForbiddenResponseWhenPermissionFailsValidation() {
     $router = Stub::construct(
       '\MailPoet\Router\Router',
-      [$this->access_control, $this->container, $this->router_data],
+      [$this->accessControl, $this->container, $this->routerData],
       [
         'validatePermissions' => false,
         'terminateRequest' => function($code, $error) {
@@ -218,51 +218,51 @@ class RouterTest extends \MailPoetTest {
     );
   }
 
-  function testItCallsEndpointAction() {
+  public function testItCallsEndpointAction() {
     $data = ['data' => 'dummy data'];
     $result = $this->router->init();
     expect($result)->equals($data);
   }
 
-  function testItExecutesUrlParameterConflictResolverAction() {
+  public function testItExecutesUrlParameterConflictResolverAction() {
     $this->router->init();
     expect((boolean)did_action('mailpoet_conflict_resolver_router_url_query_parameters'))->true();
   }
 
-  function testItCanEncodeRequestData() {
+  public function testItCanEncodeRequestData() {
     $data = ['data' => 'dummy data'];
     $result = Router::encodeRequestData($data);
     expect($result)->equals(
-      rtrim(base64_encode(json_encode($data)), '=')
+      rtrim(base64_encode((string)json_encode($data)), '=')
     );
   }
 
-  function testItReturnsEmptyArrayWhenRequestDataIsAString() {
-    $encoded_data = 'test';
-    $result = Router::decodeRequestData($encoded_data);
+  public function testItReturnsEmptyArrayWhenRequestDataIsAString() {
+    $encodedData = 'test';
+    $result = Router::decodeRequestData($encodedData);
     expect($result)->equals([]);
   }
 
-  function testItCanDecodeRequestData() {
+  public function testItCanDecodeRequestData() {
     $data = ['data' => 'dummy data'];
-    $encoded_data = rtrim(base64_encode(json_encode($data)), '=');
-    $result = Router::decodeRequestData($encoded_data);
+    $encodedData = rtrim(base64_encode((string)json_encode($data)), '=');
+    $result = Router::decodeRequestData($encodedData);
     expect($result)->equals($data);
   }
 
-  function testItCanConvertInvalidRequestDataToArray() {
+  public function testItCanConvertInvalidRequestDataToArray() {
     $result = Router::decodeRequestData('some_invalid_data');
     expect($result)->equals([]);
   }
 
-  function testItCanBuildRequest() {
+  public function testItCanBuildRequest() {
     $data = ['data' => 'dummy data'];
-    $encoded_data = rtrim(base64_encode(json_encode($data)), '=');
+    $encodedData = rtrim(base64_encode((string)json_encode($data)), '=');
     $result = Router::buildRequest(
       'router_test_mock_endpoint',
       'test',
       $data
     );
-    expect($result)->contains(Router::NAME . '&endpoint=router_test_mock_endpoint&action=test&data=' . $encoded_data);
+    expect($result)->contains(Router::NAME . '&endpoint=router_test_mock_endpoint&action=test&data=' . $encodedData);
   }
 }

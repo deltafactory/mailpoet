@@ -2,17 +2,21 @@
 
 namespace MailPoet\Test\Cron\Workers\SendingQueue;
 
-use AspectMock\Test as Mock;
-use Carbon\Carbon;
-use Codeception\Util\Fixtures;
 use Codeception\Stub;
 use Codeception\Stub\Expected;
+use Codeception\Util\Fixtures;
 use MailPoet\Config\Populator;
+use MailPoet\Cron\CronHelper;
 use MailPoet\Cron\Workers\SendingQueue\SendingErrorHandler;
 use MailPoet\Cron\Workers\SendingQueue\SendingQueue as SendingQueueWorker;
 use MailPoet\Cron\Workers\SendingQueue\Tasks\Mailer as MailerTask;
 use MailPoet\Cron\Workers\SendingQueue\Tasks\Newsletter as NewsletterTask;
 use MailPoet\Cron\Workers\StatsNotifications\Scheduler as StatsNotificationsScheduler;
+use MailPoet\DI\ContainerWrapper;
+use MailPoet\Entities\NewsletterEntity;
+use MailPoet\Form\FormFactory;
+use MailPoet\Form\FormsRepository;
+use MailPoet\Logging\LoggerFactory;
 use MailPoet\Mailer\MailerLog;
 use MailPoet\Models\Newsletter;
 use MailPoet\Models\NewsletterLink;
@@ -22,82 +26,126 @@ use MailPoet\Models\ScheduledTask;
 use MailPoet\Models\ScheduledTaskSubscriber;
 use MailPoet\Models\Segment;
 use MailPoet\Models\SendingQueue;
-use MailPoet\Models\Setting;
 use MailPoet\Models\StatisticsNewsletters;
 use MailPoet\Models\Subscriber;
 use MailPoet\Models\SubscriberSegment;
 use MailPoet\Newsletter\Links\Links;
+use MailPoet\Newsletter\NewslettersRepository;
+use MailPoet\Referrals\ReferralDetector;
 use MailPoet\Router\Endpoints\Track;
 use MailPoet\Router\Router;
+use MailPoet\Segments\SubscribersFinder;
 use MailPoet\Settings\SettingsController;
-use MailPoet\Subscription\Url;
+use MailPoet\Settings\SettingsRepository;
+use MailPoet\Subscribers\LinkTokens;
+use MailPoet\Subscription\Captcha;
+use MailPoet\Subscription\SubscriptionUrlFactory;
 use MailPoet\Tasks\Sending as SendingTask;
 use MailPoet\WP\Functions as WPFunctions;
+use MailPoetVendor\Carbon\Carbon;
+use MailPoetVendor\Idiorm\ORM;
 
 class SendingQueueTest extends \MailPoetTest {
+  public $sendingQueueWorker;
+  public $cronHelper;
+  public $newsletterLink;
+  public $queue;
+  public $newsletterSegment;
+  public $newsletter;
+  public $subscriberSegment;
+  public $segment;
+  public $subscriber;
+  private $mailerTaskDummyResponse = ['response' => true];
   /** @var SendingErrorHandler */
-  private $sending_error_handler;
+  private $sendingErrorHandler;
   /** @var SettingsController */
   private $settings;
-  /** @var Scheduler */
-  private $stats_notifications_worker;
+  /** @var StatsNotificationsScheduler */
+  private $statsNotificationsWorker;
+  /** @var LoggerFactory */
+  private $loggerFactory;
+  /** @var NewslettersRepository */
+  private $newslettersRepository;
+  /** @var SubscribersFinder */
+  private $subscribersFinder;
 
-  function _before() {
+  public function _before() {
     parent::_before();
-    $wp_users = get_users();
-    wp_set_current_user($wp_users[0]->ID);
-    $populator = new Populator();
+    $wpUsers = get_users();
+    wp_set_current_user($wpUsers[0]->ID);
+    $this->settings = SettingsController::getInstance();
+    $referralDetector = new ReferralDetector(WPFunctions::get(), $this->settings);
+    $populator = new Populator(
+      $this->settings,
+      WPFunctions::get(),
+      new Captcha,
+      $referralDetector,
+      $this->diContainer->get(FormsRepository::class),
+      $this->diContainer->get(FormFactory::class)
+    );
     $populator->up();
     $this->subscriber = Subscriber::create();
     $this->subscriber->email = 'john@doe.com';
-    $this->subscriber->first_name = 'John';
-    $this->subscriber->last_name = 'Doe';
+    $this->subscriber->firstName = 'John';
+    $this->subscriber->lastName = 'Doe';
     $this->subscriber->status = Subscriber::STATUS_SUBSCRIBED;
+    $this->subscriber->source = 'administrator';
     $this->subscriber->save();
     $this->segment = Segment::create();
     $this->segment->name = 'segment';
     $this->segment->save();
-    $this->subscriber_segment = SubscriberSegment::create();
-    $this->subscriber_segment->subscriber_id = $this->subscriber->id;
-    $this->subscriber_segment->segment_id = $this->segment->id;
-    $this->subscriber_segment->save();
+    $this->subscriberSegment = SubscriberSegment::create();
+    $this->subscriberSegment->subscriberId = $this->subscriber->id;
+    $this->subscriberSegment->segmentId = (int)$this->segment->id;
+    $this->subscriberSegment->save();
     $this->newsletter = Newsletter::create();
     $this->newsletter->type = Newsletter::TYPE_STANDARD;
     $this->newsletter->status = Newsletter::STATUS_ACTIVE;
     $this->newsletter->subject = Fixtures::get('newsletter_subject_template');
     $this->newsletter->body = Fixtures::get('newsletter_body_template');
     $this->newsletter->save();
-    $this->newsletter_segment = NewsletterSegment::create();
-    $this->newsletter_segment->newsletter_id = $this->newsletter->id;
-    $this->newsletter_segment->segment_id = $this->segment->id;
-    $this->newsletter_segment->save();
+    $this->newsletterSegment = NewsletterSegment::create();
+    $this->newsletterSegment->newsletterId = $this->newsletter->id;
+    $this->newsletterSegment->segmentId = (int)$this->segment->id;
+    $this->newsletterSegment->save();
     $this->queue = SendingTask::create();
-    $this->queue->newsletter_id = $this->newsletter->id;
+    $this->queue->newsletterId = $this->newsletter->id;
     $this->queue->setSubscribers([$this->subscriber->id]);
-    $this->queue->count_total = 1;
+    $this->queue->countCotal = 1;
     $this->queue->save();
-    $this->newsletter_link = NewsletterLink::create();
-    $this->newsletter_link->newsletter_id = $this->newsletter->id;
-    $this->newsletter_link->queue_id = $this->queue->id;
-    $this->newsletter_link->url = '[link:subscription_unsubscribe_url]';
-    $this->newsletter_link->hash = 'abcde';
-    $this->newsletter_link->save();
-    $this->sending_error_handler = new SendingErrorHandler();
-    $this->settings = new SettingsController();
-    $this->stats_notifications_worker = new StatsNotificationsScheduler($this->settings);
-    $this->sending_queue_worker = new SendingQueueWorker($this->sending_error_handler, $this->stats_notifications_worker);
+    $this->newsletterLink = NewsletterLink::create();
+    $this->newsletterLink->newsletterId = $this->newsletter->id;
+    $this->newsletterLink->queueId = $this->queue->id;
+    $this->newsletterLink->url = '[link:subscription_instant_unsubscribe_url]';
+    $this->newsletterLink->hash = 'abcde';
+    $this->newsletterLink->save();
+    $this->subscribersFinder = $this->diContainer->get(SubscribersFinder::class);
+    $this->sendingErrorHandler = new SendingErrorHandler();
+    $this->statsNotificationsWorker = Stub::makeEmpty(StatsNotificationsScheduler::class);
+    $this->loggerFactory = LoggerFactory::getInstance();
+    $this->cronHelper = $this->diContainer->get(CronHelper::class);
+    $this->sendingQueueWorker = new SendingQueueWorker(
+      $this->sendingErrorHandler,
+      $this->statsNotificationsWorker,
+      $this->loggerFactory,
+      Stub::makeEmpty(NewslettersRepository::class, ['findOneById' => new NewsletterEntity()]),
+      $this->cronHelper,
+      $this->subscribersFinder
+    );
+    $this->newslettersRepository = ContainerWrapper::getInstance()->get(NewslettersRepository::class);
   }
 
   private function getDirectUnsubscribeURL() {
-    return Url::getUnsubscribeUrl($this->subscriber);
+    return SubscriptionUrlFactory::getInstance()->getUnsubscribeUrl($this->subscriber, $this->queue->id);
   }
 
   private function getTrackedUnsubscribeURL() {
+    $linkTokens = new LinkTokens;
     $data = Links::createUrlDataObject(
       $this->subscriber->id,
-      $this->subscriber->email,
+      $linkTokens->getToken($this->subscriber),
       $this->queue->id,
-      $this->newsletter_link->hash,
+      $this->newsletterLink->hash,
       false
     );
     return Router::buildRequest(
@@ -107,210 +155,276 @@ class SendingQueueTest extends \MailPoetTest {
     );
   }
 
-  function testItConstructs() {
-    expect($this->sending_queue_worker->batch_size)->equals(SendingQueueWorker::BATCH_SIZE);
-    expect($this->sending_queue_worker->mailer_task instanceof MailerTask);
-    expect($this->sending_queue_worker->newsletter_task instanceof NewsletterTask);
-    expect(strlen($this->sending_queue_worker->timer))->greaterOrEquals(5);
-
-    // constructor accepts timer argument
-    $timer = microtime(true) - 5;
-    $sending_queue_worker = new SendingQueueWorker($this->sending_error_handler, $this->stats_notifications_worker, $timer);
-    expect($sending_queue_worker->timer)->equals($timer);
+  public function testItConstructs() {
+    expect($this->sendingQueueWorker->batchSize)->equals(SendingQueueWorker::BATCH_SIZE);
+    expect($this->sendingQueueWorker->mailerTask instanceof MailerTask);
+    expect($this->sendingQueueWorker->newsletterTask instanceof NewsletterTask);
   }
 
-  function testItEnforcesExecutionLimitsBeforeQueueProcessing() {
-    $sending_queue_worker = Stub::make(
-      new SendingQueueWorker($this->sending_error_handler, $this->stats_notifications_worker),
+  public function testItEnforcesExecutionLimitsBeforeQueueProcessing() {
+    $sendingQueueWorker = Stub::make(
+      new SendingQueueWorker(
+        $this->sendingErrorHandler,
+        $this->statsNotificationsWorker,
+        $this->loggerFactory,
+        Stub::makeEmpty(NewslettersRepository::class),
+        $this->cronHelper,
+        $this->subscribersFinder
+      ),
       [
         'processQueue' => Expected::never(),
         'enforceSendingAndExecutionLimits' => Expected::exactly(1, function() {
           throw new \Exception();
         }),
       ], $this);
-    $sending_queue_worker->__construct($this->sending_error_handler, $this->stats_notifications_worker);
+    $sendingQueueWorker->__construct(
+      $this->sendingErrorHandler,
+      $this->statsNotificationsWorker,
+      $this->loggerFactory,
+      Stub::makeEmpty(NewslettersRepository::class),
+      $this->cronHelper,
+      $this->subscribersFinder
+    );
     try {
-      $sending_queue_worker->process();
+      $sendingQueueWorker->process();
       self::fail('Execution limits function was not called.');
     } catch (\Exception $e) {
       // No exception handling needed
     }
   }
 
-  function testItEnforcesExecutionLimitsAfterSendingWhenQueueStatusIsNotSetToComplete() {
-    $sending_queue_worker = Stub::make(
-      new SendingQueueWorker($this->sending_error_handler, $this->stats_notifications_worker),
+  public function testItEnforcesExecutionLimitsAfterSendingWhenQueueStatusIsNotSetToComplete() {
+    $sendingQueueWorker = Stub::make(
+      new SendingQueueWorker(
+        $this->sendingErrorHandler,
+        $this->statsNotificationsWorker,
+        $this->loggerFactory,
+        Stub::makeEmpty(NewslettersRepository::class),
+        $this->cronHelper,
+        $this->subscribersFinder
+      ),
       [
         'enforceSendingAndExecutionLimits' => Expected::exactly(1),
       ], $this);
-    $sending_queue_worker->__construct(
-      $this->sending_error_handler,
-      $this->stats_notifications_worker,
-      $timer = false,
+    $sendingQueueWorker->__construct(
+      $this->sendingErrorHandler,
+      $this->statsNotificationsWorker,
+      $this->loggerFactory,
+      Stub::makeEmpty(NewslettersRepository::class),
+      $this->cronHelper,
+      $this->subscribersFinder,
       Stub::make(
         new MailerTask(),
         [
-          'sendBulk' => null,
+          'sendBulk' => $this->mailerTaskDummyResponse,
         ]
       )
     );
-    $sending_queue_worker->sendNewsletters(
+    $sendingQueueWorker->sendNewsletters(
       $this->queue,
-      $prepared_subscribers = [],
-      $prepared_newsletters = [],
-      $prepared_subscribers = [],
+      $preparedSubscribers = [],
+      $preparedNewsletters = [],
+      $preparedSubscribers = [],
       $statistics[] = [
         'newsletter_id' => 1,
         'subscriber_id' => 1,
         'queue_id' => $this->queue->id,
-      ]
+      ],
+      microtime(true)
     );
   }
 
-  function testItDoesNotEnforceExecutionLimitsAfterSendingWhenQueueStatusIsSetToComplete() {
+  public function testItDoesNotEnforceExecutionLimitsAfterSendingWhenQueueStatusIsSetToComplete() {
     // when sending is done and there are no more subscribers to process, continue
     // without enforcing execution limits. this allows the newsletter to be marked as sent
     // in the process() method and after that execution limits will be enforced
     $queue = $this->queue;
     $queue->status = SendingQueue::STATUS_COMPLETED;
-    $sending_queue_worker = Stub::make(
-      new SendingQueueWorker($this->sending_error_handler, $this->stats_notifications_worker),
+    $sendingQueueWorker = Stub::make(
+      new SendingQueueWorker(
+        $this->sendingErrorHandler,
+        $this->statsNotificationsWorker,
+        $this->loggerFactory,
+        Stub::makeEmpty(NewslettersRepository::class),
+        $this->cronHelper,
+        $this->subscribersFinder
+      ),
       [
         'enforceSendingAndExecutionLimits' => Expected::never(),
       ], $this);
-    $sending_queue_worker->__construct(
-      $this->sending_error_handler,
-      $this->stats_notifications_worker,
-      $timer = false,
+    $sendingQueueWorker->__construct(
+      $this->sendingErrorHandler,
+      $this->statsNotificationsWorker,
+      $this->loggerFactory,
+      Stub::makeEmpty(NewslettersRepository::class),
+      $this->cronHelper,
+      $this->subscribersFinder,
       Stub::make(
         new MailerTask(),
         [
-          'sendBulk' => null,
+          'sendBulk' => $this->mailerTaskDummyResponse,
         ]
       )
     );
-    $sending_queue_worker->sendNewsletters(
+    $sendingQueueWorker->sendNewsletters(
       $queue,
-      $prepared_subscribers = [],
-      $prepared_newsletters = [],
-      $prepared_subscribers = [],
+      $preparedSubscribers = [],
+      $preparedNewsletters = [],
+      $preparedSubscribers = [],
       $statistics[] = [
         'newsletter_id' => 1,
         'subscriber_id' => 1,
         'queue_id' => $queue->id,
-      ]
+      ],
+      microtime(true)
     );
   }
 
-  function testItEnforcesExecutionLimitsAfterQueueProcessing() {
-    $sending_queue_worker = Stub::make(
-      new SendingQueueWorker($this->sending_error_handler, $this->stats_notifications_worker),
+  public function testItEnforcesExecutionLimitsAfterQueueProcessing() {
+    $sendingQueueWorker = Stub::make(
+      new SendingQueueWorker(
+        $this->sendingErrorHandler,
+        $this->statsNotificationsWorker,
+        $this->loggerFactory,
+        Stub::makeEmpty(NewslettersRepository::class),
+        $this->cronHelper,
+        $this->subscribersFinder
+      ),
       [
         'processQueue' => function() {
           // this function returns a queue object
-          return (object)['status' => null, 'task_id' => 0];
+          return (object)['status' => null, 'taskId' => 0];
         },
         'enforceSendingAndExecutionLimits' => Expected::exactly(2),
       ], $this);
-    $sending_queue_worker->__construct($this->sending_error_handler, $this->stats_notifications_worker);
-    $sending_queue_worker->process();
+    $sendingQueueWorker->__construct(
+      $this->sendingErrorHandler,
+      $this->statsNotificationsWorker,
+      $this->loggerFactory,
+      Stub::makeEmpty(NewslettersRepository::class),
+      $this->cronHelper,
+      $this->subscribersFinder
+    );
+    $sendingQueueWorker->process();
   }
 
-  function testItDeletesQueueWhenNewsletterIsNotFound() {
+  public function testItDeletesQueueWhenNewsletterIsNotFound() {
     // queue exists
     $queue = SendingQueue::findOne($this->queue->id);
     expect($queue)->notEquals(false);
 
     // delete newsletter
-    Newsletter::findOne($this->newsletter->id)
-      ->delete();
+    $this->newslettersRepository->bulkDelete([$this->newsletter->id]);
 
     // queue no longer exists
-    $this->sending_queue_worker->process();
+    $this->sendingQueueWorker->process();
     $queue = SendingQueue::findOne($this->queue->id);
-    expect($queue)->false(false);
+    expect($queue)->false();
   }
 
-  function testItPassesExtraParametersToMailerWhenTrackingIsDisabled() {
+  public function testItPassesExtraParametersToMailerWhenTrackingIsDisabled() {
     $this->settings->set('tracking.enabled', false);
     $directUnsubscribeURL = $this->getDirectUnsubscribeURL();
-    $sending_queue_worker = new SendingQueueWorker(
-      $this->sending_error_handler,
-      $this->stats_notifications_worker,
-      $timer = false,
+    $sendingQueueWorker = new SendingQueueWorker(
+      $this->sendingErrorHandler,
+      $this->statsNotificationsWorker,
+      $this->loggerFactory,
+      Stub::makeEmpty(NewslettersRepository::class, ['findOneById' => new NewsletterEntity()]),
+      $this->cronHelper,
+      $this->subscribersFinder,
       Stub::make(
         new MailerTask(),
         [
-          'send' => Expected::exactly(1, function($newsletter, $subscriber, $extra_params) use ($directUnsubscribeURL) {
-            expect(isset($extra_params['unsubscribe_url']))->true();
-            expect($extra_params['unsubscribe_url'])->equals($directUnsubscribeURL);
-            return true;
+          'send' => Expected::exactly(1, function($newsletter, $subscriber, $extraParams) use ($directUnsubscribeURL) {
+            expect(isset($extraParams['unsubscribe_url']))->true();
+            expect($extraParams['unsubscribe_url'])->equals($directUnsubscribeURL);
+            expect(isset($extraParams['meta']))->true();
+            expect($extraParams['meta'])->equals([
+              'email_type' => 'newsletter',
+              'subscriber_status' => 'subscribed',
+              'subscriber_source' => 'administrator',
+            ]);
+            return $this->mailerTaskDummyResponse;
           }),
         ],
         $this
       )
     );
-    $sending_queue_worker->process();
+    $sendingQueueWorker->process();
   }
 
-  function testItPassesExtraParametersToMailerWhenTrackingIsEnabled() {
+  public function testItPassesExtraParametersToMailerWhenTrackingIsEnabled() {
     $this->settings->set('tracking.enabled', true);
     $trackedUnsubscribeURL = $this->getTrackedUnsubscribeURL();
-    $sending_queue_worker = new SendingQueueWorker(
-      $this->sending_error_handler,
-      $this->stats_notifications_worker,
-      $timer = false,
+    $sendingQueueWorker = new SendingQueueWorker(
+      $this->sendingErrorHandler,
+      $this->statsNotificationsWorker,
+      $this->loggerFactory,
+      Stub::makeEmpty(NewslettersRepository::class, ['findOneById' => new NewsletterEntity()]),
+      $this->cronHelper,
+      $this->subscribersFinder,
       Stub::make(
         new MailerTask(),
         [
-          'send' => Expected::exactly(1, function($newsletter, $subscriber, $extra_params) use ($trackedUnsubscribeURL) {
-            expect(isset($extra_params['unsubscribe_url']))->true();
-            expect($extra_params['unsubscribe_url'])->equals($trackedUnsubscribeURL);
-            return true;
+          'send' => Expected::exactly(1, function($newsletter, $subscriber, $extraParams) use ($trackedUnsubscribeURL) {
+            expect(isset($extraParams['unsubscribe_url']))->true();
+            expect($extraParams['unsubscribe_url'])->equals($trackedUnsubscribeURL);
+            expect(isset($extraParams['meta']))->true();
+            expect($extraParams['meta'])->equals([
+              'email_type' => 'newsletter',
+              'subscriber_status' => 'subscribed',
+              'subscriber_source' => 'administrator',
+            ]);
+            return $this->mailerTaskDummyResponse;
           }),
         ],
         $this
       )
     );
-    $sending_queue_worker->process();
+    $sendingQueueWorker->process();
   }
 
-  function testItCanProcessSubscribersOneByOne() {
-    $sending_queue_worker = new SendingQueueWorker(
-      $this->sending_error_handler,
-      $this->stats_notifications_worker,
-      $timer = false,
+  public function testItCanProcessSubscribersOneByOne() {
+    $sendingQueueWorker = new SendingQueueWorker(
+      $this->sendingErrorHandler,
+      $this->statsNotificationsWorker,
+      $this->loggerFactory,
+      Stub::makeEmpty(NewslettersRepository::class, ['findOneById' => new NewsletterEntity()]),
+      $this->cronHelper,
+      $this->subscribersFinder,
       Stub::make(
         new MailerTask(),
         [
-          'send' => Expected::exactly(1, function($newsletter, $subscriber, $extra_params) {
+          'send' => Expected::exactly(1, function($newsletter, $subscriber, $extraParams) {
             // newsletter body should not be empty
             expect(!empty($newsletter['body']['html']))->true();
             expect(!empty($newsletter['body']['text']))->true();
-            return true;
+            return $this->mailerTaskDummyResponse;
           }),
         ],
         $this
       )
     );
-    $sending_queue_worker->process();
+    $sendingQueueWorker->process();
 
     // newsletter status is set to sent
-    $updated_newsletter = Newsletter::findOne($this->newsletter->id);
-    expect($updated_newsletter->status)->equals(Newsletter::STATUS_SENT);
+    $updatedNewsletter = Newsletter::findOne($this->newsletter->id);
+    expect($updatedNewsletter->status)->equals(Newsletter::STATUS_SENT);
 
     // queue status is set to completed
-    $updated_queue = SendingTask::createFromQueue(SendingQueue::findOne($this->queue->id));
-    expect($updated_queue->status)->equals(SendingQueue::STATUS_COMPLETED);
+    /** @var SendingQueue $updatedQueue */
+    $updatedQueue = SendingQueue::findOne($this->queue->id);
+    $updatedQueue = SendingTask::createFromQueue($updatedQueue);
+    expect($updatedQueue->status)->equals(SendingQueue::STATUS_COMPLETED);
 
     // queue subscriber processed/to process count is updated
-    expect($updated_queue->getSubscribers(ScheduledTaskSubscriber::STATUS_UNPROCESSED))
+    expect($updatedQueue->getSubscribers(ScheduledTaskSubscriber::STATUS_UNPROCESSED))
       ->equals([]);
-    expect($updated_queue->getSubscribers(ScheduledTaskSubscriber::STATUS_PROCESSED))
+    expect($updatedQueue->getSubscribers(ScheduledTaskSubscriber::STATUS_PROCESSED))
       ->equals([$this->subscriber->id]);
-    expect($updated_queue->count_total)->equals(1);
-    expect($updated_queue->count_processed)->equals(1);
-    expect($updated_queue->count_to_process)->equals(0);
+    expect($updatedQueue->countTotal)->equals(1);
+    expect($updatedQueue->countProcessed)->equals(1);
+    expect($updatedQueue->countToProcess)->equals(0);
 
     // statistics entry should be created
     $statistics = StatisticsNewsletters::where('newsletter_id', $this->newsletter->id)
@@ -320,11 +434,14 @@ class SendingQueueTest extends \MailPoetTest {
     expect($statistics)->notEquals(false);
   }
 
-  function testItCanProcessSubscribersInBulk() {
-    $sending_queue_worker = new SendingQueueWorker(
-      $this->sending_error_handler,
-      $this->stats_notifications_worker,
-      $timer = false,
+  public function testItCanProcessSubscribersInBulk() {
+    $sendingQueueWorker = new SendingQueueWorker(
+      $this->sendingErrorHandler,
+      $this->statsNotificationsWorker,
+      $this->loggerFactory,
+      Stub::makeEmpty(NewslettersRepository::class, ['findOneById' => new NewsletterEntity()]),
+      $this->cronHelper,
+      $this->subscribersFinder,
       Stub::make(
         new MailerTask(),
         [
@@ -332,7 +449,7 @@ class SendingQueueTest extends \MailPoetTest {
             // newsletter body should not be empty
             expect(!empty($newsletter[0]['body']['html']))->true();
             expect(!empty($newsletter[0]['body']['text']))->true();
-            return true;
+            return $this->mailerTaskDummyResponse;
           }),
           'getProcessingMethod' => Expected::exactly(1, function() {
             return 'bulk';
@@ -341,24 +458,26 @@ class SendingQueueTest extends \MailPoetTest {
         $this
       )
     );
-    $sending_queue_worker->process();
+    $sendingQueueWorker->process();
 
     // newsletter status is set to sent
-    $updated_newsletter = Newsletter::findOne($this->newsletter->id);
-    expect($updated_newsletter->status)->equals(Newsletter::STATUS_SENT);
+    $updatedNewsletter = Newsletter::findOne($this->newsletter->id);
+    expect($updatedNewsletter->status)->equals(Newsletter::STATUS_SENT);
 
     // queue status is set to completed
-    $updated_queue = SendingTask::createFromQueue(SendingQueue::findOne($this->queue->id));
-    expect($updated_queue->status)->equals(SendingQueue::STATUS_COMPLETED);
+    /** @var SendingQueue $updatedQueue */
+    $updatedQueue = SendingQueue::findOne($this->queue->id);
+    $updatedQueue = SendingTask::createFromQueue($updatedQueue);
+    expect($updatedQueue->status)->equals(SendingQueue::STATUS_COMPLETED);
 
     // queue subscriber processed/to process count is updated
-    expect($updated_queue->getSubscribers(ScheduledTaskSubscriber::STATUS_UNPROCESSED))
+    expect($updatedQueue->getSubscribers(ScheduledTaskSubscriber::STATUS_UNPROCESSED))
       ->equals([]);
-    expect($updated_queue->getSubscribers(ScheduledTaskSubscriber::STATUS_PROCESSED))
+    expect($updatedQueue->getSubscribers(ScheduledTaskSubscriber::STATUS_PROCESSED))
       ->equals([$this->subscriber->id]);
-    expect($updated_queue->count_total)->equals(1);
-    expect($updated_queue->count_processed)->equals(1);
-    expect($updated_queue->count_to_process)->equals(0);
+    expect($updatedQueue->countTotal)->equals(1);
+    expect($updatedQueue->countProcessed)->equals(1);
+    expect($updatedQueue->countToProcess)->equals(0);
 
     // statistics entry should be created
     $statistics = StatisticsNewsletters::where('newsletter_id', $this->newsletter->id)
@@ -368,11 +487,14 @@ class SendingQueueTest extends \MailPoetTest {
     expect($statistics)->notEquals(false);
   }
 
-  function testItProcessesStandardNewsletters() {
-    $sending_queue_worker = new SendingQueueWorker(
-      $this->sending_error_handler,
-      $this->stats_notifications_worker,
-      $timer = false,
+  public function testItProcessesStandardNewsletters() {
+    $sendingQueueWorker = new SendingQueueWorker(
+      $this->sendingErrorHandler,
+      $this->statsNotificationsWorker,
+      $this->loggerFactory,
+      Stub::makeEmpty(NewslettersRepository::class, ['findOneById' => new NewsletterEntity()]),
+      $this->cronHelper,
+      $this->subscribersFinder,
       Stub::make(
         new MailerTask(),
         [
@@ -380,31 +502,33 @@ class SendingQueueTest extends \MailPoetTest {
             // newsletter body should not be empty
             expect(!empty($newsletter['body']['html']))->true();
             expect(!empty($newsletter['body']['text']))->true();
-            return true;
+            return $this->mailerTaskDummyResponse;
           }),
         ],
         $this
       )
     );
-    $sending_queue_worker->process();
+    $sendingQueueWorker->process();
 
     // queue status is set to completed
-    $updated_queue = SendingTask::createFromQueue(SendingQueue::findOne($this->queue->id));
-    expect($updated_queue->status)->equals(SendingQueue::STATUS_COMPLETED);
+    /** @var SendingQueue $updatedQueue */
+    $updatedQueue = SendingQueue::findOne($this->queue->id);
+    $updatedQueue = SendingTask::createFromQueue($updatedQueue);
+    expect($updatedQueue->status)->equals(SendingQueue::STATUS_COMPLETED);
 
     // newsletter status is set to sent and sent_at date is populated
-    $updated_newsletter = Newsletter::findOne($this->newsletter->id);
-    expect($updated_newsletter->status)->equals(Newsletter::STATUS_SENT);
-    expect($updated_newsletter->sent_at)->equals($updated_queue->processed_at);
+    $updatedNewsletter = Newsletter::findOne($this->newsletter->id);
+    expect($updatedNewsletter->status)->equals(Newsletter::STATUS_SENT);
+    expect($updatedNewsletter->sentAt)->equals($updatedQueue->processedAt);
 
     // queue subscriber processed/to process count is updated
-    expect($updated_queue->getSubscribers(ScheduledTaskSubscriber::STATUS_UNPROCESSED))
+    expect($updatedQueue->getSubscribers(ScheduledTaskSubscriber::STATUS_UNPROCESSED))
       ->equals([]);
-    expect($updated_queue->getSubscribers(ScheduledTaskSubscriber::STATUS_PROCESSED))
+    expect($updatedQueue->getSubscribers(ScheduledTaskSubscriber::STATUS_PROCESSED))
       ->equals([$this->subscriber->id]);
-    expect($updated_queue->count_total)->equals(1);
-    expect($updated_queue->count_processed)->equals(1);
-    expect($updated_queue->count_to_process)->equals(0);
+    expect($updatedQueue->countTotal)->equals(1);
+    expect($updatedQueue->countProcessed)->equals(1);
+    expect($updatedQueue->countToProcess)->equals(0);
 
     // statistics entry should be created
     $statistics = StatisticsNewsletters::where('newsletter_id', $this->newsletter->id)
@@ -414,36 +538,42 @@ class SendingQueueTest extends \MailPoetTest {
     expect($statistics)->notEquals(false);
   }
 
-  function testItUpdatesUpdateTime() {
-    $originalUpdated = Carbon::createFromTimestamp(current_time('timestamp'))->subHours(5)->toDateTimeString();
+  public function testItUpdatesUpdateTime() {
+    $originalUpdated = Carbon::createFromTimestamp(WPFunctions::get()->currentTime('timestamp'))->subHours(5)->toDateTimeString();
 
-    $this->queue->scheduled_at = Carbon::createFromTimestamp(current_time('timestamp'));
+    $this->queue->scheduled_at = Carbon::createFromTimestamp(WPFunctions::get()->currentTime('timestamp'));
     $this->queue->updated_at = $originalUpdated;
     $this->queue->save();
 
     $this->newsletter->type = Newsletter::TYPE_WELCOME;
-    $this->newsletter_segment->delete();
+    $this->newsletterSegment->delete();
 
-    $sending_queue_worker = new SendingQueueWorker(
-      $this->sending_error_handler,
-      $this->stats_notifications_worker,
-      $timer = false,
+    $sendingQueueWorker = new SendingQueueWorker(
+      $this->sendingErrorHandler,
+      $this->statsNotificationsWorker,
+      $this->loggerFactory,
+      Stub::makeEmpty(NewslettersRepository::class),
+      $this->cronHelper,
+      $this->subscribersFinder,
       Stub::makeEmpty(new MailerTask(), [], $this)
     );
-    $sending_queue_worker->process();
+    $sendingQueueWorker->process();
 
     $newQueue = ScheduledTask::findOne($this->queue->task_id);
-    expect($newQueue->updated_at)->notEquals($originalUpdated);
+    expect($newQueue->updatedAt)->notEquals($originalUpdated);
   }
 
-  function testItCanProcessWelcomeNewsletters() {
+  public function testItCanProcessWelcomeNewsletters() {
     $this->newsletter->type = Newsletter::TYPE_WELCOME;
-    $this->newsletter_segment->delete();
+    $this->newsletterSegment->delete();
 
-    $sending_queue_worker = new SendingQueueWorker(
-      $this->sending_error_handler,
-      $this->stats_notifications_worker,
-      $timer = false,
+    $sendingQueueWorker = new SendingQueueWorker(
+      $this->sendingErrorHandler,
+      $this->statsNotificationsWorker,
+      $this->loggerFactory,
+      Stub::makeEmpty(NewslettersRepository::class, ['findOneById' => new NewsletterEntity()]),
+      $this->cronHelper,
+      $this->subscribersFinder,
       Stub::make(
         new MailerTask(),
         [
@@ -451,30 +581,32 @@ class SendingQueueTest extends \MailPoetTest {
             // newsletter body should not be empty
             expect(!empty($newsletter['body']['html']))->true();
             expect(!empty($newsletter['body']['text']))->true();
-            return true;
+            return $this->mailerTaskDummyResponse;
           }),
         ],
         $this
       )
     );
-    $sending_queue_worker->process();
+    $sendingQueueWorker->process();
 
     // newsletter status is set to sent
-    $updated_newsletter = Newsletter::findOne($this->newsletter->id);
-    expect($updated_newsletter->status)->equals(Newsletter::STATUS_SENT);
+    $updatedNewsletter = Newsletter::findOne($this->newsletter->id);
+    expect($updatedNewsletter->status)->equals(Newsletter::STATUS_SENT);
 
     // queue status is set to completed
-    $updated_queue = SendingTask::createFromQueue(SendingQueue::findOne($this->queue->id));
-    expect($updated_queue->status)->equals(SendingQueue::STATUS_COMPLETED);
+    /** @var SendingQueue $updatedQueue */
+    $updatedQueue = SendingQueue::findOne($this->queue->id);
+    $updatedQueue = SendingTask::createFromQueue($updatedQueue);
+    expect($updatedQueue->status)->equals(SendingQueue::STATUS_COMPLETED);
 
     // queue subscriber processed/to process count is updated
-    expect($updated_queue->getSubscribers(ScheduledTaskSubscriber::STATUS_UNPROCESSED))
+    expect($updatedQueue->getSubscribers(ScheduledTaskSubscriber::STATUS_UNPROCESSED))
       ->equals([]);
-    expect($updated_queue->getSubscribers(ScheduledTaskSubscriber::STATUS_PROCESSED))
+    expect($updatedQueue->getSubscribers(ScheduledTaskSubscriber::STATUS_PROCESSED))
       ->equals([$this->subscriber->id]);
-    expect($updated_queue->count_total)->equals(1);
-    expect($updated_queue->count_processed)->equals(1);
-    expect($updated_queue->count_to_process)->equals(0);
+    expect($updatedQueue->countTotal)->equals(1);
+    expect($updatedQueue->countProcessed)->equals(1);
+    expect($updatedQueue->countToProcess)->equals(0);
 
     // statistics entry should be created
     $statistics = StatisticsNewsletters::where('newsletter_id', $this->newsletter->id)
@@ -484,170 +616,234 @@ class SendingQueueTest extends \MailPoetTest {
     expect($statistics)->notEquals(false);
   }
 
-  function testItRemovesNonexistentSubscribersFromProcessingList() {
+  public function testItPreventsSendingWelcomeEmailWhenSubscriberIsUnsubscribed() {
+    $this->newsletter->type = Newsletter::TYPE_WELCOME;
+    $this->subscriber->status = Subscriber::STATUS_UNSUBSCRIBED;
+    $this->subscriber->save();
+    $this->newsletterSegment->delete();
+
+    $sendingQueueWorker = new SendingQueueWorker(
+      $this->sendingErrorHandler,
+      $this->statsNotificationsWorker,
+      $this->loggerFactory,
+      Stub::makeEmpty(NewslettersRepository::class),
+      $this->cronHelper,
+      $this->subscribersFinder,
+      Stub::make(
+        new MailerTask(),
+        [
+          'send' => Expected::exactly(0),
+        ],
+        $this
+      )
+    );
+    $sendingQueueWorker->process();
+
+    // queue status is set to completed
+    /** @var SendingQueue $updatedQueue */
+    $updatedQueue = SendingQueue::findOne($this->queue->id);
+    $updatedQueue = SendingTask::createFromQueue($updatedQueue);
+
+    expect($updatedQueue->getSubscribers(ScheduledTaskSubscriber::STATUS_PROCESSED))
+      ->equals([]);
+    expect($updatedQueue->countTotal)->equals(0);
+    expect($updatedQueue->countProcessed)->equals(0);
+    expect($updatedQueue->countToProcess)->equals(0);
+  }
+
+  public function testItRemovesNonexistentSubscribersFromProcessingList() {
     $queue = $this->queue;
     $queue->setSubscribers([
       $this->subscriber->id(),
       12345645454,
     ]);
-    $queue->count_total = 2;
+    $queue->countTotal = 2;
     $queue->save();
-    $sending_queue_worker = $this->sending_queue_worker;
-    $sending_queue_worker->mailer_task = Stub::make(
+    $sendingQueueWorker = $this->sendingQueueWorker;
+    $sendingQueueWorker->mailerTask = Stub::make(
       new MailerTask(),
       [
         'send' => Expected::exactly(1, function() {
-          return true;
+          return $this->mailerTaskDummyResponse;
         }),
       ],
       $this
     );
-    $sending_queue_worker->process();
+    $sendingQueueWorker->process();
 
-    $updated_queue = SendingTask::createFromQueue(SendingQueue::findOne($queue->id));
+    /** @var SendingQueue $updatedQueue */
+    $updatedQueue = SendingQueue::findOne($queue->id);
+    $updatedQueue = SendingTask::createFromQueue($updatedQueue);
     // queue subscriber processed/to process count is updated
-    expect($updated_queue->getSubscribers(ScheduledTaskSubscriber::STATUS_UNPROCESSED))
+    expect($updatedQueue->getSubscribers(ScheduledTaskSubscriber::STATUS_UNPROCESSED))
       ->equals([]);
-    expect($updated_queue->getSubscribers(ScheduledTaskSubscriber::STATUS_PROCESSED))
+    expect($updatedQueue->getSubscribers(ScheduledTaskSubscriber::STATUS_PROCESSED))
       ->equals([$this->subscriber->id]);
-    expect($updated_queue->count_total)->equals(1);
-    expect($updated_queue->count_processed)->equals(1);
-    expect($updated_queue->count_to_process)->equals(0);
+    expect($updatedQueue->countTotal)->equals(1);
+    expect($updatedQueue->countProcessed)->equals(1);
+    expect($updatedQueue->countToProcess)->equals(0);
 
     // statistics entry should be created only for 1 subscriber
     $statistics = StatisticsNewsletters::findMany();
     expect(count($statistics))->equals(1);
   }
 
-  function testItUpdatesQueueSubscriberCountWhenNoneOfSubscribersExist() {
+  public function testItUpdatesQueueSubscriberCountWhenNoneOfSubscribersExist() {
     $queue = $this->queue;
     $queue->setSubscribers([
       123,
       456,
     ]);
-    $queue->count_total = 2;
+    $queue->countTotal = 2;
     $queue->save();
-    $sending_queue_worker = $this->sending_queue_worker;
-    $sending_queue_worker->mailer_task = Stub::make(
+    $sendingQueueWorker = $this->sendingQueueWorker;
+    $sendingQueueWorker->mailerTask = Stub::make(
       new MailerTask(),
-      ['send' => true]
+      ['send' => $this->mailerTaskDummyResponse]
     );
-    $sending_queue_worker->process();
+    $sendingQueueWorker->process();
 
-    $updated_queue = SendingTask::createFromQueue(SendingQueue::findOne($queue->id));
+    /** @var SendingQueue $updatedQueue */
+    $updatedQueue = SendingQueue::findOne($queue->id);
+    $updatedQueue = SendingTask::createFromQueue($updatedQueue);
     // queue subscriber processed/to process count is updated
-    expect($updated_queue->getSubscribers(ScheduledTaskSubscriber::STATUS_UNPROCESSED))
+    expect($updatedQueue->getSubscribers(ScheduledTaskSubscriber::STATUS_UNPROCESSED))
       ->equals([]);
-    expect($updated_queue->getSubscribers(ScheduledTaskSubscriber::STATUS_PROCESSED))
+    expect($updatedQueue->getSubscribers(ScheduledTaskSubscriber::STATUS_PROCESSED))
       ->equals([]);
-    expect($updated_queue->count_total)->equals(0);
-    expect($updated_queue->count_processed)->equals(0);
-    expect($updated_queue->count_to_process)->equals(0);
+    expect($updatedQueue->countTotal)->equals(0);
+    expect($updatedQueue->countProcessed)->equals(0);
+    expect($updatedQueue->countToProcess)->equals(0);
   }
 
-  function testItDoesNotSendToTrashedSubscribers() {
-    $sending_queue_worker = $this->sending_queue_worker;
-    $sending_queue_worker->mailer_task = Stub::make(
+  public function testItDoesNotSendToTrashedSubscribers() {
+    $sendingQueueWorker = $this->sendingQueueWorker;
+    $sendingQueueWorker->mailerTask = Stub::make(
       new MailerTask(),
-      ['send' => true]
+      ['send' => $this->mailerTaskDummyResponse]
     );
 
     // newsletter is sent to existing subscriber
-    $sending_queue_worker->process();
-    $updated_queue = SendingTask::createFromQueue(SendingQueue::findOne($this->queue->id));
-    expect((int)$updated_queue->count_total)->equals(1);
+    $sendingQueueWorker->process();
+    /** @var SendingQueue $updatedQueue */
+    $updatedQueue = SendingQueue::findOne($this->queue->id);
+    $updatedQueue = SendingTask::createFromQueue($updatedQueue);
+    expect((int)$updatedQueue->countTotal)->equals(1);
 
     // newsletter is not sent to trashed subscriber
     $this->_after();
     $this->_before();
     $subscriber = $this->subscriber;
-    $subscriber->deleted_at = Carbon::now();
+    $subscriber->deletedAt = Carbon::now();
     $subscriber->save();
-    $sending_queue_worker->process();
-    $updated_queue = SendingTask::createFromQueue(SendingQueue::findOne($this->queue->id));
-    expect((int)$updated_queue->count_total)->equals(0);
+    $sendingQueueWorker->process();
+    /** @var SendingQueue $updatedQueue */
+    $updatedQueue = SendingQueue::findOne($this->queue->id);
+    $updatedQueue = SendingTask::createFromQueue($updatedQueue);
+    expect((int)$updatedQueue->countTotal)->equals(0);
   }
 
-  function testItDoesNotSendToGloballyUnsubscribedSubscribers() {
-    $sending_queue_worker = $this->sending_queue_worker;
-    $sending_queue_worker->mailer_task = Stub::make(
+  public function testItDoesNotSendToGloballyUnsubscribedSubscribers() {
+    $sendingQueueWorker = $this->sendingQueueWorker;
+    $sendingQueueWorker->mailerTask = Stub::make(
       new MailerTask(),
-      ['send' => true]
+      ['send' => $this->mailerTaskDummyResponse]
     );
 
     // newsletter is not sent to globally unsubscribed subscriber
     $subscriber = $this->subscriber;
     $subscriber->status = Subscriber::STATUS_UNSUBSCRIBED;
     $subscriber->save();
-    $sending_queue_worker->process();
-    $updated_queue = SendingTask::createFromQueue(SendingQueue::findOne($this->queue->id));
-    expect((int)$updated_queue->count_total)->equals(0);
+    $sendingQueueWorker->process();
+    /** @var SendingQueue $updatedQueue */
+    $updatedQueue = SendingQueue::findOne($this->queue->id);
+    $updatedQueue = SendingTask::createFromQueue($updatedQueue);
+    expect((int)$updatedQueue->countTotal)->equals(0);
   }
 
-  function testItDoesNotSendToSubscribersUnsubscribedFromSegments() {
-    $sending_queue_worker = $this->sending_queue_worker;
-    $sending_queue_worker->mailer_task = Stub::make(
+  public function testItDoesNotSendToSubscribersUnsubscribedFromSegments() {
+    $sendingQueueWorker = $this->sendingQueueWorker;
+    $sendingQueueWorker->mailerTask = Stub::make(
       new MailerTask(),
-      ['send' => true]
+      ['send' => $this->mailerTaskDummyResponse]
     );
 
     // newsletter is not sent to subscriber unsubscribed from segment
-    $subscriber_segment = $this->subscriber_segment;
-    $subscriber_segment->status = Subscriber::STATUS_UNSUBSCRIBED;
-    $subscriber_segment->save();
-    $sending_queue_worker->process();
-    $updated_queue = SendingTask::createFromQueue(SendingQueue::findOne($this->queue->id));
-    expect((int)$updated_queue->count_total)->equals(0);
+    $subscriberSegment = $this->subscriberSegment;
+    $subscriberSegment->status = Subscriber::STATUS_UNSUBSCRIBED;
+    $subscriberSegment->save();
+    $sendingQueueWorker->process();
+    /** @var SendingQueue $updatedQueue */
+    $updatedQueue = SendingQueue::findOne($this->queue->id);
+    $updatedQueue = SendingTask::createFromQueue($updatedQueue);
+    expect((int)$updatedQueue->countTotal)->equals(0);
   }
 
-  function testItDoesNotSendToInactiveSubscribers() {
-    $sending_queue_worker = $this->sending_queue_worker;
-    $sending_queue_worker->mailer_task = Stub::make(
+  public function testItDoesNotSendToInactiveSubscribers() {
+    $sendingQueueWorker = $this->sendingQueueWorker;
+    $sendingQueueWorker->mailerTask = Stub::make(
       new MailerTask(),
-      ['send' => true]
+      ['send' => $this->mailerTaskDummyResponse]
     );
 
     // newsletter is not sent to inactive subscriber
     $subscriber = $this->subscriber;
     $subscriber->status = Subscriber::STATUS_INACTIVE;
     $subscriber->save();
-    $sending_queue_worker->process();
-    $updated_queue = SendingTask::createFromQueue(SendingQueue::findOne($this->queue->id));
-    expect((int)$updated_queue->count_total)->equals(0);
+    $sendingQueueWorker->process();
+    /** @var SendingQueue $updatedQueue */
+    $updatedQueue = SendingQueue::findOne($this->queue->id);
+    $updatedQueue = SendingTask::createFromQueue($updatedQueue);
+    expect((int)$updatedQueue->countTotal)->equals(0);
   }
 
-  function testItPausesSendingWhenProcessedSubscriberListCannotBeUpdated() {
-    $sending_task = Mock::double(SendingTask::create(), [
-      'updateProcessedSubscribers' => false,
-    ]);
-    $sending_task->id = 100;
-    $sending_queue_worker = Stub::make(new SendingQueueWorker($this->sending_error_handler, $this->stats_notifications_worker));
-    $sending_queue_worker->__construct(
-      $this->sending_error_handler,
-      $this->stats_notifications_worker,
-      $timer = false,
+  public function testItPausesSendingWhenProcessedSubscriberListCannotBeUpdated() {
+    $sendingTask = $this->createMock(SendingTask::class);
+    $sendingTask
+      ->method('updateProcessedSubscribers')
+      ->will($this->returnValue(false));
+    $sendingTask
+      ->method('__get')
+      ->with('id')
+      ->will($this->returnValue(100));
+    $sendingQueueWorker = Stub::make(new SendingQueueWorker(
+      $this->sendingErrorHandler,
+      $this->statsNotificationsWorker,
+      $this->loggerFactory,
+      Stub::makeEmpty(NewslettersRepository::class),
+      $this->cronHelper,
+      $this->subscribersFinder
+    ));
+    $sendingQueueWorker->__construct(
+      $this->sendingErrorHandler,
+      $this->statsNotificationsWorker,
+      $this->loggerFactory,
+      Stub::makeEmpty(NewslettersRepository::class),
+      $this->cronHelper,
+      $this->subscribersFinder,
       Stub::make(
         new MailerTask(),
         [
-          'sendBulk' => true,
+          'sendBulk' => $this->mailerTaskDummyResponse,
         ]
       )
     );
     try {
-      $sending_queue_worker->sendNewsletters(
-        $sending_task->getObject(),
-        $prepared_subscribers = [],
-        $prepared_newsletters = [],
-        $prepared_subscribers = [],
-        $statistics = []
+      $sendingQueueWorker->sendNewsletters(
+        $sendingTask,
+        $preparedSubscribers = [],
+        $preparedNewsletters = [],
+        $preparedSubscribers = [],
+        $statistics = [],
+        microtime(true)
       );
       $this->fail('Paused sending exception was not thrown.');
     } catch (\Exception $e) {
       expect($e->getMessage())->equals('Sending has been paused.');
     }
-    $mailer_log = MailerLog::getMailerLog();
-    expect($mailer_log['status'])->equals(MailerLog::STATUS_PAUSED);
-    expect($mailer_log['error'])->equals(
+    $mailerLog = MailerLog::getMailerLog();
+    expect($mailerLog['status'])->equals(MailerLog::STATUS_PAUSED);
+    expect($mailerLog['error'])->equals(
       [
         'operation' => 'processed_list_update',
         'error_message' => 'QUEUE-100-PROCESSED-LIST-UPDATE',
@@ -655,51 +851,112 @@ class SendingQueueTest extends \MailPoetTest {
     );
   }
 
-  function testItDoesNotUpdateNewsletterHashDuringSending() {
-    $sending_queue_worker = new SendingQueueWorker(
-      $this->sending_error_handler,
-      $this->stats_notifications_worker,
-      $timer = false,
+  public function testItDoesNotUpdateNewsletterHashDuringSending() {
+    $sendingQueueWorker = new SendingQueueWorker(
+      $this->sendingErrorHandler,
+      $this->statsNotificationsWorker,
+      $this->loggerFactory,
+      Stub::makeEmpty(NewslettersRepository::class, ['findOneById' => new NewsletterEntity()]),
+      $this->cronHelper,
+      $this->subscribersFinder,
       Stub::make(
         new MailerTask(),
         [
-          'send' => Expected::once(),
+          'send' => Expected::once($this->mailerTaskDummyResponse),
         ],
         $this
       )
     );
-    $sending_queue_worker->process();
+    $sendingQueueWorker->process();
 
     // newsletter is sent and hash remains intact
-    $updated_newsletter = Newsletter::findOne($this->newsletter->id);
-    expect($updated_newsletter->status)->equals(Newsletter::STATUS_SENT);
-    expect($updated_newsletter->hash)->equals($this->newsletter->hash);
+    $updatedNewsletter = Newsletter::findOne($this->newsletter->id);
+    expect($updatedNewsletter->status)->equals(Newsletter::STATUS_SENT);
+    expect($updatedNewsletter->hash)->equals($this->newsletter->hash);
   }
 
-  function testItAllowsSettingCustomBatchSize() {
-    $custom_batch_size_value = 10;
-    $filter = function() use ($custom_batch_size_value) {
-      return $custom_batch_size_value;
+  public function testItAllowsSettingCustomBatchSize() {
+    $customBatchSizeValue = 10;
+    $filter = function() use ($customBatchSizeValue) {
+      return $customBatchSizeValue;
     };
     $wp = new WPFunctions;
     $wp->addFilter('mailpoet_cron_worker_sending_queue_batch_size', $filter);
-    $sending_queue_worker = new SendingQueueWorker($this->sending_error_handler, $this->stats_notifications_worker);
-    expect($sending_queue_worker->batch_size)->equals($custom_batch_size_value);
+    $sendingQueueWorker = new SendingQueueWorker(
+      $this->sendingErrorHandler,
+      $this->statsNotificationsWorker,
+      $this->loggerFactory,
+      Stub::makeEmpty(NewslettersRepository::class),
+      $this->cronHelper,
+      $this->subscribersFinder
+    );
+    expect($sendingQueueWorker->batchSize)->equals($customBatchSizeValue);
     $wp->removeFilter('mailpoet_cron_worker_sending_queue_batch_size', $filter);
   }
 
-  function _after() {
-    \ORM::raw_execute('TRUNCATE ' . Subscriber::$_table);
-    \ORM::raw_execute('TRUNCATE ' . SubscriberSegment::$_table);
-    \ORM::raw_execute('TRUNCATE ' . ScheduledTask::$_table);
-    \ORM::raw_execute('TRUNCATE ' . ScheduledTaskSubscriber::$_table);
-    \ORM::raw_execute('TRUNCATE ' . Segment::$_table);
-    \ORM::raw_execute('TRUNCATE ' . SendingQueue::$_table);
-    \ORM::raw_execute('TRUNCATE ' . Setting::$_table);
-    \ORM::raw_execute('TRUNCATE ' . Newsletter::$_table);
-    \ORM::raw_execute('TRUNCATE ' . NewsletterLink::$_table);
-    \ORM::raw_execute('TRUNCATE ' . NewsletterPost::$_table);
-    \ORM::raw_execute('TRUNCATE ' . NewsletterSegment::$_table);
-    \ORM::raw_execute('TRUNCATE ' . StatisticsNewsletters::$_table);
+  public function testItReschedulesBounceTaskWhenPlannedInFarFuture() {
+    $task = ScheduledTask::createOrUpdate([
+      'type' => 'bounce',
+      'status' => ScheduledTask::STATUS_SCHEDULED,
+      'scheduled_at' => Carbon::createFromTimestamp(WPFunctions::get()->currentTime('timestamp'))->addMonths(1),
+    ]);
+
+    $sendingQueueWorker = new SendingQueueWorker(
+      $this->sendingErrorHandler,
+      $this->statsNotificationsWorker,
+      $this->loggerFactory,
+      Stub::makeEmpty(NewslettersRepository::class, ['findOneById' => new NewsletterEntity()]),
+      $this->cronHelper,
+      $this->subscribersFinder,
+      $this->make(new MailerTask(), [
+        'send' => $this->mailerTaskDummyResponse,
+      ])
+    );
+    $sendingQueueWorker->process();
+
+    $refetchedTask = ScheduledTask::where('id', $task->id)->findOne();
+    assert($refetchedTask instanceof ScheduledTask); // PHPStan
+    expect($refetchedTask->scheduledAt)->lessThan(Carbon::createFromTimestamp(WPFunctions::get()->currentTime('timestamp'))->addHours(42));
+  }
+
+  public function testDoesNoRescheduleBounceTaskWhenPlannedInNearFuture() {
+    $inOneHour = Carbon::createFromTimestamp(WPFunctions::get()->currentTime('timestamp'))->addHours(1);
+    $task = ScheduledTask::createOrUpdate([
+      'type' => 'bounce',
+      'status' => ScheduledTask::STATUS_SCHEDULED,
+      'scheduled_at' => $inOneHour,
+    ]);
+
+    $sendingQueueWorker = new SendingQueueWorker(
+      $this->sendingErrorHandler,
+      $this->statsNotificationsWorker,
+      $this->loggerFactory,
+      Stub::makeEmpty(NewslettersRepository::class, ['findOneById' => new NewsletterEntity()]),
+      $this->cronHelper,
+      $this->subscribersFinder,
+      $this->make(new MailerTask(), [
+        'send' => $this->mailerTaskDummyResponse,
+      ])
+    );
+    $sendingQueueWorker->process();
+
+    $refetchedTask = ScheduledTask::where('id', $task->id)->findOne();
+    assert($refetchedTask instanceof ScheduledTask); // PHPStan
+    expect($refetchedTask->scheduledAt)->equals($inOneHour);
+  }
+
+  public function _after() {
+    ORM::raw_execute('TRUNCATE ' . Subscriber::$_table);
+    ORM::raw_execute('TRUNCATE ' . SubscriberSegment::$_table);
+    ORM::raw_execute('TRUNCATE ' . ScheduledTask::$_table);
+    ORM::raw_execute('TRUNCATE ' . ScheduledTaskSubscriber::$_table);
+    ORM::raw_execute('TRUNCATE ' . Segment::$_table);
+    ORM::raw_execute('TRUNCATE ' . SendingQueue::$_table);
+    $this->diContainer->get(SettingsRepository::class)->truncate();
+    ORM::raw_execute('TRUNCATE ' . Newsletter::$_table);
+    ORM::raw_execute('TRUNCATE ' . NewsletterLink::$_table);
+    ORM::raw_execute('TRUNCATE ' . NewsletterPost::$_table);
+    ORM::raw_execute('TRUNCATE ' . NewsletterSegment::$_table);
+    ORM::raw_execute('TRUNCATE ' . StatisticsNewsletters::$_table);
   }
 }

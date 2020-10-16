@@ -4,44 +4,53 @@ define('ABSPATH', getenv('WP_ROOT') . '/');
 
 require_once ABSPATH . 'wp-load.php';
 require_once ABSPATH . 'wp-admin/includes/admin.php';
-if(!class_exists('\MailPoet\Premium\DI\ContainerConfigurator')) {
-  require_once './PremiumContainerConfigurator.php';
+require_once(ABSPATH . 'wp-admin/includes/ms.php');
+
+use MailPoet\Mailer\WordPress\PHPMailerLoader;
+
+PHPMailerLoader::load();
+
+if (!class_exists('\MailPoet\Premium\DI\ContainerConfigurator')) {
+  require_once __DIR__ . '/PremiumContainerConfigurator.php';
 }
 
-function wc_get_customer_order_count(int $user_id): int {
-  return 0;
+if (!class_exists(WooCommerce::class)) {
+  require_once __DIR__ . '/woocommerce.php';
 }
 
-/**
- * @param  mixed $order
- * @return mixed
- */
-function wc_get_order($order = false) {
-  return false;
+require_once __DIR__ . '/function-stubs.php';
+
+// methods & classes for Premium plugin installation are required
+// only when needed so we need to let PHPStan know about them
+if (!function_exists('plugins_api')) {
+  /**
+   * @param string $action
+   * @param array|object $args
+   * @return object|array|WP_Error
+   */
+  function plugins_api($action, $args) {
+    return [];
+  }
 }
 
-function wc_price(float $price, array $args = []): string {
-  return '';
+if (!class_exists(WP_Ajax_Upgrader_Skin::class)) {
+  // phpcs:ignore
+  class WP_Ajax_Upgrader_Skin {}
 }
 
-/**
- * @return string
- */
-function get_woocommerce_currency() {
-  return '';
+if (!class_exists(Plugin_Upgrader::class)) {
+  // phpcs:ignore
+  class Plugin_Upgrader {
+    public function __construct($skin = null) {
+    }
+
+    /**
+     * @param string $package
+     * @param array $args
+     * @return bool|WP_Error
+     */
+    public function install($package, $args = []) {
+      return true;
+    }
+  }
 }
-
-function wc_get_product($the_product = false, $deprecated = array()) {
-	return null;
-}
-
-class WC_DateTime extends \DateTime {}
-
-/**
- * @method int get_id()
- * @method WC_DateTime|null get_date_created(string $context = 'view')
- * @method string get_billing_email(string $context = 'view')
- * @method string get_currency(string $context = 'view')
- * @method float get_total(string $context = 'view')
- */
-class WC_Order {}

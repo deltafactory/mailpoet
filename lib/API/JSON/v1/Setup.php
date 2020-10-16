@@ -3,28 +3,30 @@
 namespace MailPoet\API\JSON\v1;
 
 use MailPoet\API\JSON\Endpoint as APIEndpoint;
-use MailPoet\WP\Functions as WPFunctions;
 use MailPoet\Config\AccessControl;
 use MailPoet\Config\Activator;
-use MailPoet\Settings\SettingsController;
-
-if (!defined('ABSPATH')) exit;
+use MailPoet\WP\Functions as WPFunctions;
 
 class Setup extends APIEndpoint {
-  private $wp;
   public $permissions = [
     'global' => AccessControl::PERMISSION_MANAGE_SETTINGS,
   ];
 
-  function __construct(WPFunctions $wp) {
+  /** @var WPFunctions */
+  private $wp;
+
+  /** @var Activator */
+  private $activator;
+
+  public function __construct(WPFunctions $wp, Activator $activator) {
     $this->wp = $wp;
+    $this->activator = $activator;
   }
 
-  function reset() {
+  public function reset() {
     try {
-      $activator = new Activator(new SettingsController());
-      $activator->deactivate();
-      $activator->activate();
+      $this->activator->deactivate();
+      $this->activator->activate();
       $this->wp->doAction('mailpoet_setup_reset');
       return $this->successResponse();
     } catch (\Exception $e) {

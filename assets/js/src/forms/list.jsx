@@ -3,7 +3,8 @@ import classNames from 'classnames';
 import MailPoet from 'mailpoet';
 import jQuery from 'jquery';
 import PropTypes from 'prop-types';
-import Listing from '../listing/listing.jsx';
+import Listing from 'listing/listing.jsx';
+import withNpsPoll from 'nps_poll.jsx';
 
 const columns = [
   {
@@ -12,16 +13,20 @@ const columns = [
     sortable: true,
   },
   {
+    name: 'status',
+    label: MailPoet.I18n.t('status'),
+  },
+  {
     name: 'segments',
     label: MailPoet.I18n.t('segments'),
   },
   {
-    name: 'signups',
-    label: MailPoet.I18n.t('signups'),
+    name: 'type',
+    label: MailPoet.I18n.t('type'),
   },
   {
-    name: 'created_at',
-    label: MailPoet.I18n.t('createdOn'),
+    name: 'updated_at',
+    label: MailPoet.I18n.t('updatedAt'),
     sortable: true,
   },
 ];
@@ -82,6 +87,28 @@ const bulkActions = [
   },
 ];
 
+function getFormPlacement(settings) {
+  const placements = [];
+  /* eslint-disable camelcase */
+  if (settings?.form_placement?.fixed_bar?.enabled === '1') {
+    placements.push(MailPoet.I18n.t('placeFixedBarFormOnPages'));
+  }
+  if (settings?.form_placement?.below_posts?.enabled === '1') {
+    placements.push(MailPoet.I18n.t('placeFormBellowPages'));
+  }
+  if (settings?.form_placement?.popup?.enabled === '1') {
+    placements.push(MailPoet.I18n.t('placePopupFormOnPages'));
+  }
+  if (settings?.form_placement?.slide_in?.enabled === '1') {
+    placements.push(MailPoet.I18n.t('placeSlideInFormOnPages'));
+  }
+  if (placements.length > 0) {
+    return placements.join(', ');
+  }
+  /* eslint-enable camelcase */
+  return MailPoet.I18n.t('placeFormOthers');
+}
+
 const itemActions = [
   {
     name: 'edit',
@@ -104,14 +131,15 @@ const itemActions = [
           id: item.id,
         },
       }).done((response) => {
+        const formName = response.data.name ? response.data.name : MailPoet.I18n.t('noName');
         MailPoet.Notice.success(
-          (MailPoet.I18n.t('formDuplicated')).replace('%$1s', response.data.name)
+          (MailPoet.I18n.t('formDuplicated')).replace('%$1s', formName)
         );
         refresh();
       }).fail((response) => {
         if (response.errors.length > 0) {
           MailPoet.Notice.error(
-            response.errors.map(error => error.message),
+            response.errors.map((error) => error.message),
             { scroll: true }
           );
         }
@@ -124,22 +152,58 @@ const itemActions = [
 ];
 
 class FormList extends React.Component {
-  createForm = () => {
+  goToSelectTemplate = () => {
+    setTimeout(() => {
+      window.location = window.mailpoet_form_template_selection_url;
+    }, 200); // leave some time for the event to track
+  };
+
+  updateStatus = (e) => {
+    // make the event persist so that we can still override the selected value
+    // in the ajax callback
+    e.persist();
+
     MailPoet.Ajax.post({
       api_version: window.mailpoet_api_version,
       endpoint: 'forms',
-      action: 'create',
+      action: 'setStatus',
+      data: {
+        id: Number(e.target.getAttribute('data-id')),
+        status: e.target.value,
+      },
     }).done((response) => {
-      window.location = window.mailpoet_form_edit_url + response.data.id;
-    }).fail((response) => {
-      if (response.errors.length > 0) {
-        MailPoet.Notice.error(
-          response.errors.map(error => error.message),
-          { scroll: true }
-        );
+      if (response.data.status === 'enabled') {
+        MailPoet.Notice.success(MailPoet.I18n.t('formActivated'));
       }
+    }).fail((response) => {
+      MailPoet.Notice.showApiErrorNotice(response);
+
+      // reset value to actual newsletter's status
+      e.target.value = response.status;
     });
   };
+
+  renderStatus(form) {
+    return (
+      <div>
+        <p>
+          <select
+            data-id={form.id}
+            defaultValue={form.status}
+            onChange={this.updateStatus}
+          >
+            <option value="enabled">{MailPoet.I18n.t('active')}</option>
+            <option value="disabled">{MailPoet.I18n.t('inactive')}</option>
+          </select>
+        </p>
+        <p>
+          {MailPoet.I18n.t('signups')}
+          {': '}
+          {form.signups.toLocaleString()}
+        </p>
+      </div>
+    );
+  }
 
   renderItem = (form, actions) => {
     const rowClasses = classNames(
@@ -149,13 +213,15 @@ class FormList extends React.Component {
     );
 
     let segments = window.mailpoet_segments
-      .filter(segment => (jQuery.inArray(segment.id, form.segments) !== -1))
-      .map(segment => segment.name)
+      .filter((segment) => (jQuery.inArray(segment.id, form.segments) !== -1))
+      .map((segment) => segment.name)
       .join(', ');
 
     if (form.settings.segments_selected_by === 'user') {
       segments = `${MailPoet.I18n.t('userChoice')} ${segments}`;
     }
+
+    const placement = getFormPlacement(form.settings);
 
     return (
       <div>
@@ -165,19 +231,22 @@ class FormList extends React.Component {
               className="row-title"
               href={`admin.php?page=mailpoet-form-editor&id=${form.id}`}
             >
-              { form.name }
+              { form.name ? form.name : `(${MailPoet.I18n.t('noName')})`}
             </a>
           </strong>
           { actions }
         </td>
+        <td className="column" data-colname={MailPoet.I18n.t('status')}>
+          { this.renderStatus(form) }
+        </td>
         <td className="column" data-colname={MailPoet.I18n.t('segments')}>
           { segments }
         </td>
-        <td className="column" data-colname={MailPoet.I18n.t('signups')}>
-          { form.signups }
+        <td className="column" data-colname={MailPoet.I18n.t('type')}>
+          { placement }
         </td>
-        <td className="column-date" data-colname={MailPoet.I18n.t('createdOn')}>
-          <abbr>{ MailPoet.Date.format(form.created_at) }</abbr>
+        <td className="column-date" data-colname={MailPoet.I18n.t('updatedAt')}>
+          <abbr>{ MailPoet.Date.format(form.updated_at) }</abbr>
         </td>
       </div>
     );
@@ -191,8 +260,7 @@ class FormList extends React.Component {
           {' '}
           <button
             className="page-title-action"
-            href="javascript:;"
-            onClick={this.createForm}
+            onClick={() => this.goToSelectTemplate()}
             data-automation-id="create_new_form"
             type="button"
           >
@@ -224,4 +292,4 @@ FormList.propTypes = {
   }).isRequired,
 };
 
-export default FormList;
+export default withNpsPoll(FormList);

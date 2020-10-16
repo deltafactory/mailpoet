@@ -1,24 +1,25 @@
 <?php
+
 namespace MailPoet\Test\Settings;
 
 use MailPoet\Settings\Hosts;
 
 class HostsTest extends \MailPoetUnitTest {
-  function testItReturnsAListOfWebHosts() {
-    $web_hosts = Hosts::getWebHosts();
-    expect($web_hosts)->notEmpty();
+  public function testItReturnsAListOfWebHosts() {
+    $webHosts = Hosts::getWebHosts();
+    expect($webHosts)->notEmpty();
 
-    foreach ($web_hosts as $host) {
+    foreach ($webHosts as $host) {
       expect($host['interval'])->greaterThan(0);
       expect($host['emails'])->greaterThan(0);
     }
   }
 
-  function testItReturnsAListOfSMTPHosts() {
-    $smtp_hosts = Hosts::getSMTPHosts();
-    expect($smtp_hosts)->notEmpty();
+  public function testItReturnsAListOfSMTPHosts() {
+    $smtpHosts = Hosts::getSMTPHosts();
+    expect($smtpHosts)->notEmpty();
 
-    foreach ($smtp_hosts as $host) {
+    foreach ($smtpHosts as $host) {
       expect($host['interval'])->greaterThan(0);
       expect($host['emails'])->greaterThan(0);
     }

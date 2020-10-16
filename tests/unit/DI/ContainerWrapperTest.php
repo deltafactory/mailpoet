@@ -1,15 +1,16 @@
 <?php
+
 namespace MailPoet\Test\DI;
 
 use Codeception\Stub;
 use MailPoet\DI\ContainerWrapper;
+use MailPoetVendor\Psr\Container\ContainerInterface;
 use MailPoetVendor\Symfony\Component\DependencyInjection\Container;
 use MailPoetVendor\Symfony\Component\DependencyInjection\ContainerBuilder;
-use MailPoetVendor\Psr\Container\ContainerInterface;
 use MailPoetVendor\Symfony\Component\DependencyInjection\Exception\ServiceNotFoundException;
 
 class ContainerWrapperTest extends \MailPoetUnitTest {
-  function testItCanConstruct() {
+  public function testItCanConstruct() {
     $instance = new ContainerWrapper(new ContainerBuilder());
     expect($instance)->isInstanceOf(ContainerWrapper::class);
     expect($instance)->isInstanceOf(ContainerInterface::class);
@@ -19,7 +20,7 @@ class ContainerWrapperTest extends \MailPoetUnitTest {
     expect($instance)->isInstanceOf(ContainerInterface::class);
   }
 
-  function testItProvidesPremiumContainerIfAvailable() {
+  public function testItProvidesPremiumContainerIfAvailable() {
     $instance = new ContainerWrapper(new ContainerBuilder());
     expect($instance->getPremiumContainer())->null();
 
@@ -27,24 +28,24 @@ class ContainerWrapperTest extends \MailPoetUnitTest {
     expect($instance->getPremiumContainer())->isInstanceOf(ContainerBuilder::class);
   }
 
-  function testItProvidesFreePluginServices() {
-    $free_container_stub = Stub::make(Container::class, [
+  public function testItProvidesFreePluginServices() {
+    $freeContainerStub = Stub::make(Container::class, [
       'get' => function () {
           return 'service';
       },
     ]);
-    $instance = new ContainerWrapper($free_container_stub);
+    $instance = new ContainerWrapper($freeContainerStub);
     $service = $instance->get('service_id');
     expect($service)->equals('service');
   }
 
-  function testItThrowsFreePluginServices() {
-    $free_container_stub = Stub::make(Container::class, [
+  public function testItThrowsFreePluginServices() {
+    $freeContainerStub = Stub::make(Container::class, [
       'get' => function ($id) {
         throw new ServiceNotFoundException($id);
       },
     ]);
-    $instance = new ContainerWrapper($free_container_stub);
+    $instance = new ContainerWrapper($freeContainerStub);
     $exception = null;
     try {
       $instance->get('service');
@@ -54,28 +55,28 @@ class ContainerWrapperTest extends \MailPoetUnitTest {
     expect($exception)->isInstanceOf(ServiceNotFoundException::class);
   }
 
-  function testItReturnServiceFromPremium() {
-    $free_container_stub = Stub::make(Container::class, [
+  public function testItReturnServiceFromPremium() {
+    $freeContainerStub = Stub::make(Container::class, [
       'get' => function ($id) {
         throw new ServiceNotFoundException($id);
       },
     ]);
-    $premium_container_stub = Stub::make(Container::class, [
+    $premiumContainerStub = Stub::make(Container::class, [
       'get' => function () {
         return 'service_1';
       },
     ]);
-    $instance = new ContainerWrapper($free_container_stub, $premium_container_stub);
+    $instance = new ContainerWrapper($freeContainerStub, $premiumContainerStub);
     expect($instance->get('service'))->equals('service_1');
   }
 
-  function testItThrowsIfServiceNotFoundInBothContainers() {
-    $container_stub = Stub::make(Container::class, [
+  public function testItThrowsIfServiceNotFoundInBothContainers() {
+    $containerStub = Stub::make(Container::class, [
       'get' => function ($id) {
         throw new ServiceNotFoundException($id);
       },
     ]);
-    $instance = new ContainerWrapper($container_stub, $container_stub);
+    $instance = new ContainerWrapper($containerStub, $containerStub);
     $exception = null;
     try {
       $instance->get('service');

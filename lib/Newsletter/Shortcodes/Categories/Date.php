@@ -1,26 +1,27 @@
 <?php
 
 namespace MailPoet\Newsletter\Shortcodes\Categories;
+
 use MailPoet\WP\Functions as WPFunctions;
 
 class Date {
-  static function process(
-    $shortcode_details
+  public static function process(
+    $shortcodeDetails
   ) {
-    $action_mapping = [
+    $actionMapping = [
       'd' => 'd',
-      'dordinal' => 'dS',
+      'dordinal' => 'jS',
       'dtext' => 'l',
       'm' => 'm',
       'mtext' => 'F',
       'y' => 'Y',
     ];
     $wp = new WPFunctions();
-    if (!empty($action_mapping[$shortcode_details['action']])) {
-      return WPFunctions::get()->dateI18n($action_mapping[$shortcode_details['action']], $wp->currentTime('timestamp'));
+    if (!empty($actionMapping[$shortcodeDetails['action']])) {
+      return WPFunctions::get()->dateI18n($actionMapping[$shortcodeDetails['action']], $wp->currentTime('timestamp'));
     }
-    return ($shortcode_details['action'] === 'custom' && $shortcode_details['action_argument'] === 'format') ?
-      WPFunctions::get()->dateI18n($shortcode_details['action_argument_value'], $wp->currentTime('timestamp')) :
+    return ($shortcodeDetails['action'] === 'custom' && $shortcodeDetails['action_argument'] === 'format') ?
+      WPFunctions::get()->dateI18n($shortcodeDetails['action_argument_value'], $wp->currentTime('timestamp')) :
       false;
   }
 }

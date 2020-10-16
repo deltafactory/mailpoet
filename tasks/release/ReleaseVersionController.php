@@ -7,15 +7,19 @@ class ReleaseVersionController {
   /** @var JiraController */
   private $jira;
 
+  /** @var GitHubController */
+  private $github;
+
   /** @var string */
   private $project;
 
-  function __construct(JiraController $jira, $project) {
+  public function __construct(JiraController $jira, GitHubController $github, $project) {
     $this->jira = $jira;
+    $this->github = $github;
     $this->project = $project;
   }
 
-  function assignVersionToCompletedTickets($version = null) {
+  public function assignVersionToCompletedTickets($version = null) {
     $version = $this->ensureCorrectVersion($version);
     if (!$version) {
       throw new \Exception('The version is invalid or already released');
@@ -32,75 +36,61 @@ class ReleaseVersionController {
     return [$version, join("\n", $output)];
   }
 
-  function determineNextVersion() {
-    $last_version = $this->jira->getLastReleasedVersion();
+  public function determineNextVersion() {
+    $lastVersion = $this->jira->getLastReleasedVersion();
 
-    $part_to_increment = VersionHelper::PATCH;
+    $partToIncrement = VersionHelper::MINOR;
 
     if ($this->project === JiraController::PROJECT_MAILPOET) {
-      $free_increment = $this->checkProjectVersionIncrement(JiraController::PROJECT_MAILPOET);
-      $premium_increment = $this->checkProjectVersionIncrement(JiraController::PROJECT_PREMIUM);
+      $isPremiumReleased = $this->github->projectBranchExists(
+        JiraController::PROJECT_PREMIUM,
+        GitHubController::RELEASE_SOURCE_BRANCH
+      );
 
-      if (in_array(VersionHelper::MINOR, [$free_increment, $premium_increment])) {
-        $part_to_increment = VersionHelper::MINOR;
+      if (!$isPremiumReleased) {
+        $partToIncrement = VersionHelper::PATCH;
       }
+    } elseif ($this->project === JiraController::PROJECT_PREMIUM) {
+      $lastVersion = $this->jira->getLastReleasedVersion(JiraController::PROJECT_MAILPOET);
     }
 
-    $next_version = VersionHelper::incrementVersion($last_version['name'], $part_to_increment);
-    return $next_version;
-  }
-
-  private function checkProjectVersionIncrement($project) {
-    $issues = $this->getUnreleasedDoneIssues($project);
-
-    $part_to_increment = VersionHelper::PATCH;
-    $field_id = JiraController::VERSION_INCREMENT_FIELD_ID;
-
-    foreach ($issues as $issue) {
-      if (!empty($issue['fields'][$field_id]['value'])
-        && $issue['fields'][$field_id]['value'] === VersionHelper::MINOR
-      ) {
-        $part_to_increment = VersionHelper::MINOR;
-        break;
-      }
-    }
-
-    return $part_to_increment;
+    $nextVersion = VersionHelper::incrementVersion($lastVersion['name'], $partToIncrement);
+    return $nextVersion;
   }
 
   private function getUnreleasedDoneIssues($project = null) {
     $project = $project ?: $this->project;
     $jql = "project = $project AND status = Done AND (fixVersion = EMPTY OR fixVersion IN unreleasedVersions()) AND updated >= -52w";
-    $result = $this->jira->search($jql, ['key', JiraController::VERSION_INCREMENT_FIELD_ID]);
+    $result = $this->jira->search($jql);
     return $result['issues'];
   }
 
   private function ensureCorrectVersion($version) {
     try {
-      $version_data = $this->jira->getVersion($version);
+      $versionData = $this->jira->getVersion($version);
     } catch (\Exception $e) {
-      $version_data = false;
+      $versionData = false;
     }
-    if (!empty($version_data['released'])) {
+    if (!empty($versionData['released'])) {
       // version is already released
       return false;
-    } else if (empty($version_data)) {
+    } else if (empty($versionData)) {
       // version does not exist
       $this->jira->createVersion($version);
       return $version;
     }
     // version exists
-    return $version_data['name'];
+    return $versionData['name'];
   }
 
-  private function setIssueFixVersion($issue_key, $version) {
+  private function setIssueFixVersion($issueKey, $version) {
     $data = [
       'update' => [
         'fixVersions' => [
-          ['set' => [['name' => $version]]]
-        ]
-      ]
+          ['set' => [['name' => $version]]],
+        ],
+      ],
     ];
-    return $this->jira->updateIssue($issue_key, $data);
+    return $this->jira->updateIssue($issueKey, $data);
   }
 }

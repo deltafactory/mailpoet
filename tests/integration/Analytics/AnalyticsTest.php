@@ -2,12 +2,10 @@
 
 namespace MailPoet\Analytics;
 
-use Carbon\Carbon;
 use Codeception\Stub;
 use Codeception\Stub\Expected;
 use MailPoet\Settings\SettingsController;
-use MailPoet\WooCommerce\Helper as WooCommerceHelper;
-use MailPoet\WP\Functions as WPFunctions;
+use MailPoetVendor\Carbon\Carbon;
 
 class AnalyticsTest extends \MailPoetTest {
 
@@ -19,33 +17,30 @@ class AnalyticsTest extends \MailPoetTest {
   /** @var SettingsController */
   private $settings;
 
-  function _before() {
+  public function _before() {
     parent::_before();
-    $this->settings = new SettingsController();
-    $this->analytics = new Analytics(
-      new Reporter($this->settings, new WooCommerceHelper(new WPFunctions)),
-      $this->settings
-    );
+    $this->settings = $this->diContainer->get(SettingsController::class);
+    $this->analytics = $this->diContainer->get(Analytics::class);
     // Remove premium plugin hooks so that tests pass also with premium active
     remove_all_filters(Analytics::ANALYTICS_FILTER);
   }
 
-  function testIsEnabledReturnsTrueIfSettingEnabled() {
+  public function testIsEnabledReturnsTrueIfSettingEnabled() {
     $this->settings->set('analytics', ['enabled' => '1']);
     expect($this->analytics->isEnabled())->true();
   }
 
-  function testIsEnabledReturnsFalseIfEmptySettings() {
+  public function testIsEnabledReturnsFalseIfEmptySettings() {
     $this->settings->set('analytics', []);
     expect($this->analytics->isEnabled())->false();
   }
 
-  function testIsEnabledReturnsFalseIfNotEnabled() {
+  public function testIsEnabledReturnsFalseIfNotEnabled() {
     $this->settings->set('analytics', ['enabled' => '']);
     expect($this->analytics->isEnabled())->false();
   }
 
-  function testGetDataIfSettingsIsDisabled() {
+  public function testGetDataIfSettingsIsDisabled() {
     $reporter = Stub::makeEmpty(
       'MailPoet\Analytics\Reporter',
       [
@@ -54,12 +49,12 @@ class AnalyticsTest extends \MailPoetTest {
       $this
     );
     $this->settings->set('analytics', ['enabled' => '']);
-    $analytics = new Analytics($reporter, new SettingsController());
+    $analytics = new Analytics($reporter, SettingsController::getInstance());
 
     expect($analytics->generateAnalytics())->null();
   }
 
-  function testGetDataIfSentRecently() {
+  public function testGetDataIfSentRecently() {
     $reporter = Stub::makeEmpty(
       'MailPoet\Analytics\Reporter',
       [
@@ -69,12 +64,12 @@ class AnalyticsTest extends \MailPoetTest {
     );
     $this->settings->set('analytics', ['enabled' => '1']);
     $this->settings->set('analytics_last_sent', Carbon::now()->subHours(1));
-    $analytics = new Analytics($reporter, new SettingsController());
+    $analytics = new Analytics($reporter, SettingsController::getInstance());
 
     expect($analytics->generateAnalytics())->null();
   }
 
-  function testGetDataIfEnabledButNeverSent() {
+  public function testGetDataIfEnabledButNeverSent() {
     $data = [];
     $reporter = Stub::makeEmpty(
       'MailPoet\Analytics\Reporter',
@@ -88,11 +83,11 @@ class AnalyticsTest extends \MailPoetTest {
     $this->settings->set('analytics', ['enabled' => '1']);
     $this->settings->set('analytics_last_sent', null);
 
-    $analytics = new Analytics($reporter, new SettingsController());
+    $analytics = new Analytics($reporter, SettingsController::getInstance());
     expect($analytics->generateAnalytics())->equals(apply_filters(Analytics::ANALYTICS_FILTER, $data));
   }
 
-  function testGetDataIfEnabledAndSentLongTimeAgo() {
+  public function testGetDataIfEnabledAndSentLongTimeAgo() {
     $data = [];
     $reporter = Stub::makeEmpty(
       'MailPoet\Analytics\Reporter',
@@ -106,12 +101,12 @@ class AnalyticsTest extends \MailPoetTest {
     $this->settings->set('analytics', ['enabled' => '1']);
     $this->settings->set('analytics_last_sent', Carbon::now()->subYear());
 
-    $analytics = new Analytics($reporter, new SettingsController());
+    $analytics = new Analytics($reporter, SettingsController::getInstance());
 
     expect($analytics->generateAnalytics())->equals(apply_filters(Analytics::ANALYTICS_FILTER, $data));
   }
 
-  function testSetPublicId() {
+  public function testSetPublicId() {
     $fakePublicId = 'alk-ded-egrg-zaz-fvf-rtr-zdef';
 
     $this->settings->set('public_id', 'old-fake-public-id');
@@ -124,7 +119,7 @@ class AnalyticsTest extends \MailPoetTest {
     expect($this->settings->get(Analytics::SETTINGS_LAST_SENT_KEY, null))->null();
   }
 
-  function testIsPublicIdNew() {
+  public function testIsPublicIdNew() {
     $fakePublicId = 'alk-ded-egrg-zaz-fvf-rtr-zdef';
 
     $this->settings->set('public_id', 'old-fake-public-id');
@@ -142,5 +137,4 @@ class AnalyticsTest extends \MailPoetTest {
     expect($this->analytics->isPublicIdNew())->false();
     expect($this->settings->get('new_public_id'))->equals('false');
   }
-
 }

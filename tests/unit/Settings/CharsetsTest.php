@@ -1,10 +1,11 @@
 <?php
+
 namespace MailPoet\Test\Settings;
 
 use MailPoet\Settings\Charsets;
 
 class CharsetsTest extends \MailPoetUnitTest {
-  function testItReturnsAListOfCharsets() {
+  public function testItReturnsAListOfCharsets() {
     $charsets = Charsets::getAll();
     expect($charsets)->notEmpty();
     expect($charsets[0])->equals('UTF-8');

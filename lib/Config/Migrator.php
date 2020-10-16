@@ -1,11 +1,12 @@
 <?php
+
 namespace MailPoet\Config;
 
-use MailPoet\Models\Subscriber;
+use MailPoet\Entities\FormEntity;
 use MailPoet\Models\Newsletter;
+use MailPoet\Models\Subscriber;
+use MailPoet\Settings\SettingsController;
 use MailPoet\Util\Helpers;
-
-if (!defined('ABSPATH')) exit;
 
 require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
 
@@ -15,12 +16,14 @@ require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
 class Migrator {
 
   public $prefix;
-  private $charset_collate;
+  private $charsetCollate;
   private $models;
+  private $settings;
 
-  function __construct() {
-    $this->prefix = Env::$db_prefix;
-    $this->charset_collate = Env::$db_charset_collate;
+  public function __construct() {
+    $this->settings = SettingsController::getInstance();
+    $this->prefix = Env::$dbPrefix;
+    $this->charsetCollate = Env::$dbCharsetCollate;
     $this->models = [
       'segments',
       'settings',
@@ -51,10 +54,11 @@ class Migrator {
       'log',
       'user_flags',
       'feature_flags',
+      'dynamic_segment_filters',
     ];
   }
 
-  function up() {
+  public function up() {
     global $wpdb;
 
     $output = [];
@@ -62,22 +66,23 @@ class Migrator {
       $modelMethod = Helpers::underscoreToCamelCase($model);
       $output = array_merge(dbDelta($this->$modelMethod()), $output);
     }
+    $this->updateNullInUnsubscribeStats();
     return $output;
   }
 
-  function down() {
+  public function down() {
     global $wpdb;
 
     $_this = $this;
-    $drop_table = function($model) use($wpdb, $_this) {
+    $dropTable = function($model) use($wpdb, $_this) {
       $table = $_this->prefix . $model;
       $wpdb->query("DROP TABLE {$table}");
     };
 
-    array_map($drop_table, $this->models);
+    array_map($dropTable, $this->models);
   }
 
-  function segments() {
+  public function segments() {
     $attributes = [
       'id int(11) unsigned NOT NULL AUTO_INCREMENT,',
       'name varchar(90) NOT NULL,',
@@ -92,7 +97,7 @@ class Migrator {
     return $this->sqlify(__FUNCTION__, $attributes);
   }
 
-  function settings() {
+  public function settings() {
     $attributes = [
       'id int(11) unsigned NOT NULL AUTO_INCREMENT,',
       'name varchar(50) NOT NULL,',
@@ -105,7 +110,7 @@ class Migrator {
     return $this->sqlify(__FUNCTION__, $attributes);
   }
 
-  function customFields() {
+  public function customFields() {
     $attributes = [
       'id int(11) unsigned NOT NULL AUTO_INCREMENT,',
       'name varchar(90) NOT NULL,',
@@ -119,7 +124,7 @@ class Migrator {
     return $this->sqlify(__FUNCTION__, $attributes);
   }
 
-  function scheduledTasks() {
+  public function scheduledTasks() {
     $attributes = [
       'id int(11) unsigned NOT NULL AUTO_INCREMENT,',
       'type varchar(90) NULL DEFAULT NULL,',
@@ -130,6 +135,8 @@ class Migrator {
       'created_at timestamp NULL,', // must be NULL, see comment at the top
       'updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,',
       'deleted_at timestamp NULL,',
+      'in_progress int(1),',
+      'reschedule_count int(11) NOT NULL DEFAULT 0,',
       'meta longtext,',
       'PRIMARY KEY  (id),',
       'KEY type (type),',
@@ -138,7 +145,7 @@ class Migrator {
     return $this->sqlify(__FUNCTION__, $attributes);
   }
 
-  function statsNotifications() {
+  public function statsNotifications() {
     $attributes = [
       'id int(11) unsigned NOT NULL AUTO_INCREMENT,',
       'newsletter_id int(11) unsigned NOT NULL,',
@@ -152,7 +159,7 @@ class Migrator {
     return $this->sqlify(__FUNCTION__, $attributes);
   }
 
-  function scheduledTaskSubscribers() {
+  public function scheduledTaskSubscribers() {
     $attributes = [
       'task_id int(11) unsigned NOT NULL,',
       'subscriber_id int(11) unsigned NOT NULL,',
@@ -167,7 +174,7 @@ class Migrator {
     return $this->sqlify(__FUNCTION__, $attributes);
   }
 
-  function sendingQueues() {
+  public function sendingQueues() {
     $attributes = [
       'id int(11) unsigned NOT NULL AUTO_INCREMENT,',
       'task_id int(11) unsigned NOT NULL,',
@@ -189,7 +196,7 @@ class Migrator {
     return $this->sqlify(__FUNCTION__, $attributes);
   }
 
-  function subscribers() {
+  public function subscribers() {
     $attributes = [
       'id int(11) unsigned NOT NULL AUTO_INCREMENT,',
       'wp_user_id bigint(20) NULL,',
@@ -201,22 +208,28 @@ class Migrator {
       'subscribed_ip varchar(45) NULL,',
       'confirmed_ip varchar(45) NULL,',
       'confirmed_at timestamp NULL,',
+      'last_subscribed_at timestamp NULL,',
       'created_at timestamp NULL,', // must be NULL, see comment at the top
       'updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,',
       'deleted_at timestamp NULL,',
       'unconfirmed_data longtext,',
       "source enum('form','imported','administrator','api','wordpress_user','woocommerce_user','woocommerce_checkout','unknown') DEFAULT 'unknown',",
       'count_confirmations int(11) unsigned NOT NULL DEFAULT 0,',
+      'unsubscribe_token char(15) NULL,',
+      'link_token char(32) NULL,',
       'PRIMARY KEY  (id),',
       'UNIQUE KEY email (email),',
+      'UNIQUE KEY unsubscribe_token (unsubscribe_token),',
       'KEY wp_user_id (wp_user_id),',
       'KEY updated_at (updated_at),',
-      'KEY status_deleted_at (status,deleted_at)',
+      'KEY status_deleted_at (status,deleted_at),',
+      'KEY last_subscribed_at (last_subscribed_at),',
+      'KEY link_token (link_token)',
     ];
     return $this->sqlify(__FUNCTION__, $attributes);
   }
 
-  function subscriberSegment() {
+  public function subscriberSegment() {
     $attributes = [
       'id int(11) unsigned NOT NULL AUTO_INCREMENT,',
       'subscriber_id int(11) unsigned NOT NULL,',
@@ -231,7 +244,7 @@ class Migrator {
     return $this->sqlify(__FUNCTION__, $attributes);
   }
 
-  function subscriberCustomField() {
+  public function subscriberCustomField() {
     $attributes = [
       'id int(11) unsigned NOT NULL AUTO_INCREMENT,',
       'subscriber_id int(11) unsigned NOT NULL,',
@@ -245,7 +258,7 @@ class Migrator {
     return $this->sqlify(__FUNCTION__, $attributes);
   }
 
-  function subscriberIps() {
+  public function subscriberIps() {
     $attributes = [
       'ip varchar(45) NOT NULL,',
       'created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,',
@@ -255,7 +268,7 @@ class Migrator {
     return $this->sqlify(__FUNCTION__, $attributes);
   }
 
-  function newsletters() {
+  public function newsletters() {
     $attributes = [
       'id int(11) unsigned NOT NULL AUTO_INCREMENT,',
       'hash varchar(150) NULL DEFAULT NULL,',
@@ -273,13 +286,16 @@ class Migrator {
       'created_at timestamp NULL,', // must be NULL, see comment at the top
       'updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,',
       'deleted_at timestamp NULL,',
+      'unsubscribe_token char(15) NULL,',
+      'ga_campaign varchar(250) NOT NULL DEFAULT "",',
       'PRIMARY KEY  (id),',
+      'UNIQUE KEY unsubscribe_token (unsubscribe_token),',
       'KEY type_status (type,status)',
     ];
     return $this->sqlify(__FUNCTION__, $attributes);
   }
 
-  function newsletterTemplates() {
+  public function newsletterTemplates() {
     $attributes = [
       'id int(11) unsigned NOT NULL AUTO_INCREMENT,',
       'newsletter_id int(11) NULL DEFAULT 0,',
@@ -296,7 +312,7 @@ class Migrator {
     return $this->sqlify(__FUNCTION__, $attributes);
   }
 
-  function newsletterOptionFields() {
+  public function newsletterOptionFields() {
     $attributes = [
       'id int(11) unsigned NOT NULL AUTO_INCREMENT,',
       'name varchar(90) NOT NULL,',
@@ -309,7 +325,7 @@ class Migrator {
     return $this->sqlify(__FUNCTION__, $attributes);
   }
 
-  function newsletterOption() {
+  public function newsletterOption() {
     $attributes = [
       'id int(11) unsigned NOT NULL AUTO_INCREMENT,',
       'newsletter_id int(11) unsigned NOT NULL,',
@@ -323,7 +339,7 @@ class Migrator {
     return $this->sqlify(__FUNCTION__, $attributes);
   }
 
-  function newsletterSegment() {
+  public function newsletterSegment() {
     $attributes = [
       'id int(11) unsigned NOT NULL AUTO_INCREMENT,',
       'newsletter_id int(11) unsigned NOT NULL,',
@@ -336,7 +352,7 @@ class Migrator {
     return $this->sqlify(__FUNCTION__, $attributes);
   }
 
-  function newsletterLinks() {
+  public function newsletterLinks() {
     $attributes = [
       'id int(11) unsigned NOT NULL AUTO_INCREMENT,',
       'newsletter_id int(11) unsigned NOT NULL,',
@@ -353,7 +369,7 @@ class Migrator {
     return $this->sqlify(__FUNCTION__, $attributes);
   }
 
-  function newsletterPosts() {
+  public function newsletterPosts() {
     $attributes = [
       'id int(11) unsigned NOT NULL AUTO_INCREMENT,',
       'newsletter_id int(11) unsigned NOT NULL,',
@@ -366,10 +382,11 @@ class Migrator {
     return $this->sqlify(__FUNCTION__, $attributes);
   }
 
-  function forms() {
+  public function forms() {
     $attributes = [
       'id int(11) unsigned NOT NULL AUTO_INCREMENT,',
-      'name varchar(90) NOT NULL,',
+      'name varchar(90) NOT NULL,', // should be null but db_delta can't handle this change
+      'status varchar(20) NOT NULL DEFAULT "' . FormEntity::STATUS_ENABLED . '",',
       'body longtext,',
       'settings longtext,',
       'styles longtext,',
@@ -381,7 +398,7 @@ class Migrator {
     return $this->sqlify(__FUNCTION__, $attributes);
   }
 
-  function statisticsNewsletters() {
+  public function statisticsNewsletters() {
     $attributes = [
       'id int(11) unsigned NOT NULL AUTO_INCREMENT,',
       'newsletter_id int(11) unsigned NOT NULL,',
@@ -395,7 +412,7 @@ class Migrator {
     return $this->sqlify(__FUNCTION__, $attributes);
   }
 
-  function statisticsClicks() {
+  public function statisticsClicks() {
     $attributes = [
       'id int(11) unsigned NOT NULL AUTO_INCREMENT,',
       'newsletter_id int(11) unsigned NOT NULL,',
@@ -406,14 +423,14 @@ class Migrator {
       'created_at timestamp NULL,', // must be NULL, see comment at the top
       'updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,',
       'PRIMARY KEY  (id),',
-      'KEY newsletter_id (newsletter_id),',
+      'KEY newsletter_id_subscriber_id (newsletter_id, subscriber_id),',
       'KEY queue_id (queue_id),',
       'KEY subscriber_id (subscriber_id)',
     ];
     return $this->sqlify(__FUNCTION__, $attributes);
   }
 
-  function statisticsOpens() {
+  public function statisticsOpens() {
     $attributes = [
       'id int(11) unsigned NOT NULL AUTO_INCREMENT,',
       'newsletter_id int(11) unsigned NOT NULL,',
@@ -421,30 +438,33 @@ class Migrator {
       'queue_id int(11) unsigned NOT NULL,',
       'created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,',
       'PRIMARY KEY  (id),',
-      'KEY newsletter_id (newsletter_id),',
+      'KEY newsletter_id_subscriber_id (newsletter_id, subscriber_id),',
       'KEY queue_id (queue_id),',
       'KEY subscriber_id (subscriber_id),',
-      'KEY created_at (created_at)',
+      'KEY created_at (created_at),',
+      'KEY subscriber_id_created_at (subscriber_id, created_at)',
     ];
     return $this->sqlify(__FUNCTION__, $attributes);
   }
 
-  function statisticsUnsubscribes() {
+  public function statisticsUnsubscribes() {
     $attributes = [
       'id int(11) unsigned NOT NULL AUTO_INCREMENT,',
-      'newsletter_id int(11) unsigned NOT NULL,',
+      'newsletter_id int(11) unsigned NULL,',
       'subscriber_id int(11) unsigned NOT NULL,',
-      'queue_id int(11) unsigned NOT NULL,',
+      'queue_id int(11) unsigned NULL,',
       'created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,',
+      "source varchar(255) DEFAULT 'unknown',",
+      'meta varchar(255) NULL,',
       'PRIMARY KEY  (id),',
-      'KEY newsletter_id (newsletter_id),',
+      'KEY newsletter_id_subscriber_id (newsletter_id, subscriber_id),',
       'KEY queue_id (queue_id),',
       'KEY subscriber_id (subscriber_id)',
     ];
     return $this->sqlify(__FUNCTION__, $attributes);
   }
 
-  function statisticsForms() {
+  public function statisticsForms() {
     $attributes = [
       'id int(11) unsigned NOT NULL AUTO_INCREMENT,',
       'form_id int(11) unsigned NOT NULL,',
@@ -456,7 +476,7 @@ class Migrator {
     return $this->sqlify(__FUNCTION__, $attributes);
   }
 
-  function statisticsWoocommercePurchases() {
+  public function statisticsWoocommercePurchases() {
     $attributes = [
       'id int(11) unsigned NOT NULL AUTO_INCREMENT,',
       'newsletter_id int(11) unsigned NOT NULL,',
@@ -477,7 +497,7 @@ class Migrator {
     return $this->sqlify(__FUNCTION__, $attributes);
   }
 
-  function mappingToExternalEntities() {
+  public function mappingToExternalEntities() {
     $attributes = [
       'old_id int(11) unsigned NOT NULL,',
       'type varchar(50) NOT NULL,',
@@ -489,7 +509,7 @@ class Migrator {
     return $this->sqlify(__FUNCTION__, $attributes);
   }
 
-  function log() {
+  public function log() {
     $attributes = [
       'id bigint(20) unsigned NOT NULL AUTO_INCREMENT,',
       'name varchar(255),',
@@ -501,7 +521,7 @@ class Migrator {
     return $this->sqlify(__FUNCTION__, $attributes);
   }
 
-  function userFlags() {
+  public function userFlags() {
     $attributes = [
       'id int(11) unsigned NOT NULL AUTO_INCREMENT,',
       'user_id bigint(20) NOT NULL,',
@@ -515,7 +535,7 @@ class Migrator {
     return $this->sqlify(__FUNCTION__, $attributes);
   }
 
-  function featureFlags() {
+  public function featureFlags() {
     $attributes = [
       'id int(11) unsigned NOT NULL AUTO_INCREMENT,',
       'name varchar(100) NOT NULL,',
@@ -528,14 +548,42 @@ class Migrator {
     return $this->sqlify(__FUNCTION__, $attributes);
   }
 
+  public function dynamicSegmentFilters() {
+    $attributes = [
+      'id int(11) unsigned NOT NULL AUTO_INCREMENT,',
+      'segment_id int(11) unsigned NOT NULL,',
+      'created_at timestamp NULL,',
+      'updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,',
+      'filter_data longblob,',
+      'PRIMARY KEY (id),',
+      'KEY segment_id (segment_id)',
+    ];
+    return $this->sqlify(__FUNCTION__, $attributes);
+  }
+
   private function sqlify($model, $attributes) {
     $table = $this->prefix . Helpers::camelCaseToUnderscore($model);
 
     $sql = [];
     $sql[] = "CREATE TABLE " . $table . " (";
     $sql = array_merge($sql, $attributes);
-    $sql[] = ") " . $this->charset_collate . ";";
+    $sql[] = ") " . $this->charsetCollate . ";";
 
     return implode("\n", $sql);
+  }
+
+  private function updateNullInUnsubscribeStats() {
+    global $wpdb;
+    // perform once for versions below or equal to 3.47.6
+    if (version_compare($this->settings->get('db_version', '3.47.6'), '3.47.6', '>')) {
+      return false;
+    }
+    $query = "
+    ALTER TABLE `{$this->prefix}statistics_unsubscribes`
+      CHANGE `newsletter_id` `newsletter_id` int(11) unsigned NULL,
+      CHANGE `queue_id` `queue_id` int(11) unsigned NULL;
+    ";
+    $wpdb->query($query);
+    return true;
   }
 }

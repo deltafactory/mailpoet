@@ -1,36 +1,40 @@
 <?php
+
 namespace Helper;
+
 // here you can define custom actions
 // all public methods declared in helper class will be available in $I
 
-class WordPress extends \Codeception\Module
-{
-  private static $functions_to_intercept = array();
+class WordPress extends \Codeception\Module {
 
-  static function interceptFunction($function_name, $callback) {
-    self::$functions_to_intercept[$function_name] = $callback;
+  private static $functionsToIntercept = [];
+
+  public static function interceptFunction($functionName, $callback) {
+    self::$functionsToIntercept[$functionName] = $callback;
   }
 
-  static function releaseFunction($function_name) {
-    unset(self::$functions_to_intercept[$function_name]);
+  public static function releaseFunction($functionName) {
+    unset(self::$functionsToIntercept[$functionName]);
   }
 
-  static function releaseAllFunctions() {
-    self::$functions_to_intercept = array();
+  public static function releaseAllFunctions() {
+    self::$functionsToIntercept = [];
   }
 
-  static function getInterceptor($function_name) {
-    if (isset(self::$functions_to_intercept[$function_name]))
-      return self::$functions_to_intercept[$function_name];
+  public static function getInterceptor($functionName) {
+    if (isset(self::$functionsToIntercept[$functionName]))
+      return self::$functionsToIntercept[$functionName];
   }
 }
 
 // WP function overrides for \MailPoet namespace go here
-namespace MailPoet\WP;
+
+namespace MailPoet\WP; // phpcs:ignore
 
 function override($func, $args) {
   $func = str_replace(__NAMESPACE__ . '\\', '', $func);
-  if ($callback = \Helper\WordPress::getInterceptor($func)) {
+  $callback = \Helper\WordPress::getInterceptor($func);
+  if ($callback) {
     return call_user_func_array($callback, $args);
   }
   return call_user_func_array('\\' . $func, $args);

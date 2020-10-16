@@ -1,21 +1,27 @@
 <?php
+
 namespace MailPoet\Test\Cron\Workers;
 
-use Carbon\Carbon;
 use MailPoet\Cron\Workers\Bounce;
+use MailPoet\Cron\Workers\Bounce\BounceTestMockAPI as MockAPI;
 use MailPoet\Mailer\Mailer;
 use MailPoet\Models\ScheduledTask;
 use MailPoet\Models\ScheduledTaskSubscriber;
-use MailPoet\Models\Setting;
 use MailPoet\Models\Subscriber;
 use MailPoet\Services\Bridge\API;
+use MailPoet\Settings\SettingsController;
+use MailPoet\Settings\SettingsRepository;
+use MailPoet\WP\Functions as WPFunctions;
+use MailPoetVendor\Carbon\Carbon;
+use MailPoetVendor\Idiorm\ORM;
 
 require_once('BounceTestMockAPI.php');
-use MailPoet\Cron\Workers\Bounce\BounceTestMockAPI as MockAPI;
-use MailPoet\Settings\SettingsController;
 
 class BounceTest extends \MailPoetTest {
-  function _before() {
+  public $worker;
+  public $emails;
+
+  public function _before() {
     parent::_before();
     $this->emails = [
       'soft_bounce@example.com',
@@ -30,62 +36,71 @@ class BounceTest extends \MailPoetTest {
         ]);
     }
 
-    $this->worker = new Bounce(microtime(true));
+    $this->worker = new Bounce($this->diContainer->get(SettingsController::class));
 
-    $this->worker->api = new MockAPI('key');
+    $this->worker->api = new MockAPI();
   }
 
-  function testItDefinesConstants() {
+  public function testItDefinesConstants() {
     expect(Bounce::BATCH_SIZE)->equals(100);
   }
 
-  function testItCanInitializeBridgeAPI() {
+  public function testItCanInitializeBridgeAPI() {
     $this->setMailPoetSendingMethod();
-    $worker = new Bounce(microtime(true));
+    $worker = new Bounce($this->diContainer->get(SettingsController::class));
     $worker->init();
     expect($worker->api instanceof API)->true();
   }
 
-  function testItRequiresMailPoetMethodToBeSetUp() {
+  public function testItRequiresMailPoetMethodToBeSetUp() {
     expect($this->worker->checkProcessingRequirements())->false();
     $this->setMailPoetSendingMethod();
     expect($this->worker->checkProcessingRequirements())->true();
   }
 
-  function testItDeletesTaskIfThereAreNoSubscribersWhenPreparingTask() {
+  public function testItDeletesAllSubscribersIfThereAreNoSubscribersToProcessWhenPreparingTask() {
+    // 1st run - subscribers will be processed
+    $task = $this->createScheduledTask();
+    $this->worker->prepareTaskStrategy($task, microtime(true));
+    expect(ScheduledTaskSubscriber::where('task_id', $task->id)->findMany())->notEmpty();
+
+    // 2nd run - nothing more to process, ScheduledTaskSubscriber will be cleaned up
     Subscriber::deleteMany();
     $task = $this->createScheduledTask();
-    $result = $this->worker->prepareTask($task);
-    expect(ScheduledTask::findOne($task->id))->isEmpty();
-    expect($result)->false();
+    $this->worker->prepareTaskStrategy($task, microtime(true));
+    expect(ScheduledTaskSubscriber::where('task_id', $task->id)->findMany())->isEmpty();
   }
 
-  function testItPreparesTask() {
+  public function testItPreparesTask() {
     $task = $this->createScheduledTask();
     expect(ScheduledTaskSubscriber::getUnprocessedCount($task->id))->isEmpty();
-    $this->worker->prepareTask($task);
-    expect($task->status)->null();
+    $result = $this->worker->prepareTaskStrategy($task, microtime(true));
+    expect($result)->true();
     expect(ScheduledTaskSubscriber::getUnprocessedCount($task->id))->notEmpty();
   }
 
-  function testItDeletesTaskIfThereAreNoSubscribersToProcessWhenProcessingTask() {
+  public function testItDeletesAllSubscribersIfThereAreNoSubscribersToProcessWhenProcessingTask() {
+    // prepare subscribers
     $task = $this->createScheduledTask();
-    $task->subscribers = null;
-    $task->save();
-    $result = $this->worker->processTask($task);
-    expect(ScheduledTask::findOne($task->id))->isEmpty();
-    expect($result)->false();
+    $this->worker->prepareTaskStrategy($task, microtime(true));
+    expect(ScheduledTaskSubscriber::where('task_id', $task->id)->findMany())->notEmpty();
+
+    // process - no subscribers found, ScheduledTaskSubscriber will be cleaned up
+    Subscriber::deleteMany();
+    $task = $this->createScheduledTask();
+    $this->worker->processTaskStrategy($task, microtime(true));
+    expect(ScheduledTaskSubscriber::where('task_id', $task->id)->findMany())->isEmpty();
   }
 
-  function testItProcessesTask() {
+  public function testItProcessesTask() {
     $task = $this->createRunningTask();
-    $this->worker->prepareTask($task);
+    $this->worker->prepareTaskStrategy($task, microtime(true));
     expect(ScheduledTaskSubscriber::getUnprocessedCount($task->id))->notEmpty();
-    $this->worker->processTask($task);
+    $this->worker->processTaskStrategy($task, microtime(true));
     expect(ScheduledTaskSubscriber::getProcessedCount($task->id))->notEmpty();
   }
 
-  function testItSetsSubscriberStatusAsBounced() {
+  public function testItSetsSubscriberStatusAsBounced() {
     $emails = Subscriber::select('email')->findArray();
     $emails = array_column($emails, 'email');
 
@@ -99,7 +114,7 @@ class BounceTest extends \MailPoetTest {
   }
 
   private function setMailPoetSendingMethod() {
-    $settings = new SettingsController();
+    $settings = SettingsController::getInstance();
     $settings->set(
       Mailer::MAILER_CONFIG_SETTING_NAME,
       [
@@ -113,7 +128,7 @@ class BounceTest extends \MailPoetTest {
     $task = ScheduledTask::create();
     $task->type = 'bounce';
     $task->status = ScheduledTask::STATUS_SCHEDULED;
-    $task->scheduled_at = Carbon::createFromTimestamp(current_time('timestamp'));
+    $task->scheduledAt = Carbon::createFromTimestamp(WPFunctions::get()->currentTime('timestamp'));
     $task->save();
     return $task;
   }
@@ -122,15 +137,15 @@ class BounceTest extends \MailPoetTest {
     $task = ScheduledTask::create();
     $task->type = 'bounce';
     $task->status = null;
-    $task->scheduled_at = Carbon::createFromTimestamp(current_time('timestamp'));
+    $task->scheduledAt = Carbon::createFromTimestamp(WPFunctions::get()->currentTime('timestamp'));
     $task->save();
     return $task;
   }
 
-  function _after() {
-    \ORM::raw_execute('TRUNCATE ' . Setting::$_table);
-    \ORM::raw_execute('TRUNCATE ' . ScheduledTask::$_table);
-    \ORM::raw_execute('TRUNCATE ' . ScheduledTaskSubscriber::$_table);
-    \ORM::raw_execute('TRUNCATE ' . Subscriber::$_table);
+  public function _after() {
+    $this->diContainer->get(SettingsRepository::class)->truncate();
+    ORM::raw_execute('TRUNCATE ' . ScheduledTask::$_table);
+    ORM::raw_execute('TRUNCATE ' . ScheduledTaskSubscriber::$_table);
+    ORM::raw_execute('TRUNCATE ' . Subscriber::$_table);
   }
 }

@@ -1,6 +1,7 @@
 <?php
 
 namespace MailPoet\Config\PopulatorData\Templates;
+
 use MailPoet\WP\Functions as WPFunctions;
 
 class WordPressTheme {
@@ -8,12 +9,12 @@ class WordPressTheme {
   private $template_image_url;
   private $social_icon_url;
 
-  function __construct($assets_url) {
+  public function __construct($assets_url) {
     $this->template_image_url = 'https://ps.w.org/mailpoet/assets/newsletter-templates/word-press-theme';
     $this->social_icon_url = $assets_url . '/img/newsletter_editor/social-icons';
   }
 
-  function get() {
+  public function get() {
     return [
       'name' => WPFunctions::get()->__("WordPress Theme", 'mailpoet'),
       'categories' => json_encode(['standard', 'all']),
@@ -101,7 +102,7 @@ class WordPressTheme {
                   1 =>
                    [
                     'type' => 'header',
-                    'text' => '<p><a href="[link:newsletter_view_in_browser_url]">Open this email in your web browser &gt;</a></p>',
+                    'text' => '<p><a href="[link:newsletter_view_in_browser_url]">' . WPFunctions::get()->__("View this in your browser.", 'mailpoet') . '</a></p>',
                     'styles' =>
                      [
                       'block' =>
@@ -1028,7 +1029,7 @@ class WordPressTheme {
                   0 =>
                    [
                     'type' => 'footer',
-                    'text' => '<p><a href="[link:subscription_unsubscribe_url]">Unsubscribe</a> | <a href="[link:subscription_manage_url]">Manage subscription</a><br />Add your postal address here!</p>',
+                    'text' => '<p><a href="[link:subscription_unsubscribe_url]">' . WPFunctions::get()->__("Unsubscribe", 'mailpoet') . '</a> | <a href="[link:subscription_manage_url]">' . WPFunctions::get()->__("Manage your subscription", 'mailpoet') . '</a><br />' . WPFunctions::get()->__("Add your postal address here!", 'mailpoet') . '</p>',
                     'styles' =>
                      [
                       'block' =>
@@ -1262,7 +1263,7 @@ class WordPressTheme {
          ],
         'footer' =>
          [
-          'text' => '<p><a href="[link:subscription_unsubscribe_url]">Unsubscribe</a> | <a href="[link:subscription_manage_url]">Manage subscription</a><br />Add your postal address here!</p>',
+          'text' => '<p><a href="[link:subscription_unsubscribe_url]">' . WPFunctions::get()->__("Unsubscribe", 'mailpoet') . '</a> | <a href="[link:subscription_manage_url]">' . WPFunctions::get()->__("Manage your subscription", 'mailpoet') . '</a><br />' . WPFunctions::get()->__("Add your postal address here!", 'mailpoet') . '</p>',
           'styles' =>
            [
             'block' =>
@@ -1409,7 +1410,7 @@ class WordPressTheme {
          ],
         'header' =>
          [
-          'text' => 'Display problems?&nbsp;<a href="[link:newsletter_view_in_browser_url]">Open this email in your web browser.</a>',
+          'text' => '<a href="[link:newsletter_view_in_browser_url]">' . WPFunctions::get()->__("View this in your browser.", 'mailpoet') . '</a>',
           'styles' =>
            [
             'block' =>
@@ -1434,5 +1435,4 @@ class WordPressTheme {
        ],
     ];
   }
-
 }

@@ -5,30 +5,22 @@ namespace MailPoet\Test\Acceptance;
 use MailPoet\Test\DataFactories\Newsletter;
 
 class EditorFooterBlockCest {
-  function addFooter(\AcceptanceTester $I) {
-    $I->wantTo('add Footer block to newsletter');
-    $newsletterTitle = 'Footer Block Newsletter';
+  public function addFooter(\AcceptanceTester $i) {
+    $i->wantTo('add Footer block to newsletter');
     $footerInEditor = ('[data-automation-id="footer"]');
     $footerSettingsIcon = ('[data-automation-id="settings_tool"]');
     $footerSettingsAssertion = ('[data-automation-id="footer_done_button"]');
-    (new Newsletter())
-      ->withSubject($newsletterTitle)
+    $newsletter = (new Newsletter())
       ->loadBodyFrom('newsletterWithTextNoFooter.json')
       ->create();
-    $I->login();
-    $I->amOnMailpoetPage('Emails');
-    $I->waitForText($newsletterTitle);
-    $I->clickItemRowActionByItemName($newsletterTitle, 'Edit');
-    // Create Footer block
-    $I->waitForText('Footer');
-    $I->waitForElementNotVisible('.velocity-animating');
-    $I->dragAndDrop('#automation_editor_block_footer', '#mce_0');
+    $i->login();
+    $i->amEditingNewsletter($newsletter->id);
+    $i->dragAndDrop('#automation_editor_block_footer', '#mce_0');
     //Open settings by clicking on block
-    $I->moveMouseOver($footerInEditor, 3, 2);
-    $I->waitForText('Manage subscription');
-    $I->click($footerSettingsIcon);
-    $I->waitForElementVisible($footerSettingsAssertion);
-    $I->click($footerSettingsAssertion);
+    $i->moveMouseOver($footerInEditor, 3, 2);
+    $i->waitForText('Manage subscription');
+    $i->click($footerSettingsIcon);
+    $i->waitForElementVisible($footerSettingsAssertion);
+    $i->click($footerSettingsAssertion);
   }
-
 }

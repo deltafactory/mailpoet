@@ -3,20 +3,18 @@ namespace MailPoet\Config\PopulatorData\Templates;
 
 use MailPoet\WP\Functions as WPFunctions;
 
-if (!defined('ABSPATH')) exit;
-
 
 class ClearNews {
 
   private $template_image_url;
   private $social_icon_url;
 
-  function __construct($assets_url) {
+  public function __construct($assets_url) {
     $this->template_image_url = 'https://ps.w.org/mailpoet/assets/newsletter-templates/clear-news';
     $this->social_icon_url = $assets_url . '/img/newsletter_editor/social-icons';
   }
 
-  function get() {
+  public function get() {
     return [
       'name' => WPFunctions::get()->__("Clear News", 'mailpoet'),
       'categories' => json_encode(['notification', 'all']),
@@ -104,7 +102,7 @@ class ClearNews {
                   1 =>
                    [
                     'type' => 'header',
-                    'text' => '<p><a href="[link:newsletter_view_in_browser_url]">Open this email in your web browser.</a></p>',
+                    'text' => '<p><a href="[link:newsletter_view_in_browser_url]">'.WPFunctions::get()->__("View this in your browser.", 'mailpoet').'</a></p>',
                     'styles' =>
                      [
                       'block' =>
@@ -279,7 +277,7 @@ class ClearNews {
                   0 =>
                    [
                     'type' => 'text',
-                    'text' => '<h1 style="text-align: left; line-height: 1.3;" data-post-id="1994"><strong>Good Morning!</strong></h1>
+                    'text' => '<h1 style="text-align: left; line-height: 1.3;"><strong>Good Morning!</strong></h1>
     <h3>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Fusce egestas nisl vel ante finibus fringilla ullamcorper non lectus. Aenean leo neque, egestas et lacus eu, viverra luctus nisi. Donec dapibus mauris at fringilla consequat. Cras sed porta nunc. Ut tincidunt luctus felis sed suscipit. Sed tristique faucibus fermentum.</h3>',
                    ],
                  ],
@@ -1423,8 +1421,8 @@ class ClearNews {
                   0 =>
                    [
                     'type' => 'text',
-                    'text' => '<p style="text-align: center;"><strong><a href="[link:subscription_unsubscribe_url]">Unsubscribe</a></strong></p>
-    <p style="text-align: center;"><strong><a href="[link:subscription_manage_url]">Manage your subscription</a></strong></p>',
+                    'text' => '<p style="text-align: center;"><strong><a href="[link:subscription_unsubscribe_url]">'.WPFunctions::get()->__("Unsubscribe", 'mailpoet').'</a></strong></p>
+    <p style="text-align: center;"><strong><a href="[link:subscription_manage_url]">'.WPFunctions::get()->__("Manage your subscription", 'mailpoet').'</a></strong></p>',
                    ],
                   1 =>
                    [
@@ -1717,7 +1715,7 @@ class ClearNews {
          ],
         'footer' =>
          [
-          'text' => '<p><a href="[link:subscription_unsubscribe_url]">Unsubscribe</a> | <a href="[link:subscription_manage_url]">Manage subscription</a><br />Add your postal address here!</p>',
+          'text' => '<p><a href="[link:subscription_unsubscribe_url]">'.WPFunctions::get()->__("Unsubscribe", 'mailpoet').'</a> | <a href="[link:subscription_manage_url]">'.WPFunctions::get()->__("Manage your subscription", 'mailpoet').'</a><br />'.WPFunctions::get()->__("Add your postal address here!", 'mailpoet').'</p>',
           'styles' =>
            [
             'block' =>
@@ -1862,7 +1860,7 @@ class ClearNews {
          ],
         'header' =>
          [
-          'text' => 'Display problems?&nbsp;<a href="[link:newsletter_view_in_browser_url]">Open this email in your web browser.</a>',
+          'text' => '<a href="[link:newsletter_view_in_browser_url]">'.WPFunctions::get()->__("View this in your browser.", 'mailpoet').'</a>',
           'styles' =>
            [
             'block' =>

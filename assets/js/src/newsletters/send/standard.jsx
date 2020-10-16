@@ -6,6 +6,8 @@ import PropTypes from 'prop-types';
 
 import DateTime from 'newsletters/send/date_time.jsx';
 import SenderField from 'newsletters/send/sender_address_field.jsx';
+import GATrackingField from 'newsletters/send/ga_tracking.jsx';
+import Toggle from 'common/form/toggle/toggle';
 
 const currentTime = window.mailpoet_current_time || '00:00';
 const defaultDateTime = `${window.mailpoet_current_date} 00:00:00`;
@@ -33,7 +35,7 @@ class StandardScheduling extends React.Component {
 
   isScheduled = () => this.getCurrentValue().isScheduled === '1';
 
-  handleCheckboxChange = (event) => {
+  handleCheckboxChange = (checked, event) => {
     const changeEvent = event;
     changeEvent.target.value = event.target.checked ? '1' : '0';
     return this.handleValueChange(changeEvent);
@@ -57,36 +59,37 @@ class StandardScheduling extends React.Component {
 
     if (this.isScheduled()) {
       schedulingOptions = (
-        <span id="mailpoet_scheduling">
-          <DateTime
-            name="scheduledAt"
-            value={this.getCurrentValue().scheduledAt}
-            onChange={this.handleValueChange}
-            disabled={this.props.field.disabled}
-            dateValidation={this.getDateValidation()}
-            defaultDateTime={defaultDateTime}
-            timeOfDayItems={timeOfDayItems}
-            dateDisplayFormat={dateDisplayFormat}
-            dateStorageFormat={dateStorageFormat}
-          />
-          &nbsp;
-          <span>
+        <>
+          <span className="mailpoet-form-schedule-time">
             {MailPoet.I18n.t('websiteTimeIs')}
             {' '}
-            <code>{currentTime}</code>
+            {currentTime}
           </span>
-        </span>
+          <div className="mailpoet-gap" />
+          <div id="mailpoet_scheduling">
+            <DateTime
+              name="scheduledAt"
+              value={this.getCurrentValue().scheduledAt}
+              onChange={this.handleValueChange}
+              disabled={this.props.field.disabled}
+              dateValidation={this.getDateValidation()}
+              defaultDateTime={defaultDateTime}
+              timeOfDayItems={timeOfDayItems}
+              dateDisplayFormat={dateDisplayFormat}
+              dateStorageFormat={dateStorageFormat}
+            />
+          </div>
+        </>
       );
     }
     return (
       <div>
-        <input
-          type="checkbox"
-          value="1"
+        <Toggle
           checked={this.isScheduled()}
           disabled={this.props.field.disabled}
           name="isScheduled"
-          onChange={this.handleCheckboxChange}
+          onCheck={this.handleCheckboxChange}
+          automationId="email-schedule-checkbox"
         />
 
         {schedulingOptions}
@@ -110,14 +113,35 @@ StandardScheduling.defaultProps = {
 
 let fields = [
   {
-    name: 'subject',
-    label: MailPoet.I18n.t('subjectLine'),
-    tip: MailPoet.I18n.t('subjectLineTip'),
-    type: 'text',
-    validation: {
-      'data-parsley-required': true,
-      'data-parsley-required-message': MailPoet.I18n.t('emptySubjectLineError'),
-    },
+    name: 'email-header',
+    label: null,
+    tip: null,
+    fields: [
+      {
+        name: 'subject',
+        customLabel: MailPoet.I18n.t('subjectLabel'),
+        className: 'mailpoet-form-field-subject',
+        placeholder: MailPoet.I18n.t('subjectLine'),
+        tooltip: MailPoet.I18n.t('subjectLineTip'),
+        type: 'text',
+        validation: {
+          'data-parsley-required': true,
+          'data-parsley-required-message': MailPoet.I18n.t('emptySubjectLineError'),
+          maxLength: 250,
+        },
+      },
+      {
+        name: 'preheader',
+        customLabel: MailPoet.I18n.t('preheaderLabel'),
+        className: 'mailpoet-form-field-preheader',
+        placeholder: MailPoet.I18n.t('preheaderLine'),
+        tooltip: `${MailPoet.I18n.t('preheaderLineTip1')} ${MailPoet.I18n.t('preheaderLineTip2')}`,
+        type: 'textarea',
+        validation: {
+          maxLength: 250,
+        },
+      },
+    ],
   },
   {
     name: 'segments',
@@ -133,16 +157,25 @@ let fields = [
       return !segment.deleted_at;
     },
     getLabel: function getLabel(segment) {
-      return `${segment.name} (${parseInt(segment.subscribers, 10).toLocaleString()})`;
+      return segment.name;
+    },
+    getCount: function getCount(segment) {
+      return parseInt(segment.subscribers, 10).toLocaleString();
     },
     transformChangedValue: function transformChangedValue(segmentIds) {
       const allSegments = this.getItems();
-      return _.map(segmentIds, id => _.find(allSegments, segment => segment.id === id));
+      return _.map(segmentIds, (id) => _.find(allSegments, (segment) => segment.id === id));
     },
     validation: {
       'data-parsley-required': true,
       'data-parsley-required-message': MailPoet.I18n.t('noSegmentsSelectedError'),
     },
+  },
+  {
+    name: 'options',
+    label: MailPoet.I18n.t('scheduleIt'),
+    type: 'reactComponent',
+    component: StandardScheduling,
   },
   {
     name: 'sender',
@@ -169,6 +202,7 @@ let fields = [
       },
     ],
   },
+  GATrackingField,
   {
     name: 'reply-to',
     label: MailPoet.I18n.t('replyTo'),
@@ -189,12 +223,6 @@ let fields = [
         },
       },
     ],
-  },
-  {
-    name: 'options',
-    label: MailPoet.I18n.t('scheduleIt'),
-    type: 'reactComponent',
-    component: StandardScheduling,
   },
 ];
 

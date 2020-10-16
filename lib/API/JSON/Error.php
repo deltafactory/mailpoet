@@ -1,7 +1,6 @@
 <?php
-namespace MailPoet\API\JSON;
 
-if (!defined('ABSPATH')) exit;
+namespace MailPoet\API\JSON;
 
 final class Error {
   const UNKNOWN = 'unknown';

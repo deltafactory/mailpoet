@@ -1,4 +1,5 @@
 <?php
+
 namespace MailPoet\Test\Config;
 
 use Codeception\Stub;
@@ -6,20 +7,25 @@ use Codeception\Stub\Expected;
 use MailPoet\Config\Updater;
 
 class UpdaterTest extends \MailPoetTest {
-  function _before() {
+  public $updater;
+  public $version;
+  public $slug;
+  public $pluginName;
+
+  public function _before() {
     parent::_before();
-    $this->plugin_name = 'some-plugin/some-plugin.php';
+    $this->pluginName = 'some-plugin/some-plugin.php';
     $this->slug = 'some-plugin';
     $this->version = '0.1';
 
     $this->updater = new Updater(
-      $this->plugin_name,
+      $this->pluginName,
       $this->slug,
       $this->version
     );
   }
 
-  function testItInitializes() {
+  public function testItInitializes() {
     $updater = Stub::make(
       $this->updater,
       [
@@ -31,13 +37,13 @@ class UpdaterTest extends \MailPoetTest {
     apply_filters('pre_set_site_transient_update_plugins', null);
   }
 
-  function testItChecksForUpdates() {
-    $update_transient = new \StdClass;
-    $update_transient->last_checked = time();
+  public function testItChecksForUpdates() {
+    $updateTransient = new \stdClass;
+    $updateTransient->last_checked = time(); // phpcs:ignore Squiz.NamingConventions.ValidVariableName.NotCamelCaps
     $updater = Stub::construct(
       $this->updater,
       [
-        $this->plugin_name,
+        $this->pluginName,
         $this->slug,
         $this->version,
       ],
@@ -46,7 +52,7 @@ class UpdaterTest extends \MailPoetTest {
           return (object)[
             'id' => 76630,
             'slug' => $this->slug,
-            'plugin' => $this->plugin_name,
+            'plugin' => $this->pluginName,
             'new_version' => $this->version . 1,
             'url' => 'http://www.mailpoet.com/wordpress-newsletter-plugin-premium/',
             'package' => home_url() . '/wp-content/uploads/mailpoet-premium.zip',
@@ -55,21 +61,21 @@ class UpdaterTest extends \MailPoetTest {
       ],
       $this
     );
-    $result = $updater->checkForUpdate($update_transient);
-    expect($result->last_checked)->greaterOrEquals($update_transient->last_checked);
-    expect($result->checked[$this->plugin_name])->equals($this->version);
-    expect($result->response[$this->plugin_name]->slug)->equals($this->slug);
-    expect($result->response[$this->plugin_name]->plugin)->equals($this->plugin_name);
+    $result = $updater->checkForUpdate($updateTransient);
+    expect($result->last_checked)->greaterOrEquals($updateTransient->last_checked); // phpcs:ignore Squiz.NamingConventions.ValidVariableName.NotCamelCaps
+    expect($result->checked[$this->pluginName])->equals($this->version);
+    expect($result->response[$this->pluginName]->slug)->equals($this->slug);
+    expect($result->response[$this->pluginName]->plugin)->equals($this->pluginName);
     expect(version_compare(
       $this->version,
-      $result->response[$this->plugin_name]->new_version,
+      $result->response[$this->pluginName]->new_version,
       '<'
     ))->true();
-    expect($result->response[$this->plugin_name]->package)->notEmpty();
+    expect($result->response[$this->pluginName]->package)->notEmpty();
   }
 
-  function testItReturnsObjectIfPassedNonObjectWhenCheckingForUpdates() {
+  public function testItReturnsObjectIfPassedNonObjectWhenCheckingForUpdates() {
     $result = $this->updater->checkForUpdate(null);
-    expect($result instanceof \StdClass)->true();
+    expect($result instanceof \stdClass)->true();
   }
 }

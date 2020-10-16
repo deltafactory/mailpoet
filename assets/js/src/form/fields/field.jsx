@@ -6,11 +6,12 @@ import FormFieldRadio from 'form/fields/radio.jsx';
 import FormFieldCheckbox from 'form/fields/checkbox.jsx';
 import FormFieldSelection from 'form/fields/selection.jsx';
 import FormFieldDate from 'form/fields/date.jsx';
+import Heading from 'common/typography/heading/heading';
 import jQuery from 'jquery';
 import PropTypes from 'prop-types';
 
 class FormField extends React.Component {
-  renderField = (data, inline = false) => {
+  renderField = (data) => {
     let description = false;
     if (data.field.description) {
       description = (
@@ -18,7 +19,7 @@ class FormField extends React.Component {
       );
     }
 
-    let field = false;
+    let field;
     let dataField = data.field;
 
     if (data.field.field !== undefined) {
@@ -27,52 +28,119 @@ class FormField extends React.Component {
 
     switch (dataField.type) {
       case 'text':
-        field = (<FormFieldText {...data} />);
+        field = (
+          <FormFieldText
+            onValueChange={data.onValueChange}
+            field={data.field}
+            item={data.item}
+            automationId={data.automationId}
+            inline={data.inline}
+            description={data.description}
+          />
+        );
         break;
 
       case 'textarea':
-        field = (<FormFieldTextarea {...data} />);
+        field = (
+          <FormFieldTextarea
+            onValueChange={data.onValueChange}
+            field={data.field}
+            item={data.item}
+            automationId={data.automationId}
+            inline={data.inline}
+            description={data.description}
+          />
+        );
         break;
 
       case 'select':
-        field = (<FormFieldSelect {...data} />);
+        field = (
+          <FormFieldSelect
+            onValueChange={data.onValueChange}
+            field={data.field}
+            item={data.item}
+            automationId={data.automationId}
+            inline={data.inline}
+            description={data.description}
+          />
+        );
         break;
 
       case 'radio':
-        field = (<FormFieldRadio {...data} />);
+        field = (
+          <FormFieldRadio
+            onValueChange={data.onValueChange}
+            field={data.field}
+            item={data.item}
+            automationId={data.automationId}
+            inline={data.inline}
+            description={data.description}
+          />
+        );
         break;
 
       case 'checkbox':
-        field = (<FormFieldCheckbox {...data} />);
+        field = (
+          <FormFieldCheckbox
+            onValueChange={data.onValueChange}
+            field={data.field}
+            item={data.item}
+            automationId={data.automationId}
+            inline={data.inline}
+            description={data.description}
+          />
+        );
         break;
 
       case 'selection':
-        field = (<FormFieldSelection {...data} />);
+        field = (
+          <FormFieldSelection
+            key={`selection-field-${dataField.name}`}
+            onValueChange={data.onValueChange}
+            field={data.field}
+            automationId={data.automationId}
+            inline={data.inline}
+            description={data.description}
+            item={data.item}
+          />
+        );
         break;
 
       case 'date':
-        field = (<FormFieldDate {...data} />);
+        field = (
+          <FormFieldDate
+            onValueChange={data.onValueChange}
+            field={data.field}
+            item={data.item}
+            automationId={data.automationId}
+            inline={data.inline}
+            description={data.description}
+          />
+        );
         break;
 
       case 'reactComponent':
-        field = (<data.field.component {...data} />);
+        field = (
+          <data.field.component
+            onValueChange={data.onValueChange}
+            field={data.field}
+            item={data.item}
+            automationId={data.automationId}
+            inline={data.inline}
+            description={data.description}
+          />
+        );
+        break;
+
+      case 'empty':
         break;
 
       default:
         field = 'invalid';
         break;
     }
-
-    if (inline === true) {
-      return (
-        <span key={`field-${data.index || 0}`}>
-          { field }
-          { description }
-        </span>
-      );
-    }
     return (
-      <div key={`field-${data.index || 0}`}>
+      <div className="mailpoet-form-field" key={`field-${data.index || 0}`}>
         { field }
         { description }
       </div>
@@ -93,27 +161,28 @@ class FormField extends React.Component {
       field = this.renderField(this.props);
     }
 
+    let label = false;
+    if (this.props.field.label) {
+      label = (
+        <Heading level={4}>
+          <label htmlFor={`field_${this.props.field.name}`}>{ this.props.field.label }</label>
+        </Heading>
+      );
+    }
+
     let tip = false;
     if (this.props.field.tip) {
       tip = (
-        <p className="description">{ this.props.field.tip }</p>
+        <p className="mailpoet-form-description">{ this.props.field.tip }</p>
       );
     }
 
     return (
-      <tr className={`form-field-row-${this.props.field.name}`}>
-        <th scope="row">
-          <label
-            htmlFor={`field_${this.props.field.name}`}
-          >
-            { this.props.field.label }
-            { tip }
-          </label>
-        </th>
-        <td>
-          { field }
-        </td>
-      </tr>
+      <div className={`mailpoet-form-field-${this.props.field.name} form-field-row-${this.props.field.name}`}>
+        { label }
+        { tip }
+        { field }
+      </div>
     );
   }
 }

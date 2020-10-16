@@ -2,6 +2,7 @@ import _ from 'underscore';
 import React from 'react';
 import MailPoet from 'mailpoet';
 import Select from 'form/fields/select.jsx';
+import Selection from 'form/fields/selection.jsx';
 import Text from 'form/fields/text.jsx';
 import { timeDelayValues } from 'newsletters/scheduling/common.jsx';
 import PropTypes from 'prop-types';
@@ -10,7 +11,7 @@ import { withRouter } from 'react-router-dom';
 const availableRoles = window.mailpoet_roles || {};
 const availableSegments = _.filter(
   window.mailpoet_segments || [],
-  segment => segment.type === 'default'
+  (segment) => segment.type === 'default'
 );
 
 const events = {
@@ -21,17 +22,14 @@ const events = {
   },
 };
 
-const availableSegmentValues = _.object(_.map(
-  availableSegments,
-  (segment) => {
-    const name = `${segment.name} (${parseInt(segment.subscribers, 10).toLocaleString()})`;
-    return [segment.id, name];
-  }
-));
 const segmentField = {
   name: 'segment',
-  values: availableSegmentValues,
-  sortBy: (key, value) => value.toLowerCase(),
+  placeholder: MailPoet.I18n.t('selectSegmentPlaceholder'),
+  forceSelect2: true,
+  values: availableSegments,
+  getCount: (segment) => parseInt(segment.subscribers, 10).toLocaleString(),
+  getLabel: (segment) => segment.name,
+  getValue: (segment) => segment.id,
 };
 
 const roleField = {
@@ -66,15 +64,15 @@ class WelcomeScheduling extends React.Component {
     });
   };
 
-  handleEventChange = event => this.handleValueChange('event', event.target.value);
+  handleEventChange = (event) => this.handleValueChange('event', event.target.value);
 
-  handleSegmentChange = event => this.handleValueChange('segment', event.target.value);
+  handleSegmentChange = (event) => this.handleValueChange('segment', event.target.value);
 
-  handleRoleChange = event => this.handleValueChange('role', event.target.value);
+  handleRoleChange = (event) => this.handleValueChange('role', event.target.value);
 
-  handleAfterTimeNumberChange = event => this.handleValueChange('afterTimeNumber', event.target.value);
+  handleAfterTimeNumberChange = (event) => this.handleValueChange('afterTimeNumber', event.target.value);
 
-  handleAfterTimeTypeChange = event => this.handleValueChange('afterTimeType', event.target.value);
+  handleAfterTimeTypeChange = (event) => this.handleValueChange('afterTimeType', event.target.value);
 
   handleNext = () => {
     MailPoet.Ajax.post({
@@ -90,7 +88,7 @@ class WelcomeScheduling extends React.Component {
     }).fail((response) => {
       if (response.errors.length > 0) {
         MailPoet.Notice.error(
-          response.errors.map(error => error.message),
+          response.errors.map((error) => error.message),
           { scroll: true }
         );
       }
@@ -116,7 +114,7 @@ class WelcomeScheduling extends React.Component {
       );
     } else {
       roleSegmentSelection = (
-        <Select
+        <Selection
           field={segmentField}
           item={this.getCurrentValue()}
           onValueChange={this.handleSegmentChange}
@@ -140,16 +138,20 @@ class WelcomeScheduling extends React.Component {
           item={this.getCurrentValue()}
           onValueChange={this.handleEventChange}
         />
+        <div className="mailpoet-gap" />
 
         { roleSegmentSelection }
+        <div className="mailpoet-gap" />
 
-        { timeNumber }
-
-        <Select
-          field={afterTimeTypeField}
-          item={this.getCurrentValue()}
-          onValueChange={this.handleAfterTimeTypeChange}
-        />
+        <div className="mailpoet-grid-column mailpoet-flex">
+          { timeNumber }
+          <Select
+            field={afterTimeTypeField}
+            item={this.getCurrentValue()}
+            onValueChange={this.handleAfterTimeTypeChange}
+          />
+        </div>
+        <div className="mailpoet-gap" />
       </div>
     );
   }

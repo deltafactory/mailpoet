@@ -1,18 +1,25 @@
 <?php
+
 namespace Helper;
+
+use Codeception\Module\WebDriver;
+use Codeception\TestInterface;
+
 // here you can define custom actions
 // all public methods declared in helper class will be available in $I
 
-class Acceptance extends \Codeception\Module
-{
-  protected $js_errors = array();
+
+class Acceptance extends \Codeception\Module {
+
+  protected $jsErrors = [];
 
   /**
    * Note: Selenium JS error log buffer is cleared after logs retrieval:
    * https://github.com/SeleniumHQ/selenium/wiki/Logging#retrieval-of-logs
    */
-  function seeNoJSErrors() {
+  public function seeNoJSErrors() {
     $wd = $this->getModule('WPWebDriver');
+    assert($wd instanceof WebDriver);
 
     try {
       $logEntries = array_slice(
@@ -23,23 +30,26 @@ class Acceptance extends \Codeception\Module
       foreach ($logEntries as $logEntry) {
         if ($this->isJSError($logEntry)) {
           // Collect JS errors into an array
-          $this->js_errors[] = $logEntry['message'];
+          $this->jsErrors[] = $logEntry['message'];
         }
       }
 
-      if (!empty($this->js_errors)) {
-        $this->debug('JS errors : ' . print_r($this->js_errors, true));
+      if (!empty($this->jsErrors)) {
+        // phpcs:ignore Squiz.PHP.DiscouragedFunctions
+        $this->debug('JS errors : ' . print_r($this->jsErrors, true));
       }
     } catch (\Exception $e) {
       $this->debug('Unable to retrieve Selenium logs : ' . $e->getMessage());
     }
 
     // String comparison is used to show full error messages in test fail diffs
-    $this->assertEquals('', join(PHP_EOL, $this->js_errors), 'JS errors are present');
+    $this->assertEquals('', join(PHP_EOL, $this->jsErrors), 'JS errors are present');
   }
 
-  function getCurrentUrl() {
-    return $this->getModule('WPWebDriver')->_getCurrentUri();
+  public function getCurrentUrl() {
+    $wd = $this->getModule('WPWebDriver');
+    assert($wd instanceof WebDriver);
+    return $wd->_getCurrentUri();
   }
 
   protected function isJSError($logEntry) {
@@ -52,7 +62,7 @@ class Acceptance extends \Codeception\Module
       );
   }
 
-  function _after() {
-    $this->js_errors = array();
+  public function _after(TestInterface $test) {
+    $this->jsErrors = [];
   }
 }

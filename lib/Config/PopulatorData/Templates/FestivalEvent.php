@@ -3,20 +3,18 @@ namespace MailPoet\Config\PopulatorData\Templates;
 
 use MailPoet\WP\Functions as WPFunctions;
 
-if (!defined('ABSPATH')) exit;
-
 
 class FestivalEvent {
 
   private $template_image_url;
   private $social_icon_url;
 
-  function __construct($assets_url) {
+  public function __construct($assets_url) {
      $this->template_image_url = 'https://ps.w.org/mailpoet/assets/newsletter-templates/festival_event';
     $this->social_icon_url = $assets_url . '/img/newsletter_editor/social-icons';
   }
 
-  function get() {
+  public function get() {
     return [
       'name' => WPFunctions::get()->__("Festival Event", 'mailpoet'),
       'categories' => json_encode(['standard', 'all']),
@@ -463,7 +461,7 @@ class FestivalEvent {
                   ],
                   2 => [
                     'type' => 'footer',
-                    'text' => '<p>Mauris tristique ultricies ullamcorper. <br />Don\'t want to hear from us?&nbsp;<a href="[link:subscription_unsubscribe_url]">Unsubscribe</a></p><p></p><p>Add your postal address here.&nbsp;</p>',
+                    'text' => '<p>Mauris tristique ultricies ullamcorper. <br />Don\'t want to hear from us?&nbsp;<a href="[link:subscription_unsubscribe_url]">'.WPFunctions::get()->__("Unsubscribe", 'mailpoet').'</a></p><p></p><p>Add your postal address here.&nbsp;</p>',
                     'styles' => [
                       'block' => [
                         'backgroundColor' => 'transparent',

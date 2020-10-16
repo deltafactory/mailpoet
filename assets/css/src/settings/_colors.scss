@@ -1,0 +1,58 @@
+// General colors
+$color-placeholder-select2: #999; /* default Select2 placeholder color for single dropdown */
+$color-transparent: rgba(#fff, 0);
+$color-white: #fff;
+$color-black: #000;
+
+// Primary (blueish) color
+$color-primary: #0074a2;
+$color-primary-background: #f8f8f8;
+$color-primary-button: #2ea1cd;
+$color-primary-highlight: #1e8cbe;
+$color-primary-inactive: #a4a4a4;
+$color-primary-shadow-inset: #025c80;
+$color-primary-text: #656565;
+$color-secondary: #ff5301;
+$color-secondary-hover: darken($color-secondary, 10%);
+$color-secondary-middle: #f5a278;
+$color-secondary-middle-hover: darken($color-secondary-middle, 10%);
+$color-secondary-light: #ffe0d0;
+$color-secondary-light-hover: darken($color-secondary-light, 10%);
+$color-tertiary: #071c6d;
+$color-tertiary-hover: darken($color-tertiary, 10%);
+$color-tertiary-light: #e5e9f8;
+$color-tertiary-light-hover: darken($color-tertiary-light, 10%);
+
+// Typography colors
+$color-text: $color-tertiary;
+$color-text-hover: darken($color-text, 10%);
+$color-text-light: #9ca6cc;
+$color-text-light-hover: darken($color-text-light, 10%);
+
+// Form colors
+$color-input-background: #fdfdff;
+$color-input-border: $color-tertiary-light-hover;
+$color-input-error: #f00;
+$color-input-success: #7ed321;
+
+// Newsletter editor colors
+$color-editor-background-column: #7fbbd0;
+$color-editor-background-content: #0078a2;
+
+$color-editor-border-content: #e5e5e5;
+$color-editor-border-structure: #ddd;
+
+$color-editor-warning: #d54e21;
+$color-editor-warning-alternate: #f4c6c8;
+$color-editor-warning-text: $color-white;
+
+// Newsletter stats badges
+$color-badge-bad: #d54e21;
+$color-badge-excellent: #2993ab;
+$color-badge-good: #f0b849;
+$color-badge-green: #55bd56;
+$color-badge-video-guide: #46b450;
+
+$color-stats-average: #f559c3;
+$color-stats-good: #ff9f00;
+$color-stats-excellent: #7ed321;

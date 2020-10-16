@@ -5,33 +5,25 @@ namespace MailPoet\Test\Acceptance;
 use MailPoet\Test\DataFactories\Newsletter;
 
 class EditorDividerBlockCest {
-  function addDivider(\AcceptanceTester $I) {
-    $I->wantTo('add divider block to newsletter');
-    $newsletterTitle = 'Divider Block Newsletter';
+  public function addDivider(\AcceptanceTester $i) {
+    $i->wantTo('add divider block to newsletter');
     $dividerSettings = ('[data-automation-id="settings_tool"]');
     $dividerResizeHandle = ('[data-automation-id="divider_resize_handle"]');
     $dividerInEditor = ('[data-automation-id="divider"]');
     $dividerSettingsAssertion = ('[data-automation-id="divider_selector"]');
-    (new Newsletter())
-      ->withSubject($newsletterTitle)
+    $newsletter = (new Newsletter())
       ->loadBodyFrom('newsletterWithText.json')
       ->create();
-    $I->login();
-    $I->amOnMailpoetPage('Emails');
-    $I->waitForText($newsletterTitle);
-    $I->clickItemRowActionByItemName($newsletterTitle, 'Edit');
-    // Create divider block
-    $I->waitForText('Divider');
-    $I->waitForElementNotVisible('.velocity-animating');
-    $I->dragAndDrop('#automation_editor_block_divider', '#mce_0');
-    $I->waitForElementNotVisible('.velocity-animating');
+    $i->login();
+    $i->amEditingNewsletter($newsletter->id);
+    $i->dragAndDrop('#automation_editor_block_divider', '#mce_0');
+    $i->waitForElementNotVisible('.velocity-animating');
     //Open settings
-    $I->moveMouseOver($dividerInEditor);
-    $I->waitForElementVisible($dividerResizeHandle);
-    $I->waitForElementVisible($dividerSettings);
-    $I->click($dividerSettings);
-    $I->waitForElementVisible($dividerSettingsAssertion);
-    $I->click('Done');
+    $i->moveMouseOver($dividerInEditor);
+    $i->waitForElementVisible($dividerResizeHandle);
+    $i->waitForElementVisible($dividerSettings);
+    $i->click($dividerSettings);
+    $i->waitForElementVisible($dividerSettingsAssertion);
+    $i->click('Done');
   }
-
 }

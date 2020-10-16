@@ -1,29 +1,26 @@
 import React from 'react';
-import createReactClass from 'create-react-class';
 import PropTypes from 'prop-types';
-import { Link } from 'react-router-dom';
+import { Link, withRouter } from 'react-router-dom';
 
 import Listing from 'listing/listing.jsx';
-import ListingTabs from 'newsletters/listings/tabs.jsx';
-import ListingHeading from 'newsletters/listings/heading.jsx';
-import FeatureAnnouncement from 'announcements/feature_announcement.jsx';
-
+import Statistics from 'newsletters/listings/statistics.jsx';
 import {
-  StatisticsMixin,
-  MailerMixin,
-  CronMixin,
-} from 'newsletters/listings/mixins.jsx';
+  addStatsCTAAction,
+  checkCronStatus,
+  checkMailerStatus,
+} from 'newsletters/listings/utils.jsx';
+import NewsletterTypes from 'newsletters/types.jsx';
 
 import classNames from 'classnames';
 import MailPoet from 'mailpoet';
 import _ from 'underscore';
-import Hooks from 'wp-js-hooks';
 
 const mailpoetRoles = window.mailpoet_roles || {};
 const mailpoetSegments = window.mailpoet_segments || {};
 const mailpoetTrackingEnabled = (!!(window.mailpoet_tracking_enabled));
 
 const messages = {
+  onNoItemsFound: (group, search) => MailPoet.I18n.t(search ? 'noItemsFound' : 'emptyListing'),
   onTrash: (response) => {
     const count = Number(response.meta.count);
     let message = null;
@@ -133,7 +130,7 @@ let newsletterActions = [
     }).fail((response) => {
       if (response.errors.length > 0) {
         MailPoet.Notice.error(
-          response.errors.map(error => error.message),
+          response.errors.map((error) => error.message),
           { scroll: true }
         );
       }
@@ -153,23 +150,17 @@ let newsletterActions = [
     name: 'trash',
   },
 ];
+newsletterActions = addStatsCTAAction(newsletterActions);
 
-Hooks.addFilter('mailpoet_newsletters_listings_welcome_notification_actions', 'mailpoet', StatisticsMixin.addStatsCTAAction);
-newsletterActions = Hooks.applyFilters('mailpoet_newsletters_listings_welcome_notification_actions', newsletterActions);
+class NewsletterListWelcome extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      newslettersCount: undefined,
+    };
+  }
 
-const NewsletterListWelcome = createReactClass({ // eslint-disable-line react/prefer-es6-class
-  displayName: 'NewsletterListWelcome',
-
-  propTypes: {
-    location: PropTypes.object.isRequired, // eslint-disable-line react/forbid-prop-types
-    match: PropTypes.shape({
-      params: PropTypes.object, // eslint-disable-line react/forbid-prop-types
-    }).isRequired,
-  },
-
-  mixins: [StatisticsMixin, MailerMixin, CronMixin],
-
-  updateStatus: function updateStatus(e) {
+  updateStatus = (e) => {
     // make the event persist so that we can still override the selected value
     // in the ajax callback
     e.persist();
@@ -189,14 +180,14 @@ const NewsletterListWelcome = createReactClass({ // eslint-disable-line react/pr
       // force refresh of listing so that groups are updated
       this.forceUpdate();
     }).fail((response) => {
-      MailPoet.Notice.error(MailPoet.I18n.t('welcomeEmailActivationFailed'));
+      MailPoet.Notice.showApiErrorNotice(response);
 
       // reset value to actual newsletter's status
       e.target.value = response.status;
     });
-  },
+  };
 
-  renderStatus: function renderStatus(newsletter) {
+  renderStatus = (newsletter) => {
     const totalSentMessage = MailPoet.I18n.t('sentToXSubscribers')
       .replace('%$1d', newsletter.total_sent.toLocaleString());
     const totalScheduledMessage = MailPoet.I18n.t('scheduledToXSubscribers')
@@ -227,9 +218,9 @@ const NewsletterListWelcome = createReactClass({ // eslint-disable-line react/pr
         </p>
       </div>
     );
-  },
+  };
 
-  renderSettings: function renderSettings(newsletter) {
+  renderSettings = (newsletter) => {
     let sendingEvent;
     let sendingDelay;
     let segment;
@@ -251,7 +242,7 @@ const NewsletterListWelcome = createReactClass({ // eslint-disable-line react/pr
         // get segment
         segment = _.find(
           mailpoetSegments,
-          seg => (Number(seg.id) === Number(newsletter.options.segment))
+          (seg) => (Number(seg.id) === Number(newsletter.options.segment))
         );
 
         if (segment === undefined) {
@@ -272,6 +263,12 @@ const NewsletterListWelcome = createReactClass({ // eslint-disable-line react/pr
     if (sendingEvent) {
       if (newsletter.options.afterTimeType !== 'immediate') {
         switch (newsletter.options.afterTimeType) {
+          case 'minutes':
+            sendingDelay = MailPoet.I18n.t('sendingDelayMinutes').replace(
+              '%$1d', newsletter.options.afterTimeNumber
+            );
+            break;
+
           case 'hours':
             sendingDelay = MailPoet.I18n.t('sendingDelayHours').replace(
               '%$1d', newsletter.options.afterTimeNumber
@@ -303,9 +300,9 @@ const NewsletterListWelcome = createReactClass({ // eslint-disable-line react/pr
         { sendingEvent }
       </span>
     );
-  },
+  };
 
-  renderItem: function renderItem(newsletter, actions) {
+  renderItem = (newsletter, actions) => {
     const rowClasses = classNames(
       'manage-column',
       'column-primary',
@@ -333,10 +330,10 @@ const NewsletterListWelcome = createReactClass({ // eslint-disable-line react/pr
         </td>
         { (mailpoetTrackingEnabled === true) ? (
           <td className="column" data-colname={MailPoet.I18n.t('statistics')}>
-            { this.renderStatistics(
-              newsletter,
-              newsletter.total_sent > 0 && newsletter.statistics
-            ) }
+            <Statistics
+              newsletter={newsletter}
+              isSent={newsletter.total_sent > 0 && !!newsletter.statistics}
+            />
           </td>
         ) : null }
         <td className="column-date" data-colname={MailPoet.I18n.t('lastModifiedOn')}>
@@ -344,37 +341,52 @@ const NewsletterListWelcome = createReactClass({ // eslint-disable-line react/pr
         </td>
       </div>
     );
-  },
+  };
 
-  render: function render() {
+  render() {
     return (
-      <div>
-        <ListingHeading />
-
-        <FeatureAnnouncement hasNews={window.mailpoet_feature_announcement_has_news} />
-
-        <ListingTabs tab="welcome" />
-
-        <Listing
-          limit={window.mailpoet_listing_per_page}
-          location={this.props.location}
-          params={this.props.match.params}
-          endpoint="newsletters"
-          type="welcome"
-          base_url="welcome"
-          onRenderItem={this.renderItem}
-          columns={columns}
-          bulk_actions={bulkActions}
-          item_actions={newsletterActions}
-          messages={messages}
-          auto_refresh
-          sort_by="updated_at"
-          sort_order="desc"
-          afterGetItems={(state) => { this.checkMailerStatus(state); this.checkCronStatus(state); }}
-        />
-      </div>
+      <>
+        {this.state.newslettersCount === 0 && (
+          <NewsletterTypes
+            filter={(type) => type.slug === 'welcome'}
+          />
+        )}
+        {this.state.newslettersCount !== 0 && (
+          <Listing
+            limit={window.mailpoet_listing_per_page}
+            location={this.props.location}
+            params={this.props.match.params}
+            endpoint="newsletters"
+            type="welcome"
+            base_url="welcome"
+            onRenderItem={this.renderItem}
+            columns={columns}
+            bulk_actions={bulkActions}
+            item_actions={newsletterActions}
+            messages={messages}
+            auto_refresh
+            sort_by="updated_at"
+            sort_order="desc"
+            afterGetItems={(state) => {
+              if (!state.loading) {
+                const total = state.groups.reduce((count, group) => (count + group.count), 0);
+                this.setState({ newslettersCount: total });
+              }
+              checkMailerStatus(state);
+              checkCronStatus(state);
+            }}
+          />
+        )}
+      </>
     );
-  },
-});
+  }
+}
 
-export default NewsletterListWelcome;
+NewsletterListWelcome.propTypes = {
+  location: PropTypes.object.isRequired, // eslint-disable-line react/forbid-prop-types
+  match: PropTypes.shape({
+    params: PropTypes.object, // eslint-disable-line react/forbid-prop-types
+  }).isRequired,
+};
+
+export default withRouter(NewsletterListWelcome);

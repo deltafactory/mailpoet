@@ -3,9 +3,8 @@ import React from 'react';
 import ReactStringReplace from 'react-string-replace';
 import CronStatus from './cron_status.jsx';
 import QueueStatus from './queue_status.jsx';
-import Tabs from './tabs.jsx';
 
-function renderStatusMessage(status, error, link) {
+function renderStatusMessage(status, error, link, linkBeacon, additionalInfo) {
   const noticeType = (status) ? 'success' : 'error';
   let noticeMessage = (status)
     ? MailPoet.I18n.t('systemStatusConnectionSuccessful')
@@ -15,8 +14,8 @@ function renderStatusMessage(status, error, link) {
     noticeMessage = ReactStringReplace(
       noticeMessage,
       /\[link\](.*?)\[\/link\]/g,
-      match => (
-        <a href={`${link}`} key="kb-link">{ match }</a>
+      (match) => (
+        <a href={link} data-beacon-article={linkBeacon} key="kb-link">{match}</a>
       )
     );
   }
@@ -24,6 +23,7 @@ function renderStatusMessage(status, error, link) {
   return (
     <div className={`mailpoet_notice notice inline notice-${noticeType}`} style={{ marginTop: '1em' }}>
       <p>{noticeMessage}</p>
+      {additionalInfo ? (<p><i>{additionalInfo}</i></p>) : null}
     </div>
   );
 }
@@ -31,14 +31,16 @@ function renderStatusMessage(status, error, link) {
 function renderCronSection(data) {
   const status = data.cron.isReachable;
   const url = data.cron.url;
+  const error = MailPoet.I18n.t('systemStatusCronConnectionUnsuccessfulInfo');
+  const additionalInfo = !status ? data.cron.pingResponse : null;
 
   return (
     <div>
-      <h2>{MailPoet.I18n.t('systemStatusCronTitle')}</h2>
+      <h4>{MailPoet.I18n.t('systemStatusCronTitle')}</h4>
       <p>
         <a href={url} target="_blank" rel="noopener noreferrer">{url}</a>
       </p>
-      {renderStatusMessage(status, MailPoet.I18n.t('systemStatusCronConnectionUnsuccessfulInfo'), '//beta.docs.mailpoet.com/article/231-sending-does-not-work')}
+      {renderStatusMessage(status, error, 'https://kb.mailpoet.com/article/231-sending-does-not-work', '5a0257ac2c7d3a272c0d7ad6', additionalInfo)}
     </div>
   );
 }
@@ -50,7 +52,7 @@ function renderMSSSection(data) {
 
   return (
     <div>
-      <h2>{MailPoet.I18n.t('systemStatusMSSTitle')}</h2>
+      <h4>{MailPoet.I18n.t('systemStatusMSSTitle')}</h4>
       {renderStatusMessage(status, MailPoet.I18n.t('systemStatusMSSConnectionUnsuccessfulInfo'), false)}
     </div>
   );
@@ -60,16 +62,15 @@ function SystemStatus() {
   const systemStatusData = window.systemStatusData;
 
   return (
-    <div>
-      <Tabs tab="systemStatus" />
-      <div className="mailpoet_notice notice inline" style={{ marginTop: '1em' }}>
+    <>
+      <div className="mailpoet_notice notice inline">
         <p>{systemStatusData.mss.enabled ? MailPoet.I18n.t('systemStatusIntroCronMSS') : MailPoet.I18n.t('systemStatusIntroCron')}</p>
       </div>
       {renderCronSection(systemStatusData)}
       {renderMSSSection(systemStatusData)}
       <CronStatus status_data={systemStatusData.cronStatus} />
       <QueueStatus status_data={systemStatusData.queueStatus} />
-    </div>
+    </>
   );
 }
 export default SystemStatus;

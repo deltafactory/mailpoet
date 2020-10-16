@@ -1,21 +1,27 @@
 <?php
+
 namespace MailPoet\Test\WP;
 
 use MailPoet\WP\Functions as WPFunctions;
-use MailPoet\Config\Env;
 
 class FunctionsTest extends \MailPoetTest {
-  function _before() {
+  public $ids;
+  public $wp;
+  public $filter;
+  public $action;
+  public $contentWidth;
+
+  public function _before() {
     parent::_before();
-    global $content_width;
-    $this->_content_width = $content_width;
-    $content_width = 150;
+    global $content_width; // phpcs:ignore Squiz.NamingConventions.ValidVariableName.NotCamelCaps
+    $this->contentWidth = $content_width; // phpcs:ignore Squiz.NamingConventions.ValidVariableName.NotCamelCaps
+    $content_width = 150; // phpcs:ignore Squiz.NamingConventions.ValidVariableName.NotCamelCaps
     $this->action = 'mailpoet_test_action';
     $this->filter = 'mailpoet_test_filter';
     $this->wp = new WPFunctions;
   }
 
-  function makeAttachment($upload, $parent_post_id = 0) {
+  public function makeAttachment($upload, $parentPostId = 0) {
     $type = '';
     if (!empty($upload['type'])) {
         $type = $upload['type'];
@@ -29,32 +35,33 @@ class FunctionsTest extends \MailPoetTest {
         'post_title' => basename($upload['file']),
         'post_content' => '',
         'post_type' => 'attachment',
-        'post_parent' => $parent_post_id,
+        'post_parent' => $parentPostId,
         'post_mime_type' => $type,
         'guid' => $upload['url'],
     ];
 
     // Save the data
-    $id = wp_insert_attachment($attachment, $upload['file'], $parent_post_id);
+    /** @var int $id */
+    $id = wp_insert_attachment($attachment, $upload['file'], $parentPostId);
     $metadata = wp_generate_attachment_metadata($id, $upload['file']);
     wp_update_attachment_metadata($id, $metadata);
 
     return $this->ids[] = $id;
   }
 
-  function testItCanProcessActions() {
-    $test_value = ['abc', 'def'];
-    $test_value2 = new \stdClass;
+  public function testItCanProcessActions() {
+    $testValue = ['abc', 'def'];
+    $testValue2 = new \stdClass;
     $called = false;
 
-    $callback = function ($value, $value2) use ($test_value, $test_value2, &$called) {
+    $callback = function ($value, $value2) use ($testValue, $testValue2, &$called) {
       $called = true;
-      expect($value)->same($test_value);
-      expect($value2)->same($test_value2);
+      expect($value)->same($testValue);
+      expect($value2)->same($testValue2);
     };
 
     $this->wp->addAction($this->action, $callback, 10, 2);
-    $this->wp->doAction($this->action, $test_value, $test_value2);
+    $this->wp->doAction($this->action, $testValue, $testValue2);
 
     expect($called)->true();
 
@@ -64,30 +71,30 @@ class FunctionsTest extends \MailPoetTest {
     expect($called)->false();
   }
 
-  function testItCanProcessFilters() {
-    $test_value = ['abc', 'def'];
+  public function testItCanProcessFilters() {
+    $testValue = ['abc', 'def'];
 
     $called = false;
 
-    $callback = function ($value) use ($test_value, &$called) {
+    $callback = function ($value) use ($testValue, &$called) {
       $called = true;
-      return $test_value;
+      return $testValue;
     };
 
     $this->wp->addFilter($this->filter, $callback);
-    $result = $this->wp->applyFilters($this->filter, $test_value);
+    $result = $this->wp->applyFilters($this->filter, $testValue);
 
     expect($called)->true();
-    expect($result)->equals($test_value);
+    expect($result)->equals($testValue);
 
     $called = false;
     $this->wp->removeFilter($this->filter, $callback);
-    $this->wp->applyFilters($this->filter, $test_value);
+    $this->wp->applyFilters($this->filter, $testValue);
     expect($called)->false();
   }
 
-  function _after() {
-    global $content_width;
-    $content_width = $this->_content_width;
+  public function _after() {
+    global $content_width; // phpcs:ignore Squiz.NamingConventions.ValidVariableName.NotCamelCaps
+    $content_width = $this->contentWidth; // phpcs:ignore Squiz.NamingConventions.ValidVariableName.NotCamelCaps
   }
 }

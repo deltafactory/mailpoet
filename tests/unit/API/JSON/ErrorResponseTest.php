@@ -7,7 +7,7 @@ use MailPoet\API\JSON\ErrorResponse;
 use MailPoet\WP\Functions as WPFunctions;
 
 class ErrorResponseTest extends \MailPoetUnitTest {
-  function testItSanitizesSqlErrorsWhenReturningResponse() {
+  public function testItSanitizesSqlErrorsWhenReturningResponse() {
     WPFunctions::set(Stub::make(new WPFunctions, [
       '__' => function ($value) {
         return $value;
@@ -18,8 +18,8 @@ class ErrorResponseTest extends \MailPoetUnitTest {
       'SQLSTATE[22001]: Some SQL error',
       'another valid error',
     ];
-    $error_response = new ErrorResponse($errors);
-    expect($error_response->getData())->equals(
+    $errorResponse = new ErrorResponse($errors);
+    expect($errorResponse->getData())->equals(
       [
         'errors' => [
           [
@@ -39,7 +39,7 @@ class ErrorResponseTest extends \MailPoetUnitTest {
     );
   }
 
-  function _after() {
+  public function _after() {
     WPFunctions::set(new WPFunctions);
   }
 }

@@ -1,36 +1,29 @@
 <?php
+
 namespace MailPoet\Test\Models;
 
 use MailPoet\Models\Form;
 use MailPoet\Settings\SettingsController;
 
 class FormTest extends \MailPoetTest {
+  public $form;
   /** @var SettingsController */
   private $settings;
 
-  function _before() {
+  public function _before() {
     parent::_before();
-    $this->settings = new SettingsController();
+    $this->settings = SettingsController::getInstance();
     $this->form = Form::createOrUpdate([
       'name' => 'My Form',
     ]);
   }
 
-  function testItCanBeCreated() {
+  public function testItCanBeCreated() {
     expect($this->form->id() > 0)->true();
     expect($this->form->getErrors())->false();
   }
 
-  function testItHasToBeValid() {
-    $invalid_form = Form::create();
-    $result = $invalid_form->save();
-    $errors = $result->getErrors();
-
-    expect(is_array($errors))->true();
-    expect($errors[0])->equals('Please specify a name.');
-  }
-
-  function testItCanBeGrouped() {
+  public function testItCanBeGrouped() {
     $forms = Form::filter('groupBy', 'all')->findArray();
     expect($forms)->count(1);
 
@@ -49,58 +42,58 @@ class FormTest extends \MailPoetTest {
     expect($forms)->count(1);
   }
 
-  function testItCanBeSearched() {
+  public function testItCanBeSearched() {
     $form = Form::filter('search', 'my F')->findOne();
     expect($form->name)->equals('My Form');
   }
 
-  function testItHasACreatedAtOnCreation() {
+  public function testItHasACreatedAtOnCreation() {
     $form = Form::findOne($this->form->id);
-    expect($form->created_at)->notNull();
+    expect($form->createdAt)->notNull();
   }
 
-  function testItHasAnUpdatedAtOnCreation() {
+  public function testItHasAnUpdatedAtOnCreation() {
     $form = Form::findOne($this->form->id);
-    expect($form->updated_at)
-      ->equals($form->created_at);
+    expect($form->updatedAt)
+      ->equals($form->createdAt);
   }
 
-  function testItUpdatesTheUpdatedAtOnUpdate() {
+  public function testItUpdatesTheUpdatedAtOnUpdate() {
     $form = Form::findOne($this->form->id);
-    $created_at = $form->created_at;
+    $createdAt = $form->createdAt;
 
     sleep(1);
 
     $form->name = 'new name';
     $form->save();
 
-    $updated_form = Form::findOne($form->id);
-    expect($updated_form->created_at)->equals($created_at);
-    $is_time_updated = (
-      $updated_form->updated_at > $updated_form->created_at
+    $updatedForm = Form::findOne($form->id);
+    expect($updatedForm->createdAt)->equals($createdAt);
+    $isTimeUpdated = (
+      $updatedForm->updatedAt > $updatedForm->createdAt
     );
-    expect($is_time_updated)->true();
+    expect($isTimeUpdated)->true();
   }
 
-  function testItCanCreateOrUpdate() {
-    $created_form = Form::createOrUpdate([
+  public function testItCanCreateOrUpdate() {
+    $createdForm = Form::createOrUpdate([
       'name' => 'Created Form',
     ]);
-    expect($created_form->id > 0)->true();
-    expect($created_form->getErrors())->false();
+    expect($createdForm->id > 0)->true();
+    expect($createdForm->getErrors())->false();
 
-    $form = Form::findOne($created_form->id);
+    $form = Form::findOne($createdForm->id);
     expect($form->name)->equals('Created Form');
 
-    $is_updated = Form::createOrUpdate([
-      'id' => $created_form->id,
+    $isUpdated = Form::createOrUpdate([
+      'id' => $createdForm->id,
       'name' => 'Updated Form',
     ]);
-    $form = Form::findOne($created_form->id);
+    $form = Form::findOne($createdForm->id);
     expect($form->name)->equals('Updated Form');
   }
 
-  function testItCanProvideAFieldList() {
+  public function testItCanProvideAFieldList() {
     $form = Form::createOrUpdate([
       'name' => 'My Form',
       'body' => [
@@ -113,15 +106,38 @@ class FormTest extends \MailPoetTest {
           'id' => 2,
         ],
         [
+          'type' => 'columns',
+          'body' => [
+            [
+              'type' => 'column',
+              'body' => [
+                [
+                  'type' => 'text',
+                  'id' => 3,
+                ],
+              ],
+            ],
+            [
+              'type' => 'column',
+              'body' => [
+                [
+                  'type' => 'divider',
+                  'id' => 'divider',
+                ],
+              ],
+            ],
+          ],
+        ],
+        [
           'type' => 'submit',
           'id' => 'submit',
         ],
       ],
     ]);
-    expect($form->getFieldList())->equals(['email', 'cf_2']);
+    expect($form->getFieldList())->equals(['email', 'cf_2', 'cf_3']);
   }
 
-  function testItUpdatesSuccessMessagesWhenConfirmationIsDisabled() {
+  public function testItUpdatesSuccessMessagesWhenConfirmationIsDisabled() {
     $default = Form::createOrUpdate([
       'name' => 'with default message',
       'settings' => ['success_message' => 'Check your inbox or spam folder to confirm your subscription.'],
@@ -138,7 +154,7 @@ class FormTest extends \MailPoetTest {
     expect($custom['settings']['success_message'])->equals('Thanks for joining us!');
   }
 
-  function testItUpdatesSuccessMessagesWhenConfirmationIsEnabled() {
+  public function testItUpdatesSuccessMessagesWhenConfirmationIsEnabled() {
     $default = Form::createOrUpdate([
       'name' => 'with default message',
       'settings' => ['success_message' => 'Check your inbox or spam folder to confirm your subscription.'],
@@ -155,7 +171,7 @@ class FormTest extends \MailPoetTest {
     expect($custom['settings']['success_message'])->equals('Thanks for joining us!');
   }
 
-  function _after() {
+  public function _after() {
     Form::deleteMany();
   }
 }

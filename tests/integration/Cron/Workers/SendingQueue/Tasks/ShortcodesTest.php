@@ -5,13 +5,15 @@ namespace MailPoet\Test\Cron\Workers\SendingQueue\Tasks;
 use MailPoet\Cron\Workers\SendingQueue\Tasks\Shortcodes;
 use MailPoet\Models\Newsletter;
 use MailPoet\Models\SendingQueue;
-
-if (!defined('ABSPATH')) exit;
+use MailPoet\Models\Subscriber;
+use MailPoetVendor\Idiorm\ORM;
 
 class ShortcodesTest extends \MailPoetTest {
-  function _before() {
+  public $wPPost;
+
+  public function _before() {
     parent::_before();
-    $this->WP_post = wp_insert_post(
+    $this->wPPost = wp_insert_post(
       [
         'post_title' => 'Sample Post',
         'post_content' => 'contents',
@@ -20,36 +22,37 @@ class ShortcodesTest extends \MailPoetTest {
     );
   }
 
-  function testItCanReplaceShortcodes() {
+  public function testItCanReplaceShortcodes() {
     $queue = $newsletter = (object)[
       'id' => 1,
     ];
-    $subscriber = (object)[
+    $subscriber = Subscriber::create();
+    $subscriber->hydrate([
       'email' => 'test@xample. com',
       'first_name' => 'John',
       'last_name' => 'Doe',
-    ];
-    $rendered_body = '[subscriber:firstname] [subscriber:lastname]';
-    $result = Shortcodes::process($rendered_body, null, $newsletter, $subscriber, $queue);
+    ]);
+    $renderedBody = '[subscriber:firstname] [subscriber:lastname]';
+    $result = Shortcodes::process($renderedBody, null, $newsletter, $subscriber, $queue);
     expect($result)->equals('John Doe');
   }
 
-  function testItCanReplaceShortcodesInOneStringUsingContentsFromAnother() {
-    $wp_post = get_post($this->WP_post);
+  public function testItCanReplaceShortcodesInOneStringUsingContentsFromAnother() {
+    $wpPost = get_post($this->wPPost);
     $content = 'Subject line with one shortcode: [newsletter:post_title]';
-    $content_source = '<a data-post-id="' . $this->WP_post . '" href="#">latest post</a>';
+    $contentSource = '<a data-post-id="' . $this->wPPost . '" href="#">latest post</a>';
 
     // [newsletter:post_title] depends on the "data-post-id" tag and the shortcode will
     // get replaced with an empty string if that tag is not found
     expect(trim(Shortcodes::process($content)))->equals('Subject line with one shortcode:');
 
     // when tag is found, the shortcode will be processed and replaced
-    expect(Shortcodes::process($content, $content_source))->equals('Subject line with one shortcode: ' . $wp_post->post_title);
+    expect(Shortcodes::process($content, $contentSource))->equals('Subject line with one shortcode: ' . $wpPost->post_title); // phpcs:ignore Squiz.NamingConventions.ValidVariableName.NotCamelCaps
   }
 
-  function _after() {
-    \ORM::raw_execute('TRUNCATE ' . SendingQueue::$_table);
-    \ORM::raw_execute('TRUNCATE ' . Newsletter::$_table);
-    wp_delete_post($this->WP_post, true);
+  public function _after() {
+    ORM::raw_execute('TRUNCATE ' . SendingQueue::$_table);
+    ORM::raw_execute('TRUNCATE ' . Newsletter::$_table);
+    wp_delete_post($this->wPPost, true);
   }
 }

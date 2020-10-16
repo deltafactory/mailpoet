@@ -46,9 +46,14 @@ Module.ImageBlockView = base.BlockView.extend({
       elementSelector: '.mailpoet_image',
       resizeHandleSelector: '.mailpoet_image_resize_handle',
       onResize: function (event) {
+        var alignment = this.view.model.get('styles.block.textAlign');
         var corner = this.$('.mailpoet_image').offset();
-        var width = event.pageX - corner.left;
-        this.view.model.set('width', width + 'px');
+        var currentWidth = this.$('.mailpoet_image').width();
+        var newWidth = event.pageX - corner.left;
+        if (alignment === 'right') {
+          newWidth = currentWidth + corner.left - event.pageX;
+        }
+        this.view.model.set('width', newWidth + 'px');
       },
     },
     ShowSettingsBehavior: {
@@ -89,10 +94,12 @@ Module.ImageBlockSettingsView = base.BlockSettingsView.extend({
     MailPoet.helpTooltip.show(document.getElementById('tooltip-designer-full-width'), {
       tooltipId: 'tooltip-editor-full-width',
       tooltip: MailPoet.I18n.t('helpTooltipDesignerFullWidth'),
+      place: 'top',
     });
     MailPoet.helpTooltip.show(document.getElementById('tooltip-designer-ideal-width'), {
       tooltipId: 'tooltip-editor-ideal-width',
       tooltip: MailPoet.I18n.t('helpTooltipDesignerIdealWidth'),
+      place: 'bottom',
     });
   },
   getTemplate: function () { return window.templates.imageBlockSettings; },

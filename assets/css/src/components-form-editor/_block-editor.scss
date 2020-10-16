@@ -1,0 +1,119 @@
+// We don't want to allow user to remove Submit or Email + we hide core/column toolbar because it is empty
+// There is no way to hide the delete button programmatically so we hide last toolbar that contains the delete option
+// There is a feature request for adding that into Gutenberg https://github.com/WordPress/gutenberg/issues/16364
+.mailpoet-form-submit-button,
+.mailpoet-form-email-input {
+  .block-editor-block-toolbar > .components-toolbar-group {
+    display: none;
+  }
+
+  .block-editor-block-toolbar .components-toolbar-group {
+    border-right: none;
+  }
+}
+
+// Drag and drop library we use for custom fields does not support nested scrollable
+// https://github.com/atlassian/react-beautiful-dnd/issues/131
+.interface-interface-skeleton__body,
+.is-sidebar-opened .interface-interface-skeleton__sidebar {
+  overflow: hidden;
+}
+
+// Fix for settings toolbar placement in header
+.edit-post-header {
+  flex-direction: row-reverse;
+  justify-content: space-between;
+}
+
+// Html blocks contains iframe which captures clicks and in some cases prevents selecting block.
+// This adds an transparent overlay over the iframe.
+.mailpoet-html-block-editor-content-wrapper {
+  position: relative;
+
+  &:after {
+    background: transparent;
+    content: ' ';
+    display: block;
+    height: 100%;
+    left: 0;
+    position: absolute;
+    top: 0;
+    width: 100%;
+  }
+}
+
+// Wordpress displays h3 and h2 the same size by default. To make it less confusing we need to make h2 different size.
+h2 {
+  font-size: 1.7em;
+}
+
+// Fix for form padding rendering
+.mailpoet-form-background > div > .block-editor-block-list__layout > .block-editor-block-list__block:first-child {
+  margin-top: 0;
+}
+
+// Remove min-height so that lower values of input padding have visible effect in form editor
+.block-editor-block-list__layout .mailpoet_text {
+  min-height: 0;
+}
+
+// Ensure same default font size for input and submit button
+.block-editor-block-list__layout .mailpoet_paragraph {
+  .mailpoet_text,
+  .mailpoet_submit {
+    font-size: 1em;
+    line-height: 1.5;
+  }
+
+  .mailpoet_text_label {
+    font-size: 1em;
+    line-height: 1.2;
+  }
+}
+
+.mailpoet_toolbar_item {
+  align-items: center;
+  background-color: white;
+  display: flex;
+  padding-left: $grid-gap / 2;
+
+  .mailpoet-font-family-select {
+    width: $grid-column-small;
+  }
+}
+
+@include breakpoint-min-width($mailpoet-breakpoint-small) {
+  // Make the sidebar a bit wider than in post editor (280px)
+  .interface-complementary-area {
+    width: 300px;
+  }
+}
+
+// Fix z-index for block inserter popup to display it over wpadmibar
+.block-editor-inserter__popover {
+  z-index: 100000 !important;
+}
+
+// Gutenberg renders 40vh height area called click-redirect under a post.
+// When user clicks into that area it moves focus to the last paragraph.
+// It is a default block in post editor always added automatically at the end of post.
+// We don't want such a behavior since it often moves focus to form title so we set 0 height
+.edit-post-visual-editor .block-editor-writing-flow__click-redirect {
+  height: 0;
+  min-height: 0;
+}
+
+// Adjustments for correct form width rendering
+.wp-block {
+  max-width: initial;
+}
+
+.block-editor-block-list__layout.is-root-container {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.edit-post-visual-editor {
+  padding-left: 50px;
+  padding-right: 50px;
+}

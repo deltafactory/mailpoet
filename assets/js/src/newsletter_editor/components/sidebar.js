@@ -1,7 +1,5 @@
 /* eslint-disable func-names */
 import App from 'newsletter_editor/App';
-import CommunicationComponent from 'newsletter_editor/components/communication';
-import MailPoet from 'mailpoet';
 import Backbone from 'backbone';
 import Marionette from 'backbone.marionette';
 import SuperModel from 'backbone.supermodel';
@@ -21,7 +19,13 @@ Module._contentWidgets = new (Backbone.Collection.extend({
   }),
   comparator: 'priority',
 }))();
-Module.registerWidget = function (widget) { return Module._contentWidgets.add(widget); };
+Module.registerWidget = function (widget) {
+  var hiddenWidgets = App.getConfig().get('hiddenWidgets');
+  if (hiddenWidgets && hiddenWidgets.includes(widget.name)) {
+    return false;
+  }
+  return Module._contentWidgets.add(widget);
+};
 Module.getWidgets = function () { return Module._contentWidgets; };
 
 // Layout widget handlers for use to create new layout blocks via drag&drop
@@ -76,6 +80,11 @@ SidebarView = Marionette.View.extend({
       }
     },
   },
+  templateContext: function () {
+    return {
+      isWoocommerceTransactional: this.model.isWoocommerceTransactional(),
+    };
+  },
   initialize: function () {
     jQuery(window)
       .on('resize', this.updateHorizontalScroll.bind(this))
@@ -91,8 +100,8 @@ SidebarView = Marionette.View.extend({
     this.showChildView('stylesRegion', new Module.SidebarStylesView({
       model: App.getGlobalStyles(),
       availableStyles: App.getAvailableStyles(),
+      isWoocommerceTransactional: this.model.isWoocommerceTransactional(),
     }));
-    this.showChildView('previewRegion', new Module.SidebarPreviewView());
   },
   updateHorizontalScroll: function () {
     // Fixes the sidebar so that on narrower screens the horizontal
@@ -162,9 +171,7 @@ Module.SidebarStylesView = Marionette.View.extend({
   getTemplate: function () { return window.templates.sidebarStyles; },
   behaviors: {
     ColorPickerBehavior: {},
-  },
-  modelEvents: {
-    change: 'render',
+    WooCommerceStylesBehavior: {},
   },
   events: function () {
     return {
@@ -216,10 +223,13 @@ Module.SidebarStylesView = Marionette.View.extend({
     return {
       model: this.model.toJSON(),
       availableStyles: this.availableStyles.toJSON(),
+      isWoocommerceTransactional: this.isWoocommerceTransactional,
     };
   },
   initialize: function (options) {
     this.availableStyles = options.availableStyles;
+    this.isWoocommerceTransactional = options.isWoocommerceTransactional;
+    App.getChannel().on('historyUpdate', this.render);
   },
   changeField: function (field, event) {
     this.model.set(field, jQuery(event.target).val());
@@ -233,192 +243,6 @@ Module.SidebarStylesView = Marionette.View.extend({
   },
 });
 
-Module.SidebarPreviewView = Marionette.View.extend({
-  getTemplate: function () { return window.templates.sidebarPreview; },
-  events: {
-    'click .mailpoet_show_preview': 'showPreview',
-    'click #mailpoet_send_preview': 'sendPreview',
-  },
-  onBeforeDestroy: function () {
-    if (this.previewView) {
-      this.previewView.destroy();
-      this.previewView = null;
-    }
-  },
-  showPreview: function () {
-    var json = App.toJSON();
-
-    // Stringify to enable transmission of primitive non-string value types
-    if (!_.isUndefined(json.body)) {
-      json.body = JSON.stringify(json.body);
-    }
-
-    MailPoet.Modal.loading(true);
-
-    MailPoet.Ajax.post({
-      api_version: window.mailpoet_api_version,
-      endpoint: 'newsletters',
-      action: 'showPreview',
-      data: json,
-    }).always(function () {
-      MailPoet.Modal.loading(false);
-    }).done(function (response) {
-      this.previewView = new Module.NewsletterPreviewView({
-        previewType: window.localStorage.getItem(App.getConfig().get('newsletterPreview.previewTypeLocalStorageKey')),
-        previewUrl: response.meta.preview_url,
-      });
-
-      this.previewView.render();
-
-      MailPoet.Modal.popup({
-        template: '',
-        element: this.previewView.$el,
-        minWidth: '95%',
-        height: '100%',
-        title: MailPoet.I18n.t('newsletterPreview'),
-        onCancel: function () {
-          this.previewView.destroy();
-          this.previewView = null;
-        }.bind(this),
-      });
-
-      MailPoet.trackEvent('Editor > Browser Preview', {
-        'MailPoet Free version': window.mailpoet_version,
-      });
-    }.bind(this)).fail(function (response) {
-      if (response.errors.length > 0) {
-        MailPoet.Notice.error(
-          response.errors.map(function (error) { return error.message; }),
-          { scroll: true }
-        );
-      }
-    });
-  },
-  sendPreview: function () {
-    // get form data
-    var $emailField = this.$('#mailpoet_preview_to_email');
-    var data = {
-      subscriber: $emailField.val(),
-      id: App.getNewsletter().get('id'),
-    };
-
-    if (data.subscriber.length <= 0) {
-      MailPoet.Notice.error(
-        MailPoet.I18n.t('newsletterPreviewEmailMissing'),
-        {
-          positionAfter: $emailField,
-          scroll: true,
-        }
-      );
-      return false;
-    }
-
-    // send test email
-    MailPoet.Modal.loading(true);
-
-    // save before sending
-    App.getChannel().request('save').always(function () {
-      CommunicationComponent.previewNewsletter(data).always(function () {
-        MailPoet.Modal.loading(false);
-      }).done(function () {
-        var showSuccessDeliveryPoll;
-        MailPoet.Notice.success(
-          MailPoet.I18n.t('newsletterPreviewSent'),
-          { scroll: true }
-        );
-        MailPoet.trackEvent('Editor > Preview sent', {
-          'MailPoet Free version': window.mailpoet_version,
-          'Domain name': data.subscriber.substring(data.subscriber.indexOf('@') + 1),
-        });
-        showSuccessDeliveryPoll = MailPoet.Poll.successDelivery.canShow('preview');
-        if (showSuccessDeliveryPoll) {
-          MailPoet.Poll.successDelivery.showModal('preview', 'IHedf1');
-          MailPoet.Poll.successDelivery.setPollShown('preview');
-        }
-      }).fail(function (response) {
-        if (response.errors.length > 0) {
-          MailPoet.Notice.error(
-            response.errors.map(function (error) {
-              let errorMessage = `
-                <p>
-                  ${MailPoet.I18n.t('newsletterPreviewErrorNotice').replace('%$1s', window.config.mtaMethod)}:
-                  <i>${error.message}</i>
-                </p>
-              `;
-
-              if (window.config.mtaMethod === 'PHPMail') {
-                errorMessage += `
-                  <p>${MailPoet.I18n.t('newsletterPreviewErrorCheckConfiguration')}</p>
-                  <br />
-                  <p>${MailPoet.I18n.t('newsletterPreviewErrorUseSendingService')}</p>
-                  <p>
-                    <a
-                      href="https://www.mailpoet.com/free-plan/?utm_source=plugin&utm_campaign=sending-error"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      ${MailPoet.I18n.t('newsletterPreviewErrorSignUpForSendingService')}
-                    </a>
-                  </p>
-                `;
-              } else {
-                const checkSettingsNotice = MailPoet.I18n.t('newsletterPreviewErrorCheckSettingsNotice').replace(
-                  /\[link\](.*?)\[\/link\]/g,
-                  '<a href="?page=mailpoet-settings#mta" key="check-sending">$1</a>'
-                );
-                errorMessage += `<p>${checkSettingsNotice}</p>`;
-              }
-              return errorMessage;
-            }),
-            { scroll: true, static: true }
-          );
-        }
-      });
-    });
-    return undefined;
-  },
-});
-
-Module.NewsletterPreviewView = Marionette.View.extend({
-  className: 'mailpoet_browser_preview_wrapper',
-  getTemplate: function () { return window.templates.newsletterPreview; },
-  events: function () {
-    return {
-      'change .mailpoet_browser_preview_type': 'changeBrowserPreviewType',
-    };
-  },
-  initialize: function (options) {
-    this.previewType = options.previewType;
-    this.previewUrl = options.previewUrl;
-    this.width = '100%';
-    this.height = '100%';
-    // this.width = App.getConfig().get('newsletterPreview.width');
-    // this.height = App.getConfig().get('newsletterPreview.height')
-  },
-  templateContext: function () {
-    return {
-      previewType: this.previewType,
-      previewUrl: this.previewUrl,
-      width: this.width,
-      height: this.height,
-    };
-  },
-  changeBrowserPreviewType: function (event) {
-    var value = jQuery(event.target).val();
-
-    if (value === 'mobile') {
-      this.$('.mailpoet_browser_preview_container').removeClass('mailpoet_browser_preview_container_desktop');
-      this.$('.mailpoet_browser_preview_container').addClass('mailpoet_browser_preview_container_mobile');
-    } else {
-      this.$('.mailpoet_browser_preview_container').addClass('mailpoet_browser_preview_container_desktop');
-      this.$('.mailpoet_browser_preview_container').removeClass('mailpoet_browser_preview_container_mobile');
-    }
-
-    window.localStorage.setItem(App.getConfig().get('newsletterPreview.previewTypeLocalStorageKey'), value);
-    this.previewType = value;
-  },
-});
-
 App.on('before:start', function (BeforeStartApp) {
   var Application = BeforeStartApp;
   Application.registerWidget = Module.registerWidget;
@@ -428,14 +252,11 @@ App.on('before:start', function (BeforeStartApp) {
 });
 
 App.on('start', function (StartApp) {
-  var sidebarView = new SidebarView();
+  var sidebarView = new SidebarView({
+    model: StartApp.getNewsletter(),
+  });
 
   StartApp._appView.showChildView('sidebarRegion', sidebarView);
-
-  MailPoet.helpTooltip.show(document.getElementById('tooltip-send-preview'), {
-    tooltipId: 'tooltip-editor-send-preview',
-    tooltip: MailPoet.I18n.t('helpTooltipSendPreview'),
-  });
 });
 
 export default Module;

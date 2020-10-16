@@ -1,0 +1,76 @@
+$beamer-dot-size: 8px;
+
+.mailpoet-top-bar {
+  align-items: center;
+  background-color: $color-white;
+  box-shadow:
+    0 -1px 0 0 $color-tertiary-light,
+    0 2px 4px 0 opacify($color-tertiary-light, .5);
+  display: flex;
+  flex-direction: row;
+  height: 64px;
+  justify-content: space-between;
+  margin: 0;
+  padding-left: $grid-gap;
+  padding-right: $grid-gap;
+}
+
+.mailpoet-top-bar-logo {
+  cursor: pointer;
+  object-fit: contain;
+}
+
+.mailpoet-top-bar-logo-desktop {
+  display: block;
+  height: 24px;
+  width: 80px;
+
+  @include respond-to(small-screen) {
+    display: none;
+  }
+}
+
+.mailpoet-top-bar-logo-mobile {
+  display: none;
+  height: 40px;
+  width: 39px;
+
+  @include respond-to(small-screen) {
+    display: block;
+  }
+}
+
+.mailpoet-top-bar-content {
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+}
+
+.mailpoet-top-bar-children {
+  margin-right: $grid-gap;
+}
+
+.mailpoet-top-bar-beamer {
+  align-items: center;
+  background-color: $color-white;
+  border: solid 2px $color-tertiary-light;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  height: 40px;
+  justify-content: center;
+  position: relative;
+  width: 40px;
+}
+
+.mailpoet-top-bar-beamer-dot:before {
+  background: $color-editor-warning;
+  border-radius: $beamer-dot-size;
+  content: '';
+  display: block;
+  height: $beamer-dot-size;
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  width: $beamer-dot-size;
+}

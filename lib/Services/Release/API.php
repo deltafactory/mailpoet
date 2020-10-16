@@ -1,23 +1,22 @@
 <?php
 
 namespace MailPoet\Services\Release;
+
 use MailPoet\WP\Functions as WPFunctions;
 
-if (!defined('ABSPATH')) exit;
-
 class API {
-  private $api_key;
+  private $apiKey;
   private $wp;
-  public $url_products = 'https://release.mailpoet.com/products/';
+  public $urlProducts = 'https://release.mailpoet.com/products/';
 
-  function __construct($api_key) {
-    $this->setKey($api_key);
+  public function __construct($apiKey) {
+    $this->setKey($apiKey);
     $this->wp = new WPFunctions();
   }
 
-  function getPluginInformation($plugin_name) {
+  public function getPluginInformation($pluginName) {
     $result = $this->request(
-      $this->url_products . $plugin_name
+      $this->urlProducts . $pluginName
     );
 
     $code = $this->wp->wpRemoteRetrieveResponseCode($result);
@@ -36,16 +35,16 @@ class API {
     return $body;
   }
 
-  function setKey($api_key) {
-    $this->api_key = $api_key;
+  public function setKey($apiKey) {
+    $this->apiKey = $apiKey;
   }
 
-  function getKey() {
-    return $this->api_key;
+  public function getKey() {
+    return $this->apiKey;
   }
 
   private function request($url, $params = []) {
-    $params['license'] = $this->api_key;
+    $params['license'] = $this->apiKey;
     $url = WPFunctions::get()->addQueryArg($params, $url);
     $args = [
       'timeout' => 10,

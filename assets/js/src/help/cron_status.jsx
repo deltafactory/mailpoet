@@ -14,7 +14,7 @@ const CronStatus = (props) => {
     ? (
       <>
         {
-          status.last_error.map(error => (
+          status.last_error.map((error) => (
             <div key={error.worker}>
               {error.worker}
               :
@@ -28,7 +28,7 @@ const CronStatus = (props) => {
     : status.last_error;
   return (
     <div>
-      <h2>{MailPoet.I18n.t('systemStatusCronStatusTitle')}</h2>
+      <h4>{MailPoet.I18n.t('systemStatusCronStatusTitle')}</h4>
       <KeyValueTable
         max_width="400px"
         rows={[
@@ -69,10 +69,13 @@ const CronStatus = (props) => {
 CronStatus.propTypes = {
   status_data: PropTypes.shape({
     accessible: PropTypes.bool,
+    last_error_date: PropTypes.string,
     status: PropTypes.string,
     updated_at: PropTypes.number,
     run_accessed_at: PropTypes.number,
     run_completed_at: PropTypes.number,
+    run_started_at: PropTypes.number,
+    last_error: PropTypes.oneOfType([PropTypes.string, PropTypes.array]),
   }).isRequired,
 };
 

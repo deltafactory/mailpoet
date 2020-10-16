@@ -8,18 +8,24 @@ use MailPoet\Models\Subscriber;
 use MailPoet\Models\SubscriberCustomField;
 use MailPoet\Models\SubscriberSegment;
 use MailPoet\Subscribers\ImportExport\Export\DefaultSubscribersGetter;
+use MailPoetVendor\Idiorm\ORM;
 
 class DefaultSubscribersGetterTest extends \MailPoetTest {
-  function _before() {
+  public $segmentsData;
+  public $customFieldsData;
+  public $subscribersData;
+  public $subscriberFields;
+
+  public function _before() {
     parent::_before();
-    $this->subscriber_fields = [
+    $this->subscriberFields = [
       'first_name' => 'First name',
       'last_name' => 'Last name',
       'email' => 'Email',
       1 => 'Country',
     ];
 
-    $this->subscribers_data = [
+    $this->subscribersData = [
       [
         'first_name' => 'Adam',
         'last_name' => 'Smith',
@@ -44,14 +50,14 @@ class DefaultSubscribersGetterTest extends \MailPoetTest {
       ],
     ];
 
-    $this->custom_fields_data = [
+    $this->customFieldsData = [
       [
         'name' => 'Country',
         'type' => 'text',
       ],
     ];
 
-    $this->segments_data = [
+    $this->segmentsData = [
       [
         'name' => 'Newspapers',
       ],
@@ -60,7 +66,7 @@ class DefaultSubscribersGetterTest extends \MailPoetTest {
       ],
     ];
 
-    foreach ($this->subscribers_data as $subscriber) {
+    foreach ($this->subscribersData as $subscriber) {
       if (isset($subscriber[1])) {
         unset($subscriber[1]);
       }
@@ -69,39 +75,39 @@ class DefaultSubscribersGetterTest extends \MailPoetTest {
       $entity->save();
     }
 
-    foreach ($this->segments_data as $segment) {
+    foreach ($this->segmentsData as $segment) {
       $entity = Segment::create();
       $entity->hydrate($segment);
       $entity->save();
     }
 
-    foreach ($this->custom_fields_data as $custom_field) {
+    foreach ($this->customFieldsData as $customField) {
       $entity = CustomField::create();
-      $entity->hydrate($custom_field);
+      $entity->hydrate($customField);
       $entity->save();
     }
 
     $entity = SubscriberCustomField::create();
-    $entity->subscriber_id = 2;
-    $entity->custom_field_id = 1;
-    $entity->value = $this->subscribers_data[1][1];
+    $entity->subscriberId = 2;
+    $entity->customFieldId = 1;
+    $entity->value = $this->subscribersData[1][1];
     $entity->save();
     $entity = SubscriberSegment::create();
-    $entity->subscriber_id = 1;
-    $entity->segment_id = 1;
+    $entity->subscriberId = 1;
+    $entity->segmentId = 1;
     $entity->status = Subscriber::STATUS_UNSUBSCRIBED;
     $entity->save();
     $entity = SubscriberSegment::create();
-    $entity->subscriber_id = 1;
-    $entity->segment_id = 2;
+    $entity->subscriberId = 1;
+    $entity->segmentId = 2;
     $entity->save();
     $entity = SubscriberSegment::create();
-    $entity->subscriber_id = 2;
-    $entity->segment_id = 1;
+    $entity->subscriberId = 2;
+    $entity->segmentId = 1;
     $entity->save();
     $entity = SubscriberSegment::create();
-    $entity->subscriber_id = 3;
-    $entity->segment_id = 2;
+    $entity->subscriberId = 3;
+    $entity->segmentId = 2;
     $entity->save();
   }
 
@@ -119,7 +125,7 @@ class DefaultSubscribersGetterTest extends \MailPoetTest {
     }, $subscribers);
   }
 
-  function testItGetsSubscribersInOneSegment() {
+  public function testItGetsSubscribersInOneSegment() {
     $getter = new DefaultSubscribersGetter([1], 10);
     $subscribers = $getter->get();
     expect($this->filterSubscribersData($subscribers))->equals([
@@ -148,7 +154,7 @@ class DefaultSubscribersGetterTest extends \MailPoetTest {
     expect($getter->get())->equals(false);
   }
 
-  function testItGetsSubscribersInMultipleSegments() {
+  public function testItGetsSubscribersInMultipleSegments() {
     $getter = new DefaultSubscribersGetter([1, 2], 10);
     $subscribers = $getter->get();
     expect($this->filterSubscribersData($subscribers))->equals([
@@ -197,7 +203,7 @@ class DefaultSubscribersGetterTest extends \MailPoetTest {
     expect($getter->get())->equals(false);
   }
 
-  function testItGetsSubscribersInBatches() {
+  public function testItGetsSubscribersInBatches() {
     $getter = new DefaultSubscribersGetter([1, 2], 2);
     expect($this->filterSubscribersData($getter->get()))->equals([
       [
@@ -249,7 +255,7 @@ class DefaultSubscribersGetterTest extends \MailPoetTest {
     expect($getter->get())->equals(false);
   }
 
-  function testItGetsSubscribersWithoutSegment() {
+  public function testItGetsSubscribersWithoutSegment() {
     $getter = new DefaultSubscribersGetter([0], 10);
     $subscribers = $getter->get();
     expect($this->filterSubscribersData($subscribers))->equals([
@@ -266,11 +272,11 @@ class DefaultSubscribersGetterTest extends \MailPoetTest {
     ]);
   }
 
-  function _after() {
-    \ORM::raw_execute('TRUNCATE ' . Subscriber::$_table);
-    \ORM::raw_execute('TRUNCATE ' . Segment::$_table);
-    \ORM::raw_execute('TRUNCATE ' . SubscriberSegment::$_table);
-    \ORM::raw_execute('TRUNCATE ' . CustomField::$_table);
-    \ORM::raw_execute('TRUNCATE ' . SubscriberCustomField::$_table);
+  public function _after() {
+    ORM::raw_execute('TRUNCATE ' . Subscriber::$_table);
+    ORM::raw_execute('TRUNCATE ' . Segment::$_table);
+    ORM::raw_execute('TRUNCATE ' . SubscriberSegment::$_table);
+    ORM::raw_execute('TRUNCATE ' . CustomField::$_table);
+    ORM::raw_execute('TRUNCATE ' . SubscriberCustomField::$_table);
   }
 }

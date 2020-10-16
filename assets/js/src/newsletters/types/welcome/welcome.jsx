@@ -2,7 +2,11 @@ import React from 'react';
 import _ from 'underscore';
 import MailPoet from 'mailpoet';
 import PropTypes from 'prop-types';
-import Breadcrumb from '../../breadcrumb.jsx';
+import Background from 'common/background/background';
+import Button from 'common/button/button';
+import Heading from 'common/typography/heading/heading';
+import Grid from 'common/grid';
+import ListingHeadingStepsRoute from 'newsletters/listings/heading_steps_route.jsx';
 import WelcomeScheduling from './scheduling.jsx';
 
 const field = {
@@ -17,7 +21,7 @@ class NewsletterWelcome extends React.Component {
     super(props);
     let availableSegments = window.mailpoet_segments || [];
     let defaultSegment = 1;
-    availableSegments = availableSegments.filter(segment => segment.type === 'default');
+    availableSegments = availableSegments.filter((segment) => segment.type === 'default');
 
     if (_.size(availableSegments) > 0) {
       defaultSegment = _.first(availableSegments).id;
@@ -57,7 +61,7 @@ class NewsletterWelcome extends React.Component {
     }).fail((response) => {
       if (response.errors.length > 0) {
         MailPoet.Notice.error(
-          response.errors.map(error => error.message),
+          response.errors.map((error) => error.message),
           { scroll: true }
         );
       }
@@ -71,25 +75,27 @@ class NewsletterWelcome extends React.Component {
   render() {
     return (
       <div>
-        <h1>{MailPoet.I18n.t('welcomeNewsletterTypeTitle')}</h1>
-        <Breadcrumb step="type" />
+        <Background color="#fff" />
 
-        <h3>{MailPoet.I18n.t('selectEventToSendWelcomeEmail')}</h3>
+        <ListingHeadingStepsRoute emailType="welcome" automationId="welcome_email_creation_heading" />
 
-        <WelcomeScheduling
-          item={this.state}
-          field={field}
-          onValueChange={this.handleValueChange}
-        />
+        <Grid.Column align="center" className="mailpoet-schedule-email">
+          <Heading level={4}>{MailPoet.I18n.t('selectEventToSendWelcomeEmail')}</Heading>
 
-        <p className="submit">
-          <input
-            className="button button-primary"
-            type="button"
-            onClick={this.handleNext}
-            value={MailPoet.I18n.t('next')}
+          <WelcomeScheduling
+            item={this.state}
+            field={field}
+            onValueChange={this.handleValueChange}
           />
-        </p>
+
+          <Button
+            isFullWidth
+            onClick={this.handleNext}
+            type="button"
+          >
+            {MailPoet.I18n.t('next')}
+          </Button>
+        </Grid.Column>
       </div>
     );
   }

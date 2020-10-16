@@ -1,22 +1,20 @@
 <?php
+
 namespace MailPoet\Config\PopulatorData\Templates;
 
 use MailPoet\WP\Functions as WPFunctions;
-
-if (!defined('ABSPATH')) exit;
-
 
 class Coffee {
 
   private $template_image_url;
   private $social_icon_url;
 
-  function __construct($assets_url) {
+  public function __construct($assets_url) {
     $this->template_image_url = 'https://ps.w.org/mailpoet/assets/newsletter-templates/coffee';
     $this->social_icon_url = $assets_url . '/img/newsletter_editor/social-icons';
   }
 
-  function get() {
+  public function get() {
     return [
       'name' => WPFunctions::get()->__("Coffee", 'mailpoet'),
       'categories' => json_encode(['standard', 'all']),
@@ -225,7 +223,7 @@ class Coffee {
                               1 =>
                                  [
                                   'type' => 'header',
-                                  'text' => '<p><span style="color: #000000;"><a href="[link:newsletter_view_in_browser_url]" style="color: #000000;">Open email in your web browser.</a></span></p>',
+                                  'text' => '<p><span style="color: #000000;"><a href="[link:newsletter_view_in_browser_url]" style="color: #000000;">' . WPFunctions::get()->__("View this in your browser.", 'mailpoet') . '</a></span></p>',
                                   'styles' =>
                                      [
                                       'block' =>
@@ -933,7 +931,7 @@ class Coffee {
                               3 =>
                                  [
                                   'type' => 'footer',
-                                  'text' => '<p><strong><span style="color: #000000;"><a href="[link:subscription_unsubscribe_url]" style="color: #000000;">Unsubscribe</a> | <a href="[link:subscription_manage_url]" style="color: #000000;">Manage subscription</a></span></strong><br />Add your postal address here!</p>',
+                                  'text' => '<p><strong><span style="color: #000000;"><a href="[link:subscription_unsubscribe_url]" style="color: #000000;">' . WPFunctions::get()->__("Unsubscribe", 'mailpoet') . '</a> | <a href="[link:subscription_manage_url]" style="color: #000000;">' . WPFunctions::get()->__("Manage your subscription", 'mailpoet') . '</a></span></strong><br />' . WPFunctions::get()->__("Add your postal address here!", 'mailpoet') . '</p>',
                                   'styles' =>
                                      [
                                       'block' =>
@@ -1002,5 +1000,4 @@ class Coffee {
          ],
     ];
   }
-
 }

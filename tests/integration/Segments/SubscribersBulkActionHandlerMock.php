@@ -3,9 +3,7 @@
 namespace MailPoet\Test\Segments;
 
 class SubscribersBulkActionHandlerMock {
-
-  function apply() {
+  public function apply() {
 
   }
-
 }

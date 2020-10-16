@@ -1,62 +1,76 @@
 <?php
+
 namespace MailPoet\Test\Mailer\Methods;
 
+use Codeception\Stub;
+use MailPoet\Mailer\MailerError;
+use MailPoet\Mailer\Methods\Common\BlacklistCheck;
 use MailPoet\Mailer\Methods\ErrorMappers\PHPMailMapper;
 use MailPoet\Mailer\Methods\PHPMail;
 
 class PHPMailTest extends \MailPoetTest {
-  function _before() {
+  public $extraParams;
+  public $newsletter;
+  public $subscriber;
+  public $mailer;
+  public $returnPath;
+  public $replyTo;
+  public $sender;
+
+  public function _before() {
     parent::_before();
     $this->sender = [
       'from_name' => 'Sender',
       'from_email' => 'staff@mailpoet.com',
       'from_name_email' => 'Sender <staff@mailpoet.com>',
     ];
-    $this->reply_to = [
+    $this->replyTo = [
       'reply_to_name' => 'Reply To',
       'reply_to_email' => 'reply-to@mailpoet.com',
       'reply_to_name_email' => 'Reply To <reply-to@mailpoet.com>',
     ];
-    $this->return_path = 'bounce@mailpoet.com';
+    $this->returnPath = 'bounce@mailpoet.com';
     $this->mailer = new PHPMail(
       $this->sender,
-      $this->reply_to,
-      $this->return_path,
+      $this->replyTo,
+      $this->returnPath,
       new PHPMailMapper()
     );
     $this->subscriber = 'Recipient <mailpoet-phoenix-test@mailinator.com>';
     $this->newsletter = [
-      'subject' => 'testing local method (PHP mail)',
+      'subject' => 'testing local method (PHP mail) … © & ěščřžýáíéůėę€żąß∂ 😊👨‍👩‍👧‍👧', // try some special chars
       'body' => [
         'html' => 'HTML body',
         'text' => 'TEXT body',
       ],
     ];
-    $this->extra_params = [
+    $this->extraParams = [
       'unsubscribe_url' => 'http://www.mailpoet.com',
     ];
   }
 
-  function testItCanBuildMailer() {
+  public function testItCanBuildMailer() {
     $mailer = $this->mailer->buildMailer();
     expect($mailer)->isInstanceOf('PHPMailer');
-    expect($mailer->Mailer)->equals('mail'); // uses PHP's mail() function
+
+    // uses PHP's mail() function
+    expect($mailer->Mailer)->equals('mail'); // phpcs:ignore Squiz.NamingConventions.ValidVariableName.NotCamelCaps
   }
 
-  function testWhenReturnPathIsNullItIsSetToSenderEmail() {
+  public function testWhenReturnPathIsNullItIsSetToSenderEmail() {
     $mailer = new PHPMail(
       $this->sender,
-      $this->reply_to,
-      $return_path = false,
+      $this->replyTo,
+      $returnPath = false,
       new PHPMailMapper()
     );
-    expect($mailer->return_path)->equals($this->sender['from_email']);
+    expect($mailer->returnPath)->equals($this->sender['from_email']);
   }
 
-  function testItCanConfigureMailerWithMessage() {
+  public function testItCanConfigureMailerWithMessage() {
     $mailer = $this->mailer
-      ->configureMailerWithMessage($this->newsletter, $this->subscriber, $this->extra_params);
-    expect($mailer->CharSet)->equals('UTF-8');
+      ->configureMailerWithMessage($this->newsletter, $this->subscriber, $this->extraParams);
+    expect($mailer->CharSet)->equals('UTF-8'); // phpcs:ignore Squiz.NamingConventions.ValidVariableName.NotCamelCaps
     expect($mailer->getToAddresses())->equals(
       [
         [
@@ -67,8 +81,8 @@ class PHPMailTest extends \MailPoetTest {
     );
     expect($mailer->getAllRecipientAddresses())
       ->equals(['mailpoet-phoenix-test@mailinator.com' => true]);
-    expect($mailer->From)->equals($this->sender['from_email']);
-    expect($mailer->FromName)->equals($this->sender['from_name']);
+    expect($mailer->From)->equals($this->sender['from_email']); // phpcs:ignore Squiz.NamingConventions.ValidVariableName.NotCamelCaps
+    expect($mailer->FromName)->equals($this->sender['from_name']); // phpcs:ignore Squiz.NamingConventions.ValidVariableName.NotCamelCaps
     expect($mailer->getReplyToAddresses())->equals(
       [
         'reply-to@mailpoet.com' => [
@@ -77,12 +91,12 @@ class PHPMailTest extends \MailPoetTest {
         ],
       ]
     );
-    expect($mailer->Sender)->equals($this->return_path);
-    expect($mailer->ContentType)->equals('text/html');
-    expect($mailer->Subject)->equals($this->newsletter['subject']);
-    expect($mailer->Body)
+    expect($mailer->Sender)->equals($this->returnPath); // phpcs:ignore Squiz.NamingConventions.ValidVariableName.NotCamelCaps
+    expect($mailer->ContentType)->equals('text/html'); // phpcs:ignore Squiz.NamingConventions.ValidVariableName.NotCamelCaps
+    expect($mailer->Subject)->equals($this->newsletter['subject']); // phpcs:ignore Squiz.NamingConventions.ValidVariableName.NotCamelCaps
+    expect($mailer->Body) // phpcs:ignore Squiz.NamingConventions.ValidVariableName.NotCamelCaps
       ->equals($this->newsletter['body']['html']);
-    expect($mailer->AltBody)
+    expect($mailer->AltBody) // phpcs:ignore Squiz.NamingConventions.ValidVariableName.NotCamelCaps
       ->equals($this->newsletter['body']['text']);
     expect($mailer->getCustomHeaders())->equals(
       [
@@ -94,7 +108,19 @@ class PHPMailTest extends \MailPoetTest {
     );
   }
 
-  function testItCanProcessSubscriber() {
+  public function testItCanConfigureMailerWithTextEmail() {
+    $mailer = $this->mailer
+      ->configureMailerWithMessage([
+        'subject' => 'testing local method (PHP mail)',
+        'body' => [
+          'text' => 'TEXT body',
+        ],
+      ], $this->subscriber);
+    expect($mailer->ContentType)->equals('text/plain'); // phpcs:ignore Squiz.NamingConventions.ValidVariableName.NotCamelCaps
+    expect($mailer->Body)->equals('TEXT body'); // phpcs:ignore Squiz.NamingConventions.ValidVariableName.NotCamelCaps
+  }
+
+  public function testItCanProcessSubscriber() {
     expect($this->mailer->processSubscriber('test@test.com'))->equals(
       [
         'email' => 'test@test.com',
@@ -112,8 +138,25 @@ class PHPMailTest extends \MailPoetTest {
       ]);
   }
 
-  function testItCanSend() {
-    if (getenv('WP_TEST_MAILER_ENABLE_SENDING') !== 'true') return;
+  public function testItChecksBlacklistBeforeSending() {
+    $blacklistedSubscriber = 'blacklist_test@example.com';
+    $blacklist = Stub::make(new BlacklistCheck(), ['isBlacklisted' => true], $this);
+    $mailer = Stub::make(
+      $this->mailer,
+      ['blacklist' => $blacklist, 'errorMapper' => new PHPMailMapper()],
+      $this
+    );
+    $result = $mailer->send(
+      $this->newsletter,
+      $blacklistedSubscriber
+    );
+    expect($result['response'])->false();
+    expect($result['error'])->isInstanceOf(MailerError::class);
+    expect($result['error']->getMessage())->contains('PHPMail has returned an unknown error.');
+  }
+
+  public function testItCanSend() {
+    if (getenv('WP_TEST_MAILER_ENABLE_SENDING') !== 'true') $this->markTestSkipped();
     $result = $this->mailer->send(
       $this->newsletter,
       $this->subscriber

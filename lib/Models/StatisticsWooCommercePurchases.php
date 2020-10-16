@@ -1,38 +1,41 @@
 <?php
+
 namespace MailPoet\Models;
 
 use WC_Order;
 
-if (!defined('ABSPATH')) exit;
-
 /**
- * @property int $newsletter_id
- * @property int $subscriber_id
- * @property int $queue_id
- * @property int $click_id
- * @property int $order_id
- * @property string $order_currency
- * @property float $order_price_total
+ * @property int $newsletterId
+ * @property int $subscriberId
+ * @property int $queueId
+ * @property int $clickId
+ * @property int $orderId
+ * @property string $orderCurrency
+ * @property float $orderPriceTotal
  */
 class StatisticsWooCommercePurchases extends Model {
-  public static $_table = MP_STATISTICS_WOOCOMMERCE_PURCHASES_TABLE;
+  public static $_table = MP_STATISTICS_WOOCOMMERCE_PURCHASES_TABLE; // phpcs:ignore PSR2.Classes.PropertyDeclaration
 
-  static function createOrUpdateByClickAndOrder(StatisticsClicks $click, WC_Order $order) {
-    $statistics = self::where('click_id', $click->id)
-      ->where('order_id', $order->get_id())
+  public static function createOrUpdateByClickDataAndOrder(StatisticsClicks $click, WC_Order $order) {
+    // search by subscriber and newsletter IDs (instead of click itself) to avoid duplicities
+    // when a new click from the subscriber appeared since last tracking for given newsletter
+    // (this will keep the originally tracked click - likely the click that led to the order)
+    $statistics = self::where('order_id', $order->get_id())
+      ->where('subscriber_id', $click->subscriberId)
+      ->where('newsletter_id', $click->newsletterId)
       ->findOne();
 
-    if (!$statistics) {
+    if (!$statistics instanceof self) {
       $statistics = self::create();
-      $statistics->newsletter_id = $click->newsletter_id;
-      $statistics->subscriber_id = $click->subscriber_id;
-      $statistics->queue_id = $click->queue_id;
-      $statistics->click_id = $click->id;
-      $statistics->order_id = $order->get_id();
+      $statistics->newsletterId = $click->newsletterId;
+      $statistics->subscriberId = $click->subscriberId;
+      $statistics->queueId = $click->queueId;
+      $statistics->clickId = (int)$click->id;
+      $statistics->orderId = $order->get_id();
     }
 
-    $statistics->order_currency = $order->get_currency();
-    $statistics->order_price_total = (float)$order->get_total();
+    $statistics->orderCurrency = $order->get_currency();
+    $statistics->orderPriceTotal = (float)$order->get_total();
     return $statistics->save();
   }
 }

@@ -8,7 +8,6 @@ class JiraController {
 
   const CHANGELOG_FIELD_ID = 'customfield_10500';
   const RELEASENOTE_FIELD_ID = 'customfield_10504';
-  const VERSION_INCREMENT_FIELD_ID = 'customfield_10509';
   const PULL_REQUESTS_ID = 'customfield_10000';
 
   const WONT_DO_RESOLUTION_ID = '10001';
@@ -29,44 +28,44 @@ class JiraController {
   private $project;
 
   /** @var Client */
-  private $http_client;
+  private $httpClient;
 
   public function __construct($token, $user, $project) {
     $this->token = $token;
     $this->user = $user;
     $this->project = $project;
 
-    $url_user = urlencode($this->user);
-    $url_token = urlencode($this->token);
-    $jira_domain = self::JIRA_DOMAIN;
-    $jira_api_version = self::JIRA_API_VERSION;
-    $base_uri = "https://$url_user:$url_token@$jira_domain/rest/api/$jira_api_version/";
-    $this->http_client = new Client(['base_uri' => $base_uri]);
+    $urlUser = urlencode($this->user);
+    $urlToken = urlencode($this->token);
+    $jiraDomain = self::JIRA_DOMAIN;
+    $jiraApiVersion = self::JIRA_API_VERSION;
+    $baseUri = "https://$urlUser:$urlToken@$jiraDomain/rest/api/$jiraApiVersion/";
+    $this->httpClient = new Client(['base_uri' => $baseUri]);
   }
 
   /**
    * @see https://developer.atlassian.com/cloud/jira/platform/rest/v3/#api-api-3-project-projectIdOrKey-versions-get
    */
-  function getVersion($version_name = null) {
-    $response = $this->http_client->get("project/$this->project/versions");
+  public function getVersion($versionName = null) {
+    $response = $this->httpClient->get("project/$this->project/versions");
     $versions = json_decode($response->getBody()->getContents(), true);
-    if ($version_name === null) {
+    if ($versionName === null) {
       return end($versions);
     }
     foreach ($versions as $version) {
-      if ($version_name === $version['name']) {
+      if ($versionName === $version['name']) {
         return $version;
       }
     }
     throw new \Exception('Unknown project version');
   }
 
-  function getLastVersion() {
-    $response = $this->http_client->get("project/$this->project/version", [
+  public function getLastVersion() {
+    $response = $this->httpClient->get("project/$this->project/version", [
       'query' => [
         'maxResults' => 1,
         'orderBy' => '-sequence',
-      ]
+      ],
     ]);
     $version = json_decode($response->getBody()->getContents(), true);
     if (empty($version) || empty($version['values'])) {
@@ -75,13 +74,14 @@ class JiraController {
     return reset($version['values']);
   }
 
-  function getLastReleasedVersion() {
-    $response = $this->http_client->get("project/$this->project/version", [
+  public function getLastReleasedVersion(?string $project = null) {
+    $project = $project ?: $this->project;
+    $response = $this->httpClient->get("project/$project/version", [
       'query' => [
         'maxResults' => 1,
         'orderBy' => '-sequence',
         'status' => 'released',
-      ]
+      ],
     ]);
     $version = json_decode($response->getBody()->getContents(), true);
     if (empty($version) || empty($version['values'])) {
@@ -93,21 +93,21 @@ class JiraController {
   /**
    * @see https://developer.atlassian.com/cloud/jira/platform/rest/v3/#api-api-3-version-post
    */
-  function createVersion($version_name) {
+  public function createVersion($versionName) {
     $data = [
-      'name' => $version_name,
+      'name' => $versionName,
       'archived' => false,
       'released' => false,
       'project' => $this->project,
       'startDate' => (new \DateTime())->format('Y-m-d'),
     ];
-    $response = $this->http_client->post('version', ['json' => $data]);
+    $response = $this->httpClient->post('version', ['json' => $data]);
     return json_decode($response->getBody()->getContents(), true);
   }
 
-  function releaseVersion($version_name) {
-    $version = $this->getVersion($version_name);
-    $response = $this->http_client->put("version/$version[id]", [
+  public function releaseVersion($versionName) {
+    $version = $this->getVersion($versionName);
+    $response = $this->httpClient->put("version/$version[id]", [
       'json' => [
         'released' => true,
         'releaseDate' => (new \DateTime())->format('Y-m-d'),
@@ -116,39 +116,39 @@ class JiraController {
     return json_decode($response->getBody()->getContents(), true);
   }
 
-  function getIssuesDataForVersion($version) {
-    $changelog_id = self::CHANGELOG_FIELD_ID;
-    $release_note_id = self::RELEASENOTE_FIELD_ID;
-    $pull_requests_id = self::PULL_REQUESTS_ID;
-    $issues_data = $this->search("fixVersion={$version['id']}", ['key', $changelog_id, $release_note_id, 'status', 'resolution', $pull_requests_id]);
+  public function getIssuesDataForVersion($version) {
+    $changelogId = self::CHANGELOG_FIELD_ID;
+    $releaseNoteId = self::RELEASENOTE_FIELD_ID;
+    $pullRequestsId = self::PULL_REQUESTS_ID;
+    $issuesData = $this->search("fixVersion={$version['id']}", ['key', $changelogId, $releaseNoteId, 'status', 'resolution', $pullRequestsId]);
     // Sort issues by importance of change (Added -> Updated -> Improved -> Changed -> Fixed -> Others)
-    usort($issues_data['issues'], function($a, $b) use ($changelog_id) {
+    usort($issuesData['issues'], function($a, $b) use ($changelogId) {
       $order = array_flip(['added', 'updat', 'impro', 'chang', 'fixed']);
-      $a_prefix = strtolower(substr($a['fields'][$changelog_id], 0, 5));
-      $b_prefix = strtolower(substr($b['fields'][$changelog_id], 0, 5));
-      $a_rank = isset($order[$a_prefix]) ? $order[$a_prefix] : count($order);
-      $b_rank = isset($order[$b_prefix]) ? $order[$b_prefix] : count($order);
-      return $a_rank - $b_rank;
+      $aPrefix = strtolower(substr($a['fields'][$changelogId], 0, 5));
+      $bPrefix = strtolower(substr($b['fields'][$changelogId], 0, 5));
+      $aRank = isset($order[$aPrefix]) ? $order[$aPrefix] : count($order);
+      $bRank = isset($order[$bPrefix]) ? $order[$bPrefix] : count($order);
+      return $aRank - $bRank;
     });
-    return $issues_data['issues'];
+    return $issuesData['issues'];
   }
 
   /**
    * @see https://developer.atlassian.com/cloud/jira/platform/rest/v3/#api-api-3-search-get
    */
-  function search($jql, array $fields = null) {
+  public function search($jql, array $fields = null) {
     $params = ['jql' => $jql];
     if ($fields) {
       $params['fields'] = join(',', $fields);
     }
-    $response = $this->http_client->get('search', ['query' => $params]);
+    $response = $this->httpClient->get('search', ['query' => $params]);
     return json_decode($response->getBody()->getContents(), true);
   }
 
   /**
    * @see https://developer.atlassian.com/cloud/jira/platform/rest/v3/#api-api-3-issue-issueIdOrKey-put
    */
-  function updateIssue($key, $data) {
-    $this->http_client->put("issue/$key", ['json' => $data]);
+  public function updateIssue($key, $data) {
+    $this->httpClient->put("issue/$key", ['json' => $data]);
   }
 }

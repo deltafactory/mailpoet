@@ -1,32 +1,34 @@
 <?php
+
 namespace MailPoet\Newsletter\Shortcodes;
+
 use MailPoet\WP\Functions as WPFunctions;
 
 class Shortcodes {
   public $newsletter;
   public $subscriber;
   public $queue;
-  public $wp_user_preview;
+  public $wpUserPreview;
   const SHORTCODE_CATEGORY_NAMESPACE = 'MailPoet\Newsletter\Shortcodes\Categories\\';
 
-  function __construct(
+  public function __construct(
     $newsletter = false,
     $subscriber = false,
     $queue = false,
-    $wp_user_preview = false
+    $wpUserPreview = false
   ) {
     $this->newsletter = $newsletter;
     $this->subscriber = $subscriber;
     $this->queue = $queue;
-    $this->wp_user_preview = $wp_user_preview;
+    $this->wpUserPreview = $wpUserPreview;
   }
 
-  function extract($content, $categories = false) {
+  public function extract($content, $categories = false) {
     $categories = (is_array($categories)) ? implode('|', $categories) : false;
     // match: [category:shortcode] or [category|category|...:shortcode]
     // dot not match: [category://shortcode] - avoids matching http/ftp links
     $regex = sprintf(
-      '/\[%s:(?!\/\/).*?\]/ism',
+      '/\[%s:(?!\/\/).*?\]/i',
       ($categories) ? '(?:' . $categories . ')' : '(?:\w+)'
     );
     preg_match_all($regex, $content, $shortcodes);
@@ -36,7 +38,7 @@ class Shortcodes {
       false;
   }
 
-  function match($shortcode) {
+  public function match($shortcode) {
     preg_match(
       '/\[(?P<category>\w+)?:(?P<action>\w+)(?:.*?\|.*?(?P<argument>\w+):(?P<argument_value>.*?))?\]/',
       $shortcode,
@@ -45,53 +47,53 @@ class Shortcodes {
     return $match;
   }
 
-  function process($shortcodes, $content = false) {
+  public function process($shortcodes, $content = false) {
     $_this = $this;
-    $processed_shortcodes = array_map(
+    $processedShortcodes = array_map(
       function($shortcode) use ($content, $_this) {
-        $shortcode_details = $_this->match($shortcode);
-        $shortcode_details['shortcode'] = $shortcode;
-        $shortcode_details['category'] = !empty($shortcode_details['category']) ?
-          $shortcode_details['category'] :
+        $shortcodeDetails = $_this->match($shortcode);
+        $shortcodeDetails['shortcode'] = $shortcode;
+        $shortcodeDetails['category'] = !empty($shortcodeDetails['category']) ?
+          $shortcodeDetails['category'] :
           false;
-        $shortcode_details['action'] = !empty($shortcode_details['action']) ?
-          $shortcode_details['action'] :
+        $shortcodeDetails['action'] = !empty($shortcodeDetails['action']) ?
+          $shortcodeDetails['action'] :
           false;
-        $shortcode_details['action_argument'] = !empty($shortcode_details['argument']) ?
-          $shortcode_details['argument'] :
+        $shortcodeDetails['action_argument'] = !empty($shortcodeDetails['argument']) ?
+          $shortcodeDetails['argument'] :
           false;
-        $shortcode_details['action_argument_value'] = !empty($shortcode_details['argument_value']) ?
-          $shortcode_details['argument_value'] :
+        $shortcodeDetails['action_argument_value'] = !empty($shortcodeDetails['argument_value']) ?
+          $shortcodeDetails['argument_value'] :
           false;
-        $shortcode_class =
-          Shortcodes::SHORTCODE_CATEGORY_NAMESPACE . ucfirst($shortcode_details['category']);
-        if (!class_exists($shortcode_class)) {
-          $custom_shortcode = WPFunctions::get()->applyFilters(
+        $shortcodeClass =
+          Shortcodes::SHORTCODE_CATEGORY_NAMESPACE . ucfirst($shortcodeDetails['category']);
+        if (!class_exists($shortcodeClass)) {
+          $customShortcode = WPFunctions::get()->applyFilters(
             'mailpoet_newsletter_shortcode',
             $shortcode,
             $_this->newsletter,
             $_this->subscriber,
             $_this->queue,
             $content,
-            $_this->wp_user_preview
+            $_this->wpUserPreview
           );
-          return ($custom_shortcode === $shortcode) ?
+          return ($customShortcode === $shortcode) ?
             false :
-            $custom_shortcode;
+            $customShortcode;
         }
-        return $shortcode_class::process(
-          $shortcode_details,
+        return $shortcodeClass::process(
+          $shortcodeDetails,
           $_this->newsletter,
           $_this->subscriber,
           $_this->queue,
           $content,
-          $_this->wp_user_preview
+          $_this->wpUserPreview
         );
       }, $shortcodes);
-    return $processed_shortcodes;
+    return $processedShortcodes;
   }
 
-  function replace($content, $content_source = null, $categories = null) {
+  public function replace($content, $contentSource = null, $categories = null) {
     $shortcodes = $this->extract($content, $categories);
     if (!$shortcodes) {
       return $content;
@@ -99,11 +101,11 @@ class Shortcodes {
     // if content contains only shortcodes (e.g., [newsletter:post_title]) but their processing
     // depends on some other content (e.g., "post_id" inside a rendered newsletter),
     // then we should use that content source when processing shortcodes
-    $processed_shortcodes = $this->process(
+    $processedShortcodes = $this->process(
       $shortcodes,
-      ($content_source) ? $content_source : $content
+      ($contentSource) ? $contentSource : $content
     );
-    $shortcodes = array_intersect_key($shortcodes, $processed_shortcodes);
-    return str_replace($shortcodes, $processed_shortcodes, $content);
+    $shortcodes = array_intersect_key($shortcodes, $processedShortcodes);
+    return str_replace($shortcodes, $processedShortcodes, $content);
   }
 }

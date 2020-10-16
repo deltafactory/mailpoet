@@ -15,7 +15,7 @@ class Source {
   const WOOCOMMERCE_CHECKOUT = 'woocommerce_checkout';
   const UNKNOWN = 'unknown';
 
-  private static $allowed_sources = [
+  private static $allowedSources = [
     Source::FORM,
     Source::IMPORTED,
     Source::ADMINISTRATOR,
@@ -26,16 +26,15 @@ class Source {
     Source::UNKNOWN,
   ];
 
-  static function setSource(Subscriber $subscriber, $source) {
+  public static function setSource(Subscriber $subscriber, $source) {
     if ((isset($subscriber->source)) && ($subscriber->source !== Source::UNKNOWN)) {
       // we don't want to override source
       return $subscriber;
     }
-    if (!in_array($source, Source::$allowed_sources)) {
+    if (!in_array($source, Source::$allowedSources)) {
       throw new \InvalidArgumentException('Invalid source "' . $source . '""');
     }
     $subscriber->set('source', $source);
     return $subscriber;
   }
-
 }

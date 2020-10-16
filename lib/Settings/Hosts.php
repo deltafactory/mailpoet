@@ -1,8 +1,9 @@
 <?php
+
 namespace MailPoet\Settings;
 
 class Hosts {
-  private static $_smtp = [
+  private static $smtp = [
     'AmazonSES' => [
       'name' => 'Amazon SES',
       'emails' => 100,
@@ -16,6 +17,12 @@ class Hosts {
         'US East (N. Virginia)' => 'us-east-1',
         'US West (Oregon)' => 'us-west-2',
         'EU (Ireland)' => 'eu-west-1',
+        'EU (London)' => 'eu-west-2',
+        'EU (Frankfurt)' => 'eu-central-1',
+        'Canada (Central)' => 'ca-central-1',
+        'Asia Pacific (Mumbai)' => 'ap-south-1',
+        'Asia Pacific (Sydney)' => 'ap-southeast-2',
+        'South America (Sao Paulo)' => 'sa-east-1',
       ],
     ],
     'SendGrid' => [
@@ -28,7 +35,7 @@ class Hosts {
     ],
   ];
 
-  private static $_web = [
+  private static $web = [
     '1and1' => [
         'name' => '1and1',
         'emails' => 30,
@@ -211,11 +218,11 @@ class Hosts {
     ],
   ];
 
-  static function getWebHosts() {
-    return static::$_web;
+  public static function getWebHosts() {
+    return static::$web;
   }
 
-  static function getSMTPHosts() {
-    return static::$_smtp;
+  public static function getSMTPHosts() {
+    return static::$smtp;
   }
 }

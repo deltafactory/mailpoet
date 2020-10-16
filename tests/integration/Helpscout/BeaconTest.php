@@ -1,14 +1,18 @@
 <?php
+
 namespace MailPoet\Test\Helpscout;
 
 use MailPoet\Helpscout\Beacon;
 use MailPoet\Models\Subscriber;
 use MailPoet\Services\Bridge;
-use MailPoet\WP\Functions as WPFunctions;
 use MailPoet\Settings\SettingsController;
+use MailPoet\WP\Functions as WPFunctions;
 
 class BeaconTest extends \MailPoetTest {
-  function _before() {
+  public $settings;
+  public $beaconData;
+
+  public function _before() {
     parent::_before();
     // create 4 users (1 confirmed, 1 subscribed, 1 unsubscribed, 1 bounced)
     Subscriber::createOrUpdate([
@@ -28,125 +32,125 @@ class BeaconTest extends \MailPoetTest {
       'status' => Subscriber::STATUS_BOUNCED,
     ]);
 
-    $this->beacon_data = Beacon::getData();
-    $this->settings = new SettingsController();
+    $this->beaconData = $this->diContainer->get(Beacon::class)->getData();
+    $this->settings = SettingsController::getInstance();
   }
 
-  function testItReturnsPhpVersion() {
-    expect($this->beacon_data['PHP version'])->equals(PHP_VERSION);
+  public function testItReturnsPhpVersion() {
+    expect($this->beaconData['PHP version'])->equals(PHP_VERSION);
   }
 
-  function testItReturnsMailpoetVersion() {
-    expect($this->beacon_data['MailPoet Free version'])->equals(MAILPOET_VERSION);
+  public function testItReturnsMailpoetVersion() {
+    expect($this->beaconData['MailPoet Free version'])->equals(MAILPOET_VERSION);
   }
 
-  function testItReturnsWordpressVersion() {
-    expect($this->beacon_data['WordPress version'])->equals(get_bloginfo('version'));
+  public function testItReturnsWordpressVersion() {
+    expect($this->beaconData['WordPress version'])->equals(get_bloginfo('version'));
   }
 
-  function testItReturnsDatabaseVersion() {
+  public function testItReturnsDatabaseVersion() {
     global $wpdb;
-    $db_version = $wpdb->get_var('SELECT @@VERSION');
-    expect($this->beacon_data['Database version'])->equals($db_version);
+    $dbVersion = $wpdb->get_var('SELECT @@VERSION');
+    expect($this->beaconData['Database version'])->equals($dbVersion);
   }
 
-  function testItReturnsWpMemoryLimit() {
-    expect($this->beacon_data['WP_MEMORY_LIMIT'])->equals(WP_MEMORY_LIMIT);
+  public function testItReturnsWpMemoryLimit() {
+    expect($this->beaconData['WP_MEMORY_LIMIT'])->equals(WP_MEMORY_LIMIT);
   }
 
-  function testItReturnsWpMaxMemoryLimit() {
-    expect($this->beacon_data['WP_MAX_MEMORY_LIMIT'])->equals(WP_MAX_MEMORY_LIMIT);
+  public function testItReturnsWpMaxMemoryLimit() {
+    expect($this->beaconData['WP_MAX_MEMORY_LIMIT'])->equals(WP_MAX_MEMORY_LIMIT);
   }
 
-  function testItReturnsWpDebugValue() {
-    expect($this->beacon_data['WP_DEBUG'])->equals(WP_DEBUG);
+  public function testItReturnsWpDebugValue() {
+    expect($this->beaconData['WP_DEBUG'])->equals(WP_DEBUG);
   }
 
-  function testItReturnsPhpMaxExecutionTime() {
-    expect($this->beacon_data['PHP max_execution_time'])->equals(ini_get('max_execution_time'));
+  public function testItReturnsPhpMaxExecutionTime() {
+    expect($this->beaconData['PHP max_execution_time'])->equals(ini_get('max_execution_time'));
   }
 
-  function testItReturnsPhpMemoryLimit() {
-    expect($this->beacon_data['PHP memory_limit'])->equals(ini_get('memory_limit'));
+  public function testItReturnsPhpMemoryLimit() {
+    expect($this->beaconData['PHP memory_limit'])->equals(ini_get('memory_limit'));
   }
 
-  function testItReturnsPhpUploadMaxFilesize() {
-    expect($this->beacon_data['PHP upload_max_filesize'])->equals(ini_get('upload_max_filesize'));
+  public function testItReturnsPhpUploadMaxFilesize() {
+    expect($this->beaconData['PHP upload_max_filesize'])->equals(ini_get('upload_max_filesize'));
   }
 
-  function testItReturnsPhpPostMaxSize() {
-    expect($this->beacon_data['PHP post_max_size'])->equals(ini_get('post_max_size'));
+  public function testItReturnsPhpPostMaxSize() {
+    expect($this->beaconData['PHP post_max_size'])->equals(ini_get('post_max_size'));
   }
 
-  function testItReturnsWpLanguage() {
-    expect($this->beacon_data['WordPress language'])->equals(get_locale());
+  public function testItReturnsWpLanguage() {
+    expect($this->beaconData['WordPress language'])->equals(get_locale());
   }
 
-  function testItReturnsIfWpIsMultisite() {
-    expect($this->beacon_data['Multisite environment?'])->equals(is_multisite() ? 'Yes' : 'No');
+  public function testItReturnsIfWpIsMultisite() {
+    expect($this->beaconData['Multisite environment?'])->equals(is_multisite() ? 'Yes' : 'No');
   }
 
-  function testItReturnsCurrentThemeNameAndVersion() {
-    $current_theme = wp_get_theme();
-    expect($this->beacon_data['Current Theme'])->contains($current_theme->get('Name'));
-    expect($this->beacon_data['Current Theme'])->contains($current_theme->get('Version'));
+  public function testItReturnsCurrentThemeNameAndVersion() {
+    $currentTheme = wp_get_theme();
+    expect($this->beaconData['Current Theme'])->contains($currentTheme->get('Name'));
+    expect($this->beaconData['Current Theme'])->contains($currentTheme->get('Version'));
   }
 
-  function testItReturnsActivePlugins() {
-    expect($this->beacon_data['Active Plugin names'])->equals(join(", ", get_option('active_plugins')));
+  public function testItReturnsActivePlugins() {
+    expect($this->beaconData['Active Plugin names'])->equals(join(", ", get_option('active_plugins')));
   }
 
-  function testItReturnsSendingMethodDetails() {
+  public function testItReturnsSendingMethodDetails() {
     $mta = $this->settings->get('mta');
-    expect($this->beacon_data['Sending Method'])->equals($mta['method']);
-    expect($this->beacon_data['Sending Frequency'])->contains($mta['frequency']['emails'] . ' emails');
-    expect($this->beacon_data['Sending Frequency'])->contains($mta['frequency']['interval'] . ' minutes');
+    expect($this->beaconData['Sending Method'])->equals($mta['method']);
+    expect($this->beaconData['Sending Frequency'])->contains($mta['frequency']['emails'] . ' emails');
+    expect($this->beaconData['Sending Frequency'])->contains($mta['frequency']['interval'] . ' minutes');
   }
 
-  function testItReturnsSomeSettings() {
-    expect($this->beacon_data['Task Scheduler method'])->equals($this->settings->get('cron_trigger.method'));
-    expect($this->beacon_data['Default FROM address'])->equals($this->settings->get('sender.address'));
-    expect($this->beacon_data['Default Reply-To address'])->equals($this->settings->get('reply_to.address'));
-    expect($this->beacon_data['Bounce Email Address'])->equals($this->settings->get('bounce.address'));
-    expect($this->beacon_data['Plugin installed at'])->equals($this->settings->get('installed_at'));
+  public function testItReturnsSomeSettings() {
+    expect($this->beaconData['Task Scheduler method'])->equals($this->settings->get('cron_trigger.method'));
+    expect($this->beaconData['Default FROM address'])->equals($this->settings->get('sender.address'));
+    expect($this->beaconData['Default Reply-To address'])->equals($this->settings->get('reply_to.address'));
+    expect($this->beaconData['Bounce Email Address'])->equals($this->settings->get('bounce.address'));
+    expect($this->beaconData['Plugin installed at'])->equals($this->settings->get('installed_at'));
   }
 
-  function testItReturnsTotalNumberOfSubscribers() {
+  public function testItReturnsTotalNumberOfSubscribers() {
     // unsubscribed users are not taken into account
-    expect($this->beacon_data['Total number of subscribers'])->equals(2);
+    expect($this->beaconData['Total number of subscribers'])->equals(2);
   }
 
-  function testItReturnsWebserverInformation() {
-    expect($this->beacon_data['Web server'])->equals(
+  public function testItReturnsWebserverInformation() {
+    expect($this->beaconData['Web server'])->equals(
       (!empty($_SERVER["SERVER_SOFTWARE"])) ? $_SERVER["SERVER_SOFTWARE"] : 'N/A'
     );
   }
 
-  function testItReturnsServerOSInformation() {
-    expect($this->beacon_data['Server OS'])->equals(utf8_encode(php_uname()));
+  public function testItReturnsServerOSInformation() {
+    expect($this->beaconData['Server OS'])->equals(utf8_encode(php_uname()));
   }
 
-  function testItReturnsCronPingUrl() {
-    expect($this->beacon_data['Cron ping URL'])->contains('&action=ping');
+  public function testItReturnsCronPingUrl() {
+    expect($this->beaconData['Cron ping URL'])->contains('&action=ping');
     // cron ping URL should react to custom filters
     $filter = function($url) {
       return str_replace(home_url(), 'http://custom_url/', $url);
     };
     $wp = new WPFunctions;
     $wp->addFilter('mailpoet_cron_request_url', $filter);
-    $beacon_data = Beacon::getData();
-    expect($beacon_data['Cron ping URL'])->regExp('!^http:\/\/custom_url\/!');
+    $beaconData = $this->beaconData = $this->diContainer->get(Beacon::class)->getData();
+    expect($beaconData['Cron ping URL'])->regExp('!^http:\/\/custom_url\/!');
     $wp->removeFilter('mailpoet_cron_request_url', $filter);
   }
 
-  function testItReturnsPremiumVersion() {
-    expect($this->beacon_data['MailPoet Premium version'])->equals(
+  public function testItReturnsPremiumVersion() {
+    expect($this->beaconData['MailPoet Premium version'])->equals(
       (defined('MAILPOET_PREMIUM_VERSION')) ? MAILPOET_PREMIUM_VERSION : 'N/A'
     );
   }
 
-  function testItReturnsPremiumKey() {
-    expect($this->beacon_data['MailPoet Premium/MSS key'])->equals(
+  public function testItReturnsPremiumKey() {
+    expect($this->beaconData['MailPoet Premium/MSS key'])->equals(
       $this->settings->get(Bridge::PREMIUM_KEY_SETTING_NAME) ?: $this->settings->get(Bridge::API_KEY_SETTING_NAME)
     );
   }

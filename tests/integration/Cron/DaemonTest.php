@@ -1,35 +1,43 @@
 <?php
+
 namespace MailPoet\Test\Cron;
 
 use Codeception\Stub\Expected;
 use MailPoet\Cron\CronHelper;
+use MailPoet\Cron\CronWorkerRunner;
 use MailPoet\Cron\Daemon;
 use MailPoet\Cron\Workers\SimpleWorker;
 use MailPoet\Cron\Workers\WorkersFactory;
-use MailPoet\Models\Setting;
+use MailPoet\DI\ContainerWrapper;
 use MailPoet\Settings\SettingsController;
+use MailPoet\Settings\SettingsRepository;
 
 class DaemonTest extends \MailPoetTest {
+  public $cronHelper;
 
   /** @var SettingsController */
   private $settings;
 
   public function _before() {
     parent::_before();
-    $this->settings = new SettingsController();
+    $this->settings = SettingsController::getInstance();
+    $this->cronHelper = ContainerWrapper::getInstance()->get(CronHelper::class);
   }
 
-  function testItCanRun() {
+  public function testItCanRun() {
+    $cronWorkerRunner = $this->make(CronWorkerRunner::class, [
+      'run' => null,
+    ]);
     $data = [
       'token' => 123,
     ];
     $this->settings->set(CronHelper::DAEMON_SETTING, $data);
-    $daemon = new Daemon($this->createWorkersFactoryMock());
+    $daemon = new Daemon($this->cronHelper, $cronWorkerRunner, $this->createWorkersFactoryMock());
     $daemon->run($data);
   }
 
-  function _after() {
-    \ORM::raw_execute('TRUNCATE ' . Setting::$_table);
+  public function _after() {
+    $this->diContainer->get(SettingsRepository::class)->truncate();
   }
 
   private function createWorkersFactoryMock(array $workers = []) {
@@ -37,6 +45,7 @@ class DaemonTest extends \MailPoetTest {
       'createScheduleWorker' => $this->createSimpleWorkerMock(),
       'createQueueWorker' => $this->createSimpleWorkerMock(),
       'createStatsNotificationsWorker' => $this->createSimpleWorkerMock(),
+      'createStatsNotificationsWorkerForAutomatedEmails' => $this->createSimpleWorkerMock(),
       'createSendingServiceKeyCheckWorker' => $this->createSimpleWorkerMock(),
       'createPremiumKeyCheckWorker' => $this->createSimpleWorkerMock(),
       'createBounceWorker' => $this->createSimpleWorkerMock(),
@@ -45,6 +54,10 @@ class DaemonTest extends \MailPoetTest {
       'createExportFilesCleanupWorker' => $this->createSimpleWorkerMock(),
       'createInactiveSubscribersWorker' => $this->createSimpleWorkerMock(),
       'createAuthorizedSendingEmailsCheckWorker' => $this->createSimpleWorkerMock(),
+      'createWooCommercePastOrdersWorker' => $this->createSimpleWorkerMock(),
+      'createBeamerkWorker' => $this->createSimpleWorkerMock(),
+      'createUnsubscribeTokensWorker' => $this->createSimpleWorkerMock(),
+      'createSubscriberLinkTokensWorker' => $this->createSimpleWorkerMock(),
     ]);
   }
 

@@ -3,21 +3,20 @@
 namespace MailPoet\Test\Config;
 
 use Codeception\Stub;
-use Codeception\Stub\Expected;
 use MailPoet\Config\AccessControl;
 use MailPoet\WP\Functions as WPFunctions;
 
 class AccessControlTest extends \MailPoetTest {
 
   /** @var AccessControl */
-  private $access_control;
+  private $accessControl;
 
-  function _before() {
+  public function _before() {
     parent::_before();
-    $this->access_control = new AccessControl;
+    $this->accessControl = new AccessControl;
   }
 
-  function testItAllowsSettingCustomPermissions() {
+  public function testItAllowsSettingCustomPermissions() {
     $wp = new WPFunctions;
     $wp->addFilter(
       'mailpoet_permission_access_plugin_admin',
@@ -62,7 +61,7 @@ class AccessControlTest extends \MailPoetTest {
       }
     );
 
-    expect($this->access_control->getDefaultPermissions())->equals(
+    expect($this->accessControl->getDefaultPermissions())->equals(
       [
         AccessControl::PERMISSION_ACCESS_PLUGIN_ADMIN => [
           'custom_access_plugin_admin_role',
@@ -89,23 +88,23 @@ class AccessControlTest extends \MailPoetTest {
     );
   }
 
-  function testItGetsPermissionLabels() {
-    $permissions = $this->access_control->getDefaultPermissions();
-    $labels = $this->access_control->getPermissionLabels();
+  public function testItGetsPermissionLabels() {
+    $permissions = $this->accessControl->getDefaultPermissions();
+    $labels = $this->accessControl->getPermissionLabels();
     expect(count($permissions))->equals(count($labels));
   }
 
-  function testItValidatesIfUserHasCapability() {
+  public function testItValidatesIfUserHasCapability() {
     $capability = 'some_capability';
-    $access_control = new AccessControl();
+    $accessControl = new AccessControl();
     WPFunctions::set(Stub::make(new WPFunctions, [
       'currentUserCan' => true,
     ]));
 
-    expect($access_control->validatePermission($capability))->true();
+    expect($accessControl->validatePermission($capability))->true();
   }
 
-  function _after() {
+  public function _after() {
     WPFunctions::set(new WPFunctions);
   }
 }

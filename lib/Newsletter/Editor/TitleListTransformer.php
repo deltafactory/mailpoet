@@ -1,18 +1,18 @@
 <?php
-namespace MailPoet\Newsletter\Editor;
-use MailPoet\WP\Functions as WPFunctions;
 
-if (!defined('ABSPATH')) exit;
+namespace MailPoet\Newsletter\Editor;
+
+use MailPoet\WP\Functions as WPFunctions;
 
 class TitleListTransformer {
 
   private $args;
 
-  function __construct($args) {
+  public function __construct($args) {
     $this->args = $args;
   }
 
-  function transform($posts) {
+  public function transform($posts) {
     $results = array_map(function($post) {
       return $this->getPostTitle($post);
     }, $posts);
@@ -31,7 +31,7 @@ class TitleListTransformer {
   }
 
   private function getPostTitle($post) {
-    $title = $post->post_title;
+    $title = $post->post_title; // phpcs:ignore Squiz.NamingConventions.ValidVariableName.NotCamelCaps
     $alignment = $this->args['titleAlignment'];
     $alignment = (in_array($alignment, ['left', 'right', 'center'])) ? $alignment : 'left';
 

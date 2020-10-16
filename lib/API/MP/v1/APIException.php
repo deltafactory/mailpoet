@@ -1,7 +1,6 @@
 <?php
-namespace MailPoet\API\MP\v1;
 
-if (!defined('ABSPATH')) exit;
+namespace MailPoet\API\MP\v1;
 
 class APIException extends \Exception {
   const FAILED_TO_SAVE_SUBSCRIBER_FIELD = 1;

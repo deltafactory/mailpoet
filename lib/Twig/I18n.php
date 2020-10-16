@@ -3,24 +3,23 @@
 namespace MailPoet\Twig;
 
 use MailPoet\Config\Localizer;
+use MailPoet\InvalidStateException;
 use MailPoet\WP\Functions as WPFunctions;
 use MailPoetVendor\Twig\Extension\AbstractExtension;
 use MailPoetVendor\Twig\TwigFunction;
 
-if (!defined('ABSPATH')) exit;
-
 class I18n extends AbstractExtension {
 
-  private $_text_domain;
+  private $textDomains;
 
-  function __construct($text_domain) {
+  public function __construct($textDomain) {
     // set text domain
-    $this->_text_domain = $text_domain;
+    $this->textDomains = [$textDomain, 'woocommerce'];
   }
 
-  function getFunctions() {
+  public function getFunctions() {
     // twig custom functions
-    $twig_functions = [];
+    $twigFunctions = [];
     // list of WP functions to map
     $functions = [
       'localize' => 'localize',
@@ -31,17 +30,21 @@ class I18n extends AbstractExtension {
       'date' => 'date',
     ];
 
-    foreach ($functions as $twig_function => $function) {
-      $twig_functions[] = new TwigFunction(
-        $twig_function,
-        [$this, $function],
+    foreach ($functions as $twigFunction => $function) {
+      $callable = [$this, $function];
+      if (!is_callable($callable)) {
+        throw new InvalidStateException('Trying to register non-existing function to Twig.');
+      }
+      $twigFunctions[] = new TwigFunction(
+        $twigFunction,
+        $callable,
         ['is_safe' => ['all']]
       );
     }
-    return $twig_functions;
+    return $twigFunctions;
   }
 
-  function localize() {
+  public function localize() {
     $args = func_get_args();
     $translations = array_shift($args);
     $output = [];
@@ -55,33 +58,33 @@ class I18n extends AbstractExtension {
     return join("\n", $output);
   }
 
-  function translate() {
+  public function translate() {
     $args = func_get_args();
 
     return call_user_func_array('__', $this->setTextDomain($args));
   }
 
-  function pluralize() {
+  public function pluralize() {
     $args = func_get_args();
 
     return call_user_func_array('_n', $this->setTextDomain($args));
   }
 
-  function translateWithContext() {
+  public function translateWithContext() {
     $args = func_get_args();
 
     return call_user_func_array('_x', $this->setTextDomain($args));
   }
 
-  function getLocale() {
+  public function getLocale() {
     $localizer = new Localizer;
     return $localizer->locale();
   }
 
-  function date() {
+  public function date() {
     $args = func_get_args();
     $date = (isset($args[0])) ? $args[0] : null;
-    $date_format = (isset($args[1])) ? $args[1] : WPFunctions::get()->getOption('date_format');
+    $dateFormat = (isset($args[1])) ? $args[1] : WPFunctions::get()->getOption('date_format');
 
     if (empty($date)) return;
 
@@ -92,14 +95,14 @@ class I18n extends AbstractExtension {
       $date = strtotime($date);
     }
 
-    return WPFunctions::get()->getDateFromGmt(date('Y-m-d H:i:s', (int)$date), $date_format);
+    return WPFunctions::get()->getDateFromGmt(date('Y-m-d H:i:s', (int)$date), $dateFormat);
   }
 
   private function setTextDomain($args = []) {
     // make sure that the last argument is our text domain
-    if ($args[count($args) - 1] !== $this->_text_domain) {
+    if (!in_array($args[count($args) - 1], $this->textDomains)) {
       // otherwise add it to the list of arguments
-      $args[] = $this->_text_domain;
+      $args[] = $this->textDomains[0];
     }
     return $args;
   }

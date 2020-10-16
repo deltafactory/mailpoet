@@ -1,4 +1,5 @@
 <?php
+
 namespace MailPoet\Test\Statistics\Track;
 
 use Codeception\Stub;
@@ -12,16 +13,24 @@ use MailPoet\Models\StatisticsOpens;
 use MailPoet\Models\Subscriber;
 use MailPoet\Settings\SettingsController;
 use MailPoet\Statistics\Track\Clicks;
+use MailPoet\Subscribers\LinkTokens;
 use MailPoet\Tasks\Sending as SendingTask;
+use MailPoet\Util\Cookies;
+use MailPoetVendor\Idiorm\ORM;
 
 class ClicksTest extends \MailPoetTest {
+  public $trackData;
+  public $link;
+  public $queue;
+  public $subscriber;
+  public $newsletter;
 
   /** @var Clicks */
   private $clicks;
 
-  private $settings_controller;
+  private $settingsController;
 
-  function _before() {
+  public function _before() {
     parent::_before();
     // create newsletter
     $newsletter = Newsletter::create();
@@ -31,12 +40,12 @@ class ClicksTest extends \MailPoetTest {
     // create subscriber
     $subscriber = Subscriber::create();
     $subscriber->email = 'test@example.com';
-    $subscriber->first_name = 'First';
-    $subscriber->last_name = 'Last';
+    $subscriber->firstName = 'First';
+    $subscriber->lastName = 'Last';
     $this->subscriber = $subscriber->save();
     // create queue
     $queue = SendingTask::create();
-    $queue->newsletter_id = $newsletter->id;
+    $queue->newsletterId = $newsletter->id;
     $queue->setSubscribers([$subscriber->id]);
     $queue->updateProcessedSubscribers([$subscriber->id]);
     $this->queue = $queue->save();
@@ -44,43 +53,44 @@ class ClicksTest extends \MailPoetTest {
     $link = NewsletterLink::create();
     $link->hash = 'hash';
     $link->url = 'url';
-    $link->newsletter_id = $newsletter->id;
-    $link->queue_id = $queue->id;
+    $link->newsletterId = $newsletter->id;
+    $link->queueId = $queue->id;
     $this->link = $link->save();
+    $linkTokens = new LinkTokens;
     // build track data
-    $this->track_data = (object)[
+    $this->trackData = (object)[
       'queue' => $queue,
       'subscriber' => $subscriber,
       'newsletter' => $newsletter,
-      'subscriber_token' => Subscriber::generateToken($subscriber->email),
+      'subscriber_token' => $linkTokens->getToken($subscriber),
       'link' => $link,
       'preview' => false,
     ];
     // instantiate class
-    $this->settings_controller = Stub::makeEmpty(SettingsController::class, [
+    $this->settingsController = Stub::makeEmpty(SettingsController::class, [
       'get' => false,
     ], $this);
-    $this->clicks = new Clicks($this->settings_controller);
+    $this->clicks = new Clicks($this->settingsController, new Cookies());
   }
 
-  function testItAbortsWhenTrackDataIsEmptyOrMissingLink() {
+  public function testItAbortsWhenTrackDataIsEmptyOrMissingLink() {
     // abort function should be called twice:
-    $clicks = Stub::construct($this->clicks, [$this->settings_controller], [
+    $clicks = Stub::construct($this->clicks, [$this->settingsController, new Cookies()], [
       'abort' => Expected::exactly(2),
     ], $this);
-    $data = $this->track_data;
+    $data = $this->trackData;
     // 1. when tracking data does not exist
-    $clicks->track(false);
+    $clicks->track(null);
     // 2. when link model object is missing
     unset($data->link);
     $clicks->track($data);
   }
 
-  function testItDoesNotTrackEventsFromWpUserWhenPreviewIsEnabled() {
-    $data = $this->track_data;
+  public function testItDoesNotTrackEventsFromWpUserWhenPreviewIsEnabled() {
+    $data = $this->trackData;
     $data->subscriber->wp_user_id = 99;
     $data->preview = true;
-    $clicks = Stub::construct($this->clicks, [$this->settings_controller], [
+    $clicks = Stub::construct($this->clicks, [$this->settingsController, new Cookies()], [
       'redirectToUrl' => null,
     ], $this);
     $clicks->track($data);
@@ -88,9 +98,9 @@ class ClicksTest extends \MailPoetTest {
     expect(StatisticsOpens::findMany())->isEmpty();
   }
 
-  function testItTracksClickAndOpenEvent() {
-    $data = $this->track_data;
-    $clicks = Stub::construct($this->clicks, [$this->settings_controller], [
+  public function testItTracksClickAndOpenEvent() {
+    $data = $this->trackData;
+    $clicks = Stub::construct($this->clicks, [$this->settingsController, new Cookies()], [
       'redirectToUrl' => null,
     ], $this);
     $clicks->track($data);
@@ -98,24 +108,24 @@ class ClicksTest extends \MailPoetTest {
     expect(StatisticsOpens::findMany())->notEmpty();
   }
 
-  function testItRedirectsToUrlAfterTracking() {
-    $clicks = Stub::construct($this->clicks, [$this->settings_controller], [
+  public function testItRedirectsToUrlAfterTracking() {
+    $clicks = Stub::construct($this->clicks, [$this->settingsController, new Cookies()], [
       'redirectToUrl' => Expected::exactly(1),
     ], $this);
-    $clicks->track($this->track_data);
+    $clicks->track($this->trackData);
   }
 
-  function testItIncrementsClickEventCount() {
-    $clicks = Stub::construct($this->clicks, [$this->settings_controller], [
+  public function testItIncrementsClickEventCount() {
+    $clicks = Stub::construct($this->clicks, [$this->settingsController, new Cookies()], [
       'redirectToUrl' => null,
     ], $this);
-    $clicks->track($this->track_data);
+    $clicks->track($this->trackData);
     expect(StatisticsClicks::findMany()[0]->count)->equals(1);
-    $clicks->track($this->track_data);
+    $clicks->track($this->trackData);
     expect(StatisticsClicks::findMany()[0]->count)->equals(2);
   }
 
-  function testItConvertsShortcodesToUrl() {
+  public function testItConvertsShortcodesToUrl() {
     $link = $this->clicks->processUrl(
       '[link:newsletter_view_in_browser_url]',
       $this->newsletter,
@@ -126,8 +136,8 @@ class ClicksTest extends \MailPoetTest {
     expect($link)->contains('&endpoint=view_in_browser');
   }
 
-  function testItFailsToConvertsInvalidShortcodeToUrl() {
-    $clicks = Stub::construct($this->clicks, [$this->settings_controller], [
+  public function testItFailsToConvertsInvalidShortcodeToUrl() {
+    $clicks = Stub::construct($this->clicks, [$this->settingsController, new Cookies()], [
       'abort' => Expected::exactly(1),
     ], $this);
     // should call abort() method if shortcode action does not exist
@@ -140,7 +150,7 @@ class ClicksTest extends \MailPoetTest {
     );
   }
 
-  function testItDoesNotConvertNonexistentShortcodeToUrl() {
+  public function testItDoesNotConvertNonexistentShortcodeToUrl() {
     $link = $this->clicks->processUrl(
       '[link:unknown_shortcode]',
       $this->newsletter,
@@ -151,7 +161,7 @@ class ClicksTest extends \MailPoetTest {
     expect($link)->equals('[link:unknown_shortcode]');
   }
 
-  function testItDoesNotConvertRegularUrls() {
+  public function testItDoesNotConvertRegularUrls() {
     $link = $this->clicks->processUrl(
       'http://example.com',
       $this->newsletter,
@@ -162,7 +172,7 @@ class ClicksTest extends \MailPoetTest {
     expect($link)->equals('http://example.com');
   }
 
-  function testItProcessesShortcodesInRegularUrls() {
+  public function testItProcessesShortcodesInRegularUrls() {
     $link = $this->clicks->processUrl(
       'http://example.com/?email=[subscriber:email]&newsletter_subject=[newsletter:subject]',
       $this->newsletter,
@@ -173,13 +183,13 @@ class ClicksTest extends \MailPoetTest {
     expect($link)->equals('http://example.com/?email=test@example.com&newsletter_subject=Subject');
   }
 
-  function _after() {
-    \ORM::raw_execute('TRUNCATE ' . Newsletter::$_table);
-    \ORM::raw_execute('TRUNCATE ' . Subscriber::$_table);
-    \ORM::raw_execute('TRUNCATE ' . NewsletterLink::$_table);
-    \ORM::raw_execute('TRUNCATE ' . ScheduledTask::$_table);
-    \ORM::raw_execute('TRUNCATE ' . SendingQueue::$_table);
-    \ORM::raw_execute('TRUNCATE ' . StatisticsOpens::$_table);
-    \ORM::raw_execute('TRUNCATE ' . StatisticsClicks::$_table);
+  public function _after() {
+    ORM::raw_execute('TRUNCATE ' . Newsletter::$_table);
+    ORM::raw_execute('TRUNCATE ' . Subscriber::$_table);
+    ORM::raw_execute('TRUNCATE ' . NewsletterLink::$_table);
+    ORM::raw_execute('TRUNCATE ' . ScheduledTask::$_table);
+    ORM::raw_execute('TRUNCATE ' . SendingQueue::$_table);
+    ORM::raw_execute('TRUNCATE ' . StatisticsOpens::$_table);
+    ORM::raw_execute('TRUNCATE ' . StatisticsClicks::$_table);
   }
 }

@@ -1,16 +1,19 @@
 <?php
+
 namespace MailPoet\Test\Newsletter\Editor;
 
 use MailPoet\Newsletter\Editor\StructureTransformer;
 
 class StructureTransformerTest extends \MailPoetUnitTest {
+  /** @var StructureTransformer */
+  private $transformer;
 
-  function _before() {
+  public function _before() {
     parent::_before();
     $this->transformer = new StructureTransformer();
   }
 
-  function testItExtractsImagesAsImageBlocks() {
+  public function testItExtractsImagesAsImageBlocks() {
     $html = '<p><i>italic</i><em>previous text<a href="#mylink"><img src="#myimage" /></a>next text</em><b>bolded</b></p>';
 
     $blocks = $this->transformer->transform($html, false);
@@ -26,5 +29,4 @@ class StructureTransformerTest extends \MailPoetUnitTest {
     expect($blocks[2]['type'])->equals('text');
     expect($blocks[2]['text'])->equals('<p><em>next text</em><b>bolded</b></p>');
   }
-
 }

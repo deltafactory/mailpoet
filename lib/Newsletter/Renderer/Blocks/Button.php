@@ -1,12 +1,13 @@
 <?php
+
 namespace MailPoet\Newsletter\Renderer\Blocks;
 
-use MailPoet\Newsletter\Renderer\StylesHelper;
 use MailPoet\Newsletter\Renderer\EscapeHelper as EHelper;
+use MailPoet\Newsletter\Renderer\StylesHelper;
 
 class Button {
-  static function render($element, $column_base_width) {
-    $element['styles']['block']['width'] = self::calculateWidth($element, $column_base_width);
+  public function render($element, $columnBaseWidth) {
+    $element['styles']['block']['width'] = $this->calculateWidth($element, $columnBaseWidth);
     $styles = 'display:inline-block;-webkit-text-size-adjust:none;mso-hide:all;text-decoration:none !important;text-align:center;' . StylesHelper::getBlockStyles($element, $exclude = ['textAlign']);
     $styles = EHelper::escapeHtmlStyleAttr($styles);
     $template = '
@@ -42,14 +43,14 @@ class Button {
     return $template;
   }
 
-  static function calculateWidth($element, $column_base_width) {
-    $column_width = $column_base_width - (StylesHelper::$padding_width * 2);
-    $border_width = (int)$element['styles']['block']['borderWidth'];
-    $button_width = (int)$element['styles']['block']['width'];
-    $button_width = ($button_width > $column_width) ?
-      $column_width :
-      $button_width;
-    $button_width = $button_width - (2 * $border_width) . 'px';
-    return $button_width;
+  public function calculateWidth($element, $columnBaseWidth) {
+    $columnWidth = $columnBaseWidth - (StylesHelper::$paddingWidth * 2);
+    $borderWidth = (int)$element['styles']['block']['borderWidth'];
+    $buttonWidth = (int)$element['styles']['block']['width'];
+    $buttonWidth = ($buttonWidth > $columnWidth) ?
+      $columnWidth :
+      $buttonWidth;
+    $buttonWidth = $buttonWidth - (2 * $borderWidth) . 'px';
+    return $buttonWidth;
   }
 }

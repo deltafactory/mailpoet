@@ -1,0 +1,189 @@
+.mailpoet_form {
+  margin: 0 0 20px;
+}
+
+.mailpoet_form td {
+  vertical-align: top !important;
+}
+
+.select2-container {
+  max-width: 100%;
+  width: 25em !important;
+}
+
+input.select2-search__field::-webkit-input-placeholder {
+  color: $color-placeholder-select2;
+}
+
+input.select2-search__field:-moz-placeholder {
+  color: $color-placeholder-select2;
+}
+
+input.select2-search__field::-moz-placeholder {
+  color: $color-placeholder-select2;
+}
+
+input.select2-search__field:-ms-input-placeholder {
+  color: $color-placeholder-select2;
+}
+
+.select2-container--default.select2-container--focus .select2-selection--multiple {
+  border: 1px solid #aaa; /* default Select2 border for single dropdown */
+}
+
+textarea.regular-text {
+  width: 25em !important;
+}
+
+@include breakpoint-max-width(782px) {
+  .select2-container {
+    width: 100% !important;
+  }
+}
+
+progress {
+  background-color: $progress-background;
+  border: 0;
+  height: 2em;
+  width: 100%;
+}
+
+progress::-webkit-progress-bar {
+  background-color: $progress-background;
+}
+
+progress::-webkit-progress-value {
+  background-color: $progress-foreground;
+  border-radius: $progress-border-radius;
+}
+
+progress::-moz-progress-bar {
+  background-color: $progress-foreground;
+  border-radius: $progress-border-radius;
+}
+
+.mailpoet-form-grid {
+  align-items: flex-start;
+  display: grid;
+  grid-gap: $grid-gap;
+  grid-template-columns: $grid-column $grid-column;
+  justify-content: space-between;
+  margin: $grid-gap auto;
+  max-width: 976px;
+}
+
+.mailpoet-form-actions {
+  grid-column: 2 / -1;
+  padding-top: $grid-gap + ($heading-font-size-h4 * $heading-line-height) + ($font-size * $line-height * 2);
+  text-align: right;
+
+  p {
+    color: $color-text;
+    font-size: $font-size;
+    margin: $grid-gap 0;
+  }
+}
+
+.mailpoet-form-description {
+  color: $color-text;
+  font-size: $font-size;
+  margin-top: 0;
+
+  .mailpoet-h4 + & {
+    margin-top: -$grid-gap;
+  }
+}
+
+.mailpoet-form-field + .mailpoet-form-field {
+  margin-top: $grid-gap;
+}
+
+.mailpoet-form-field-email-header {
+  border-bottom: 1px solid $color-tertiary-light;
+  grid-column: 1 / -1;
+  margin-bottom: $grid-gap-medium;
+  padding: $grid-gap-large 0 $grid-gap-xl;
+}
+
+.mailpoet-form-field-subject,
+.mailpoet-form-field-preheader {
+  background: transparent;
+  border: 0;
+  height: auto;
+  width: 100%;
+
+  .mailpoet-form-input-label {
+    background: #fff;
+    bottom: 100%;
+    color: $color-text-light;
+    display: none;
+    font-size: 12px;
+    font-weight: bold;
+    height: 16px;
+    left: 4px;
+    position: absolute;
+    text-transform: uppercase;
+    width: 100%;
+  }
+
+  .parsley-errors-list {
+    left: 4px;
+  }
+
+  input,
+  textarea {
+    font-family: $font-family;
+    padding: 4px;
+
+    &:hover,
+    &:focus,
+    &:active {
+      background: rgba($color-tertiary-light, .6);
+
+      ~ .mailpoet-form-input-label {
+        display: block;
+      }
+    }
+  }
+
+  .mailpoet-form-tooltip-holder {
+    opacity: 0;
+  }
+
+  &:hover,
+  &:focus {
+    .mailpoet-form-tooltip-holder {
+      opacity: 1;
+    }
+  }
+}
+
+.mailpoet-form-field-subject {
+  input {
+    font-size: $heading-font-size-h1;
+    font-weight: bold;
+    line-height: 40px;
+  }
+
+  .mailpoet-form-tooltip-holder {
+    margin-top: -($grid-gap + 8px) + 2px;
+  }
+}
+
+.mailpoet-form-field-preheader {
+  textarea {
+    font-size: 18px;
+    height: 56px;
+    line-height: 24px;
+  }
+
+  .mailpoet-form-tooltip-holder {
+    margin-top: -($grid-gap + 8px) - 9px;
+  }
+}
+
+.mailpoet-form-schedule-time {
+  color: $color-text;
+  margin-left: $grid-gap;
+  vertical-align: middle;
+}

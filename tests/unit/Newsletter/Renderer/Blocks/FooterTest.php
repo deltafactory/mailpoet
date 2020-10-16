@@ -1,4 +1,5 @@
 <?php
+
 namespace MailPoet\Newsletter\Renderer\Blocks;
 
 class FooterTest extends \MailPoetUnitTest {
@@ -23,32 +24,32 @@ class FooterTest extends \MailPoetUnitTest {
     ],
   ];
 
-  function testItRendersCorrectly() {
-    $output = Footer::render($this->block);
-    $expected_result = '
+  public function testItRendersCorrectly() {
+    $output = (new Footer)->render($this->block);
+    $expectedResult = '
       <tr>
         <td class="mailpoet_header_footer_padded mailpoet_footer"  style="line-height: 19.2px;color: #222222;font-family: roboto, \'helvetica neue\', helvetica, arial, sans-serif;font-size: 12px;text-align: center;">
           Footer text. <a href="http://example.com" style="color:#689f2c;text-decoration:none">link</a>
         </td>
       </tr>';
-    expect($output)->equals($expected_result);
+    expect($output)->equals($expectedResult);
   }
 
-  function testItRendersWithBackgroundColor() {
+  public function testItRendersWithBackgroundColor() {
     $this->block['styles']['block']['backgroundColor'] = '#f0f0f0';
-    $output = Footer::render($this->block);
-    $expected_result = '
+    $output = (new Footer)->render($this->block);
+    $expectedResult = '
       <tr>
         <td class="mailpoet_header_footer_padded mailpoet_footer" bgcolor="#f0f0f0" style="line-height: 19.2px;background-color: #f0f0f0;color: #222222;font-family: roboto, \'helvetica neue\', helvetica, arial, sans-serif;font-size: 12px;text-align: center;">
           Footer text. <a href="http://example.com" style="color:#689f2c;text-decoration:none">link</a>
         </td>
       </tr>';
-    expect($output)->equals($expected_result);
+    expect($output)->equals($expectedResult);
   }
 
-  function testItPrefersInlinedCssForLinks() {
+  public function testItPrefersInlinedCssForLinks() {
     $this->block['text'] = '<p>Footer text. <a href="http://example.com" style="color:#aaaaaa;">link</a></p>';
-    $output = Footer::render($this->block);
+    $output = (new Footer)->render($this->block);
     expect($output)->contains('<a href="http://example.com" style="color:#aaaaaa;text-decoration:none">link</a>');
   }
 }

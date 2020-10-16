@@ -1,5 +1,7 @@
 <?php
+
 namespace MailPoet\API\JSON;
+
 use MailPoet\WP\Functions as WPFunctions;
 
 abstract class Response {
@@ -14,12 +16,12 @@ abstract class Response {
   public $status;
   public $meta;
 
-  function __construct($status, $meta = []) {
+  public function __construct($status, $meta = []) {
     $this->status = $status;
     $this->meta = $meta;
   }
 
-  function send() {
+  public function send() {
     WPFunctions::get()->statusHeader($this->status);
 
     $data = $this->getData();
@@ -28,16 +30,15 @@ abstract class Response {
     if (!empty($this->meta)) {
       $response['meta'] = $this->meta;
     }
-    if ($data !== null) {
-      $response = array_merge($response, $data);
+    if ($data === null) {
+      $data = [];
     }
+    $response = array_merge($response, $data);
 
-    if (!empty($response)) {
-      @header('Content-Type: application/json; charset=' . get_option('blog_charset'));
-      echo WPFunctions::get()->wpJsonEncode($response);
-    }
+    @header('Content-Type: application/json; charset=' . get_option('blog_charset'));
+    echo WPFunctions::get()->wpJsonEncode($response);
     die();
   }
 
-  abstract function getData();
+  public abstract function getData();
 }

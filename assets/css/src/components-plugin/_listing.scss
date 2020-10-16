@@ -1,0 +1,237 @@
+.mailpoet-listing {
+  background: $color-white;
+  border: 1px solid $color-tertiary-light;
+  border-radius: 0 4px 4px;
+  font-family: $font-family;
+  padding: $grid-gap;
+
+  .mailpoet-tab-content & {
+    background: none;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+  }
+
+  .mailpoet-categories {
+    padding-left: $grid-gap-half;
+    padding-right: $grid-gap-half;
+  }
+}
+
+.mailpoet-listing-search {
+  display: inline-block;
+}
+
+.mailpoet-listing-filters {
+  display: inline-block;
+  margin-left: $grid-gap;
+
+  .mailpoet-form-select {
+    margin-right: $grid-gap;
+    min-height: 30px;
+  }
+}
+
+.mailpoet-listing-pages {
+  color: $color-text-light;
+  float: right;
+  font-size: $font-size-extra-small;
+  font-weight: 600;
+  margin: 0 0 9px;
+}
+
+.mailpoet-listing-pages-num {
+  margin-right: 21px;
+}
+
+.mailpoet-listing-pages-links > span,
+.mailpoet-listing-pages-links > a {
+  padding: 0 3px;
+}
+
+.mailpoet-listing-pages-first,
+.mailpoet-listing-pages-previous,
+.mailpoet-listing-pages-next,
+.mailpoet-listing-pages-last {
+  vertical-align: middle;
+}
+
+input.mailpoet-listing-current-page {
+  border: 1px solid $color-tertiary-light;
+  color: $color-text-light;
+  font-size: $font-size-extra-small;
+  margin-right: 8px;
+  text-align: center;
+  width: 37px;
+}
+
+.mailpoet-listing-loading tbody tr,
+.mailpoet_form_loading tbody tr {
+  opacity: .2;
+}
+
+tr.mailpoet-listing-actions-and-select-all-row td {
+  background-color: $color-white;
+  box-shadow: 0 -1px 0 0 $color-tertiary-light, 0 2px 4px 0 rgba($color-tertiary-light, .5);
+  padding: 0;
+}
+
+div.mailpoet-listing-bulk-actions-container {
+  padding: 0;
+}
+
+.mailpoet-listing-bulk-actions {
+  padding: ($grid-gap / 2) $grid-gap;
+
+  a {
+    color: red;
+    font-size: $font-size;
+    font-weight: bold;
+    line-height: 1.5;
+    margin-right: 1em;
+    text-decoration: underline;
+    white-space: nowrap;
+  }
+}
+
+.mailpoet-listing-select-all {
+  color: $color-tertiary;
+  font-size: $font-size-small;
+  padding: ($grid-gap / 2) $grid-gap;
+  text-align: right;
+
+  a {
+    color: $color-secondary;
+    font-weight: 600;
+    text-decoration: underline;
+  }
+}
+
+.mailpoet-listing-table {
+  .mailpoet-listing & {
+    border-left: $color-black;
+    border-right: $color-black;
+    margin: $grid-gap 0 - $grid-gap;
+    width: calc(100% + 2 * #{$grid-gap});
+  }
+
+  th span {
+    white-space: nowrap;
+  }
+
+  thead th,
+  thead th a {
+    color: $color-text-light !important;
+    font-size: $font-size-extra-small;
+    font-weight: 600;
+    letter-spacing: 1px;
+    padding: 12px 10px;
+    text-transform: uppercase;
+  }
+
+  thead th a {
+    align-items: center;
+    display: flex;
+  }
+
+  thead .mailpoet-listing-check-column,
+  tfoot .mailpoet-listing-check-column {
+    padding: 8px 10px;
+    vertical-align: top;
+    width: 2.2em;
+  }
+
+  tbody .mailpoet-listing-check-column {
+    margin: 0 0 0 8px;
+    padding: 8px 10px;
+    vertical-align: text-top;
+  }
+
+  tbody tr .mailpoet-listing-check-column input[type='checkbox'] {
+    + span {
+      visibility: hidden;
+    }
+
+    &:checked + span {
+      visibility: visible;
+    }
+  }
+
+  tbody tr:hover .mailpoet-listing-check-column input[type='checkbox'] + span {
+    visibility: visible;
+  }
+
+  thead th.column-primary,
+  tfoot th.column-primary {
+    width: 25em;
+
+    .mailpoet-segments-listing & {
+      width: 18em;
+    }
+  }
+
+  @include breakpoint-max-width(782px) {
+    thead th.column-primary,
+    tfoot th.column-primary {
+      width: 100% !important;
+    }
+  }
+}
+
+.mailpoet-listing-sorting-arrow {
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%239CA6CC' d='M2 0h8c.552 0 1 .448 1 1 0 .216-.07.427-.2.6l-4 5.333c-.331.442-.958.532-1.4.2-.076-.057-.143-.124-.2-.2L1.2 1.6C.869 1.158.958.531 1.4.2c.173-.13.384-.2.6-.2z'/%3E%3C/svg%3E") no-repeat center;
+  content: '';
+  display: none;
+  height: 8px;
+  margin-left: 5px;
+  width: 12px;
+
+  .sorted & {
+    display: block;
+  }
+
+  .asc & {
+    transform: rotate(180deg);
+  }
+}
+
+.mailpoet-listing-footer {
+  background-color: $color-white;
+}
+
+@include respond-to(small-screen) {
+  .mailpoet-listing {
+    padding: 0;
+  }
+
+  .mailpoet-listing-header {
+    display: none;
+  }
+
+  .mailpoet-listing-pages {
+    float: none;
+    text-align: center;
+  }
+
+  tr.mailpoet-listing-actions-and-select-all-row {
+    display: none;
+  }
+
+  .mailpoet-listing-table {
+    .mailpoet-listing & {
+      border-top: 0;
+      margin-bottom: 0;
+      margin-top: 0;
+    }
+
+    thead,
+    .mailpoet-listing-check-column {
+      display: none;
+    }
+  }
+
+  .mailpoet-listing-footer {
+    margin: 0 0 - $grid-gap;
+    padding-top: $grid-gap;
+  }
+}

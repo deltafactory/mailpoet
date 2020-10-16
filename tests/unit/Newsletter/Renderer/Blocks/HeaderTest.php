@@ -1,11 +1,12 @@
 <?php
+
 namespace MailPoet\Newsletter\Renderer\Blocks;
 
 class HeaderTest extends \MailPoetUnitTest {
 
   private $block = [
     'type' => 'header',
-    'text' => 'Display problems?&nbsp;<a href="[link:newsletter_view_in_browser_url]">Open in browser</a>',
+    'text' => '<a href="[link:newsletter_view_in_browser_url]">View this in your browser.</a>',
     'styles' => [
       'block' => [
         'backgroundColor' => 'transparent',
@@ -23,32 +24,32 @@ class HeaderTest extends \MailPoetUnitTest {
     ],
   ];
 
-  function testItRendersCorrectly() {
-    $output = Header::render($this->block);
-    $expected_result = '
+  public function testItRendersCorrectly() {
+    $output = (new Header)->render($this->block);
+    $expectedResult = '
       <tr>
         <td class="mailpoet_header_footer_padded mailpoet_header"  style="line-height: 19.2px;color: #222222;font-family: Arial, \'Helvetica Neue\', Helvetica, sans-serif;font-size: 12px;text-align: left;">
-          Display problems? <a href="[link:newsletter_view_in_browser_url]" style="color:#6cb7d4;text-decoration:underline">Open in browser</a>
+          <a href="[link:newsletter_view_in_browser_url]" style="color:#6cb7d4;text-decoration:underline">View this in your browser.</a>
         </td>
       </tr>';
-    expect($output)->equals($expected_result);
+    expect($output)->equals($expectedResult);
   }
 
-  function testItRendersBackgroundColorCorrectly() {
+  public function testItRendersBackgroundColorCorrectly() {
     $this->block['styles']['block']['backgroundColor'] = '#f0f0f0';
-    $output = Header::render($this->block);
-    $expected_result = '
+    $output = (new Header)->render($this->block);
+    $expectedResult = '
       <tr>
         <td class="mailpoet_header_footer_padded mailpoet_header" bgcolor="#f0f0f0" style="line-height: 19.2px;background-color: #f0f0f0;color: #222222;font-family: Arial, \'Helvetica Neue\', Helvetica, sans-serif;font-size: 12px;text-align: left;">
-          Display problems? <a href="[link:newsletter_view_in_browser_url]" style="color:#6cb7d4;text-decoration:underline">Open in browser</a>
+          <a href="[link:newsletter_view_in_browser_url]" style="color:#6cb7d4;text-decoration:underline">View this in your browser.</a>
         </td>
       </tr>';
-    expect($output)->equals($expected_result);
+    expect($output)->equals($expectedResult);
   }
 
-  function testItPrefersInlinedCssForLinks() {
+  public function testItPrefersInlinedCssForLinks() {
     $this->block['text'] = '<p>Header text. <a href="http://example.com" style="color:#aaaaaa;">link</a></p>';
-    $output = Footer::render($this->block);
+    $output = (new Footer)->render($this->block);
     expect($output)->contains('<a href="http://example.com" style="color:#aaaaaa;text-decoration:underline">link</a>');
   }
 }

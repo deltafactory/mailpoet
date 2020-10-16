@@ -1,17 +1,14 @@
 import React from 'react';
-import createReactClass from 'create-react-class';
-import { Link } from 'react-router-dom';
+import { Link, withRouter } from 'react-router-dom';
 import PropTypes from 'prop-types';
 
 import Listing from 'listing/listing.jsx';
-import ListingTabs from 'newsletters/listings/tabs.jsx';
-import ListingHeading from 'newsletters/listings/heading.jsx';
-import FeatureAnnouncement from 'announcements/feature_announcement.jsx';
 
 import {
-  MailerMixin,
-  CronMixin,
-} from 'newsletters/listings/mixins.jsx';
+  checkCronStatus,
+  checkMailerStatus,
+} from 'newsletters/listings/utils.jsx';
+import NewsletterTypes from 'newsletters/types.jsx';
 
 import classNames from 'classnames';
 import MailPoet from 'mailpoet';
@@ -24,6 +21,7 @@ import {
 } from 'newsletters/scheduling/common.jsx';
 
 const messages = {
+  onNoItemsFound: (group, search) => MailPoet.I18n.t(search ? 'noItemsFound' : 'emptyListing'),
   onTrash: (response) => {
     const count = Number(response.meta.count);
     let message = null;
@@ -148,7 +146,7 @@ const newsletterActions = [
       }).fail((response) => {
         if (response.errors.length > 0) {
           MailPoet.Notice.error(
-            response.errors.map(error => error.message),
+            response.errors.map((error) => error.message),
             { scroll: true }
           );
         }
@@ -160,20 +158,15 @@ const newsletterActions = [
   },
 ];
 
-const NewsletterListNotification = createReactClass({ // eslint-disable-line react/prefer-es6-class
+class NewsletterListNotification extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      newslettersCount: undefined,
+    };
+  }
 
-  displayName: 'NewsletterListNotification',
-
-  propTypes: {
-    location: PropTypes.object.isRequired, // eslint-disable-line react/forbid-prop-types
-    match: PropTypes.shape({
-      params: PropTypes.object, // eslint-disable-line react/forbid-prop-types
-    }).isRequired,
-  },
-
-  mixins: [MailerMixin, CronMixin],
-
-  updateStatus: function updateStatus(e) {
+  updateStatus = (e) => {
     // make the event persist so that we can still override the selected value
     // in the ajax callback
     e.persist();
@@ -193,31 +186,29 @@ const NewsletterListNotification = createReactClass({ // eslint-disable-line rea
       // force refresh of listing so that groups are updated
       this.forceUpdate();
     }).fail((response) => {
-      MailPoet.Notice.error(MailPoet.I18n.t('postNotificationActivationFailed'));
+      MailPoet.Notice.showApiErrorNotice(response);
 
       // reset value to actual newsletter's status
       e.target.value = response.status;
     });
-  },
+  };
 
-  renderStatus: function renderStatus(newsletter) {
-    return (
-      <select
-        data-id={newsletter.id}
-        defaultValue={newsletter.status}
-        onChange={this.updateStatus}
-      >
-        <option value="active">{ MailPoet.I18n.t('active') }</option>
-        <option value="draft">{ MailPoet.I18n.t('inactive') }</option>
-      </select>
-    );
-  },
+  renderStatus = (newsletter) => (
+    <select
+      data-id={newsletter.id}
+      defaultValue={newsletter.status}
+      onChange={this.updateStatus}
+    >
+      <option value="active">{ MailPoet.I18n.t('active') }</option>
+      <option value="draft">{ MailPoet.I18n.t('inactive') }</option>
+    </select>
+  );
 
-  renderSettings: function renderSettings(newsletter) {
+  renderSettings = (newsletter) => {
     let sendingFrequency;
 
     // get list of segments' name
-    const segments = newsletter.segments.map(segment => segment.name);
+    const segments = newsletter.segments.map((segment) => segment.name);
     const sendingToSegments = MailPoet.I18n.t('ifNewContentToSegments').replace(
       '%$1s', segments.join(', ')
     );
@@ -282,9 +273,9 @@ const NewsletterListNotification = createReactClass({ // eslint-disable-line rea
         { sendingToSegments }
       </span>
     );
-  },
+  };
 
-  renderHistoryLink: function renderHistoryLink(newsletter) {
+  renderHistoryLink = (newsletter) => {
     const childrenCount = Number((newsletter.children_count));
     if (childrenCount === 0) {
       return (
@@ -299,9 +290,9 @@ const NewsletterListNotification = createReactClass({ // eslint-disable-line rea
         { MailPoet.I18n.t('viewHistory') }
       </Link>
     );
-  },
+  };
 
-  renderItem: function renderItem(newsletter, actions) {
+  renderItem = (newsletter, actions) => {
     const rowClasses = classNames(
       'manage-column',
       'column-primary',
@@ -335,37 +326,52 @@ const NewsletterListNotification = createReactClass({ // eslint-disable-line rea
         </td>
       </div>
     );
-  },
+  };
 
-  render: function render() {
+  render() {
     return (
-      <div>
-        <ListingHeading />
-
-        <FeatureAnnouncement hasNews={window.mailpoet_feature_announcement_has_news} />
-
-        <ListingTabs tab="notification" />
-
-        <Listing
-          limit={window.mailpoet_listing_per_page}
-          location={this.props.location}
-          params={this.props.match.params}
-          endpoint="newsletters"
-          type="notification"
-          base_url="notification"
-          onRenderItem={this.renderItem}
-          columns={columns}
-          bulk_actions={bulkActions}
-          item_actions={newsletterActions}
-          messages={messages}
-          auto_refresh
-          sort_by="updated_at"
-          sort_order="desc"
-          afterGetItems={(state) => { this.checkMailerStatus(state); this.checkCronStatus(state); }}
-        />
-      </div>
+      <>
+        {this.state.newslettersCount === 0 && (
+          <NewsletterTypes
+            filter={(type) => type.slug === 'notification'}
+          />
+        )}
+        {this.state.newslettersCount !== 0 && (
+          <Listing
+            limit={window.mailpoet_listing_per_page}
+            location={this.props.location}
+            params={this.props.match.params}
+            endpoint="newsletters"
+            type="notification"
+            base_url="notification"
+            onRenderItem={this.renderItem}
+            columns={columns}
+            bulk_actions={bulkActions}
+            item_actions={newsletterActions}
+            messages={messages}
+            auto_refresh
+            sort_by="updated_at"
+            sort_order="desc"
+            afterGetItems={(state) => {
+              if (!state.loading) {
+                const total = state.groups.reduce((count, group) => (count + group.count), 0);
+                this.setState({ newslettersCount: total });
+              }
+              checkMailerStatus(state);
+              checkCronStatus(state);
+            }}
+          />
+        )}
+      </>
     );
-  },
-});
+  }
+}
 
-export default NewsletterListNotification;
+NewsletterListNotification.propTypes = {
+  location: PropTypes.object.isRequired, // eslint-disable-line react/forbid-prop-types
+  match: PropTypes.shape({
+    params: PropTypes.object, // eslint-disable-line react/forbid-prop-types
+  }).isRequired,
+};
+
+export default withRouter(NewsletterListNotification);

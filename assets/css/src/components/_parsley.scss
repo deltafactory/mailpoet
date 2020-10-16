@@ -2,7 +2,7 @@ input.parsley-success,
 select.parsley-success,
 textarea.parsley-success {
   background-color: #dff0d8;
-  border: 1px solid #d6e9c6;
+  border-color: #d6e9c6;
   color: #468847;
 }
 
@@ -10,7 +10,7 @@ input.parsley-error,
 select.parsley-error,
 textarea.parsley-error {
   background-color: #f2dede;
-  border: 1px solid #eed3d7;
+  border-color: #eed3d7;
   color: #b94a48;
 }
 
@@ -19,7 +19,7 @@ textarea.parsley-error {
   font-size: .9em;
   line-height: .9em;
   list-style-type: none;
-  margin: 2px 0 3px;
+  margin: 8px 0 3px;
   opacity: 0;
   padding: 0;
   transition: all .3s ease-in;
@@ -27,4 +27,16 @@ textarea.parsley-error {
   &.filled {
     opacity: 1;
   }
+
+  .mailpoet-form-input & {
+    left: $grid-gap;
+    margin-top: 2px;
+    position: absolute;
+    top: 100%;
+  }
+}
+
+.parsley-required,
+.parsley-custom-error-message {
+  color: #b94a48;
 }

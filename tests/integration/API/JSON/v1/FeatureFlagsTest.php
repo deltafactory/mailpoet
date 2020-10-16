@@ -1,21 +1,29 @@
 <?php
+
 namespace MailPoet\Test\API\JSON\v1;
 
+use Codeception\Stub;
 use MailPoet\API\JSON\Error as APIError;
 use MailPoet\API\JSON\Response as APIResponse;
 use MailPoet\API\JSON\v1\FeatureFlags;
+use MailPoet\Entities\FeatureFlagEntity;
 use MailPoet\Features\FeatureFlagsController;
+use MailPoet\Features\FeatureFlagsRepository;
 use MailPoet\Features\FeaturesController;
-use MailPoet\Models\FeatureFlag;
 
 class FeatureFlagsTest extends \MailPoetTest {
 
-  function _before() {
+  /** @var FeatureFlagsRepository */
+  private $repository;
+
+  public function _before() {
     parent::_before();
-    FeatureFlag::deleteMany();
+    $this->repository = $this->diContainer->get(FeatureFlagsRepository::class);
+    $tableName = $this->entityManager->getClassMetadata(FeatureFlagEntity::class)->getTableName();
+    $this->entityManager->getConnection()->executeUpdate("TRUNCATE $tableName");
   }
 
-  function testItReturnsDefaults() {
+  public function testItReturnsDefaults() {
     $endpoint = $this->createEndpointWithFeatureDefaults([
       'feature-a' => true,
       'feature-b' => false,
@@ -35,8 +43,8 @@ class FeatureFlagsTest extends \MailPoetTest {
     ]);
   }
 
-  function testItReturnsDatabaseValue() {
-    FeatureFlag::createOrUpdate([
+  public function testItReturnsDatabaseValue() {
+    $this->repository->createOrUpdate([
       'name' => 'feature-a',
       'value' => false,
     ]);
@@ -54,7 +62,7 @@ class FeatureFlagsTest extends \MailPoetTest {
     ]);
   }
 
-  function testItSetsDatabaseValue() {
+  public function testItSetsDatabaseValue() {
     $endpoint = $this->createEndpointWithFeatureDefaults([
       'feature-a' => true,
     ]);
@@ -63,15 +71,15 @@ class FeatureFlagsTest extends \MailPoetTest {
       'feature-a' => false,
     ]);
 
-    $features = FeatureFlag::where('name', 'feature-a')->findMany();
-    expect(count($features))->equals(1);
-    expect($features[0]->name)->equals('feature-a');
-    expect($features[0]->value)->equals('0');
+    $this->entityManager->clear();
+    $features = $this->repository->findBy(['name' => 'feature-a']);
+    expect($features)->count(1);
+    expect($features[0]->getName())->equals('feature-a');
+    expect($features[0]->getValue())->equals(false);
   }
 
-
-  function testItUpdatesDatabaseValue() {
-    FeatureFlag::createOrUpdate([
+  public function testItUpdatesDatabaseValue() {
+    $this->repository->createOrUpdate([
       'name' => 'feature-a',
       'value' => false,
     ]);
@@ -84,14 +92,15 @@ class FeatureFlagsTest extends \MailPoetTest {
       'feature-a' => true,
     ]);
 
-    $features = FeatureFlag::where('name', 'feature-a')->findMany();
+    $this->entityManager->clear();
+    $features = $this->repository->findBy(['name' => 'feature-a']);
     expect(count($features))->equals(1);
-    expect($features[0]->name)->equals('feature-a');
-    expect($features[0]->value)->equals('1');
+    expect($features[0]->getName())->equals('feature-a');
+    expect($features[0]->getValue())->equals(true);
   }
 
-  function testItDoesNotReturnUnknownFlag() {
-    FeatureFlag::createOrUpdate([
+  public function testItDoesNotReturnUnknownFlag() {
+    $this->repository->createOrUpdate([
       'name' => 'feature-unknown',
       'value' => true,
     ]);
@@ -100,7 +109,7 @@ class FeatureFlagsTest extends \MailPoetTest {
     expect($endpoint->getAll()->data)->isEmpty();
   }
 
-  function testItDoesNotSaveUnknownFlag() {
+  public function testItDoesNotSaveUnknownFlag() {
     $endpoint = $this->createEndpointWithFeatureDefaults([]);
     $response = $endpoint->set([
       'feature-unknown' => false,
@@ -109,20 +118,19 @@ class FeatureFlagsTest extends \MailPoetTest {
     expect($response->errors[0]['error'])->equals(APIError::BAD_REQUEST);
     expect($response->status)->equals(APIResponse::STATUS_BAD_REQUEST);
 
-    $features = FeatureFlag::findMany();
+    $features = $this->repository->findAll();
     expect(count($features))->equals(0);
   }
 
+  /** @return FeatureFlags */
   private function createEndpointWithFeatureDefaults(array $defaults) {
-    $features_controller = $this->make(FeaturesController::class, [
+    $featuresController = $this->make(FeaturesController::class, [
       'defaults' => $defaults,
     ]);
-    $controller = new FeatureFlagsController($features_controller);
-    return new FeatureFlags($features_controller, $controller);
-  }
-
-  function _after() {
-    parent::_before();
-    FeatureFlag::deleteMany();
+    $featureFlags = Stub::make(FeatureFlagsController::class, [
+      'featuresController' => $featuresController,
+      'featureFlagsRepository' => $this->diContainer->get(FeatureFlagsRepository::class),
+    ]);
+    return new FeatureFlags($featuresController, $featureFlags);
   }
 }

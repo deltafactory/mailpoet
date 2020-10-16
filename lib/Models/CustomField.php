@@ -1,18 +1,18 @@
 <?php
+
 namespace MailPoet\Models;
 
-use MailPoet\Form\Block\Date;
+use MailPoet\Util\DateConverter;
 use MailPoet\WP\Functions as WPFunctions;
 
-if (!defined('ABSPATH')) exit;
-
 /**
+ * @property string $name
  * @property string $type
  * @property string|array|null $params
  */
 
 class CustomField extends Model {
-  public static $_table = MP_CUSTOM_FIELDS_TABLE;
+  public static $_table = MP_CUSTOM_FIELDS_TABLE; // phpcs:ignore PSR2.Classes.PropertyDeclaration
   const TYPE_DATE = 'date';
   const TYPE_TEXT = 'text';
   const TYPE_TEXTAREA = 'textarea';
@@ -20,7 +20,7 @@ class CustomField extends Model {
   const TYPE_CHECKBOX = 'checkbox';
   const TYPE_SELECT = 'select';
 
-  function __construct() {
+  public function __construct() {
     parent::__construct();
     $this->addValidations('name', [
       'required' => WPFunctions::get()->__('Please specify a name.', 'mailpoet'),
@@ -30,7 +30,7 @@ class CustomField extends Model {
     ]);
   }
 
-  function asArray() {
+  public function asArray() {
     $model = parent::asArray();
 
     if (isset($model['params'])) {
@@ -41,7 +41,7 @@ class CustomField extends Model {
     return $model;
   }
 
-  function save() {
+  public function save() {
     if (is_null($this->params)) {
       $this->params = [];
     }
@@ -53,31 +53,30 @@ class CustomField extends Model {
     return parent::save();
   }
 
-  function formatValue($value = null) {
+  public function formatValue($value = null) {
     // format custom field data depending on type
     if (is_array($value) && $this->type === self::TYPE_DATE) {
-      $custom_field_data = $this->asArray();
-      $date_format = $custom_field_data['params']['date_format'];
-      $date_type = (isset($custom_field_data['params']['date_type'])
-        ? $custom_field_data['params']['date_type']
+      $customFieldData = $this->asArray();
+      $dateFormat = $customFieldData['params']['date_format'];
+      $dateType = (isset($customFieldData['params']['date_type'])
+        ? $customFieldData['params']['date_type']
         : 'year_month_day'
       );
-      $date_parts = explode('_', $date_type);
-      switch ($date_type) {
+      $dateParts = explode('_', $dateType);
+      switch ($dateType) {
         case 'year_month_day':
-          $value = sprintf(
-            '%s/%s/%s',
-            $value['month'],
-            $value['day'],
-            $value['year']
+          $value = str_replace(
+            ['DD', 'MM', 'YYYY'],
+            [$value['day'], $value['month'], $value['year']],
+            $dateFormat
           );
           break;
 
         case 'year_month':
-          $value = sprintf(
-            '%s/%s',
-            $value['month'],
-            $value['year']
+          $value = str_replace(
+            ['MM', 'YYYY'],
+            [$value['month'], $value['year']],
+            $dateFormat
           );
           break;
 
@@ -115,15 +114,15 @@ class CustomField extends Model {
           break;
       }
 
-      if (!empty($value)) {
-        $value = Date::convertDateToDatetime($value, $date_format);
+      if (!empty($value) && is_string($value)) {
+        $value = (new DateConverter())->convertDateToDatetime($value, $dateFormat);
       }
     }
 
     return $value;
   }
 
-  function subscribers() {
+  public function subscribers() {
     return $this->hasManyThrough(
       __NAMESPACE__ . '\Subscriber',
       __NAMESPACE__ . '\SubscriberCustomField',
@@ -132,7 +131,7 @@ class CustomField extends Model {
     )->selectExpr(MP_SUBSCRIBER_CUSTOM_FIELD_TABLE . '.value');
   }
 
-  static function createOrUpdate($data = []) {
+  public static function createOrUpdate($data = []) {
     // set name as label by default
     if (empty($data['params']['label']) && isset($data['name'])) {
       $data['params']['label'] = $data['name'];

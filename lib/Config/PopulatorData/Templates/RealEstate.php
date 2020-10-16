@@ -3,20 +3,18 @@ namespace MailPoet\Config\PopulatorData\Templates;
 
 use MailPoet\WP\Functions as WPFunctions;
 
-if (!defined('ABSPATH')) exit;
-
 
 class RealEstate {
 
   private $template_image_url;
   private $social_icon_url;
 
-  function __construct($assets_url) {
+  public function __construct($assets_url) {
     $this->template_image_url = 'https://ps.w.org/mailpoet/assets/newsletter-templates/real-estate';
     $this->social_icon_url = $assets_url . '/img/newsletter_editor/social-icons';
   }
 
-  function get() {
+  public function get() {
     return [
       'name' => WPFunctions::get()->__("Real Estate", 'mailpoet'),
       'categories' => json_encode(['welcome', 'all']),
@@ -722,7 +720,7 @@ class RealEstate {
                               1 =>
                                  [
                                   'type' => 'footer',
-                                  'text' => '<p><strong><span style="color: #ffffff;"><a href="[link:subscription_unsubscribe_url]" style="color: #ffffff;">Unsubscribe</a> | <a href="[link:subscription_manage_url]" style="color: #ffffff;">Manage subscription</a></span></strong><br /><span style="color: #ffffff;">Add your postal address here!</span></p>',
+                                  'text' => '<p><strong><span style="color: #ffffff;"><a href="[link:subscription_unsubscribe_url]" style="color: #ffffff;">'.WPFunctions::get()->__("Unsubscribe", 'mailpoet').'</a> | <a href="[link:subscription_manage_url]" style="color: #ffffff;">'.WPFunctions::get()->__("Manage your subscription", 'mailpoet').'</a></span></strong><br /><span style="color: #ffffff;">'.WPFunctions::get()->__("Add your postal address here!", 'mailpoet').'</span></p>',
                                   'styles' =>
                                      [
                                       'block' =>
@@ -966,7 +964,7 @@ class RealEstate {
              ],
           'footer' =>
              [
-              'text' => '<p><a href="[link:subscription_unsubscribe_url]">Unsubscribe</a> | <a href="[link:subscription_manage_url]">Manage subscription</a><br />Add your postal address here!</p>',
+              'text' => '<p><a href="[link:subscription_unsubscribe_url]">'.WPFunctions::get()->__("Unsubscribe", 'mailpoet').'</a> | <a href="[link:subscription_manage_url]">'.WPFunctions::get()->__("Manage your subscription", 'mailpoet').'</a><br />'.WPFunctions::get()->__("Add your postal address here!", 'mailpoet').'</p>',
               'styles' =>
                  [
                   'block' =>
@@ -1091,7 +1089,7 @@ class RealEstate {
              ],
           'header' =>
              [
-              'text' => 'Display problems?&nbsp;<a href="[link:newsletter_view_in_browser_url]">Open this email in your web browser.</a>',
+              'text' => '<a href="[link:newsletter_view_in_browser_url]">'.WPFunctions::get()->__("View this in your browser.", 'mailpoet').'</a>',
               'styles' =>
                  [
                   'block' =>

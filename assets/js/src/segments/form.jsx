@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import MailPoet from 'mailpoet';
 import Form from 'form/form.jsx';
 import PropTypes from 'prop-types';
+import SubscribersLimitNotice from 'notices/subscribers_limit_notice.jsx';
 
 const fields = [
   {
@@ -30,12 +31,14 @@ const messages = {
   },
 };
 
-const SegmentForm = props => (
+const SegmentForm = (props) => (
   <div>
     <h1 className="title">
       {MailPoet.I18n.t('segment')}
       <Link className="page-title-action" to="/">{MailPoet.I18n.t('backToList')}</Link>
     </h1>
+
+    <SubscribersLimitNotice />
 
     <Form
       endpoint="segments"

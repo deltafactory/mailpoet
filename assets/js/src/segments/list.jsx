@@ -1,14 +1,17 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, withRouter } from 'react-router-dom';
 import MailPoet from 'mailpoet';
 import classNames from 'classnames';
 import PropTypes from 'prop-types';
 
 import Listing from 'listing/listing.jsx';
+import SubscribersLimitNotice from 'notices/subscribers_limit_notice.jsx';
+import InvalidMssKeyNotice from '../notices/invalid_mss_key_notice';
+import SubscribersInPlan from '../common/subscribers_in_plan';
 
-const isWPUsersSegment = segment => segment.type === 'wp_users';
-const isWooCommerceCustomersSegment = segment => segment.type === 'woocommerce_users';
-const isSpecialSegment = segmt => isWPUsersSegment(segmt) || isWooCommerceCustomersSegment(segmt);
+const isWPUsersSegment = (segment) => segment.type === 'wp_users';
+const isWooCommerceCustomersSegment = (segment) => segment.type === 'woocommerce_users';
+const isSpecialSegment = (segmt) => isWPUsersSegment(segmt) || isWooCommerceCustomersSegment(segmt);
 
 const columns = [
   {
@@ -132,7 +135,7 @@ const itemActions = [
       refresh();
     }).fail((response) => {
       MailPoet.Notice.error(
-        response.errors.map(error => error.message),
+        response.errors.map((error) => error.message),
         { scroll: true }
       );
     }),
@@ -145,7 +148,7 @@ const itemActions = [
     link: function link() {
       return (
         <a
-          href="http://docs.mailpoet.com/article/133-the-wordpress-users-list"
+          href="https://kb.mailpoet.com/article/133-the-wordpress-users-list"
           target="_blank"
           rel="noopener noreferrer"
         >
@@ -179,7 +182,7 @@ const itemActions = [
         MailPoet.Modal.loading(false);
         if (response.errors.length > 0) {
           MailPoet.Notice.error(
-            response.errors.map(error => error.message),
+            response.errors.map((error) => error.message),
             { scroll: true }
           );
         }
@@ -202,7 +205,23 @@ const itemActions = [
   {
     name: 'trash',
     display: function display(segment) {
-      return !isSpecialSegment(segment);
+      return !isSpecialSegment(segment) && segment.automated_emails_subjects.length === 0;
+    },
+  },
+  {
+    name: 'delete',
+    label: MailPoet.I18n.t('moveToTrash'),
+    onClick: function onClick(segment) {
+      MailPoet.Notice.error(
+        MailPoet.I18n.t('trashDisallowed').replace(
+          '%$1s',
+          segment.automated_emails_subjects.map((subject) => `'${subject}'`).join(', ')
+        ),
+        { scroll: true }
+      );
+    },
+    display: function display(segment) {
+      return !isSpecialSegment(segment) && segment.automated_emails_subjects.length > 0;
     },
   },
 ];
@@ -280,7 +299,24 @@ class SegmentList extends React.Component {
           {MailPoet.I18n.t('pageTitle')}
           {' '}
           <Link className="page-title-action" to="/new">{MailPoet.I18n.t('new')}</Link>
+          <Link className="page-title-action" to="/new-segment" data-automation-id="new-segment">{MailPoet.I18n.t('newSegment')}</Link>
         </h1>
+
+        <SubscribersInPlan
+          subscribersInPlan={window.mailpoet_subscribers_in_plan_count}
+          subscribersInPlanLimit={window.mailpoet_subscribers_limit}
+          mailpoetSubscribers={window.mailpoet_premium_subscribers_count}
+          mailpoetSubscribersLimit={window.mailpoet_subscribers_limit}
+          hasPremiumSupport={window.mailpoet_has_premium_support}
+          wpUsersCount={window.mailpoet_wp_users_count}
+          mssActive={window.mailpoet_mss_active}
+        />
+
+        <SubscribersLimitNotice />
+        <InvalidMssKeyNotice
+          mssKeyInvalid={window.mailpoet_mss_key_invalid}
+          subscribersCount={window.mailpoet_subscribers_count}
+        />
 
         <Listing
           limit={window.mailpoet_listing_per_page}
@@ -308,4 +344,4 @@ SegmentList.propTypes = {
   }).isRequired,
 };
 
-export default SegmentList;
+export default withRouter(SegmentList);

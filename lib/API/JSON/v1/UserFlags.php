@@ -5,26 +5,23 @@ namespace MailPoet\API\JSON\v1;
 use MailPoet\API\JSON\Endpoint as APIEndpoint;
 use MailPoet\API\JSON\Error as APIError;
 use MailPoet\Config\AccessControl;
-use MailPoet\Services\Bridge;
 use MailPoet\Settings\UserFlagsController;
 use MailPoet\WP\Functions as WPFunctions;
-
-if (!defined('ABSPATH')) exit;
 
 class UserFlags extends APIEndpoint {
 
   /** @var UserFlagsController */
-  private $user_flags;
+  private $userFlags;
 
   public $permissions = [
     'global' => AccessControl::ALL_ROLES_ACCESS,
   ];
 
-  function __construct(UserFlagsController $user_flags) {
-    $this->user_flags = $user_flags;
+  public function __construct(UserFlagsController $userFlags) {
+    $this->userFlags = $userFlags;
   }
 
-  function set(array $flags = []) {
+  public function set(array $flags = []) {
     if (empty($flags)) {
       return $this->badRequest(
         [
@@ -33,7 +30,7 @@ class UserFlags extends APIEndpoint {
         ]);
     } else {
       foreach ($flags as $name => $value) {
-        $this->user_flags->set($name, $value);
+        $this->userFlags->set($name, $value);
       }
       return $this->successResponse([]);
     }

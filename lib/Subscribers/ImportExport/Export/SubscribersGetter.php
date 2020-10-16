@@ -3,20 +3,21 @@
 namespace MailPoet\Subscribers\ImportExport\Export;
 
 use MailPoet\Models\Subscriber;
+use MailPoetVendor\Idiorm\ORM;
 
 /**
  * Gets batches of subscribers for export.
  */
 abstract class SubscribersGetter {
 
-  protected $segments_ids;
-  protected $batch_size;
+  protected $segmentsIds;
+  protected $batchSize;
   protected $offset;
   protected $finished;
 
-  public function __construct($segments_ids, $batch_size) {
-    $this->segments_ids = $segments_ids;
-    $this->batch_size = $batch_size;
+  public function __construct($segmentsIds, $batchSize) {
+    $this->segmentsIds = $segmentsIds;
+    $this->batchSize = $batchSize;
     $this->reset();
   }
 
@@ -28,7 +29,7 @@ abstract class SubscribersGetter {
   /**
    * Initialize the query by selecting fields and ignoring trashed subscribers.
    *
-   * @return \ORM
+   * @return ORM
    */
   protected function select() {
     return Subscriber::selectMany(
@@ -48,7 +49,7 @@ abstract class SubscribersGetter {
   /**
    * Filters the subscribers query based on the segments, offset and batch size.
    *
-   * @param  \ORM $subscribers
+   * @param  ORM $subscribers
    * @return array
    */
   abstract protected function filter($subscribers);
@@ -64,9 +65,9 @@ abstract class SubscribersGetter {
     $subscribers = $this->select();
     $subscribers = $this->filter($subscribers);
 
-    $this->offset += $this->batch_size;
+    $this->offset += $this->batchSize;
 
-    if (count($subscribers) < $this->batch_size) {
+    if (count($subscribers) < $this->batchSize) {
       $this->finished = true;
     }
 

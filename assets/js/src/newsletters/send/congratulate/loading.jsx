@@ -1,31 +1,26 @@
 import React from 'react';
 import PropTypes from 'prop-types';
 import MailPoet from 'mailpoet';
-import LoadingDots from 'loading.jsx';
-
-function renderRichData(showRichData, illustrationImageUrl) {
-  if (showRichData) {
-    return (
-      <div>
-        <h1 className="mailpoet_newsletter_loading_header">{MailPoet.I18n.t('congratulationsLoadingHeader')}</h1>
-        <img src={illustrationImageUrl} alt="" width="800px" height="266px" />
-      </div>
-    );
-  }
-  return (<div />);
-}
+import Loader from 'common/loader/loader';
+import Heading from 'common/typography/heading/heading';
 
 function Loading(props) {
   return (
-    <div className="mailpoet_newsletter_loading">
-      <LoadingDots />
-      {renderRichData(props.showRichLoadingScreen, props.illustrationImageUrl)}
+    <div className="mailpoet-congratulate-loading">
+      {props.showRichLoadingScreen && (
+        <div>
+          <Heading level={0}>{MailPoet.I18n.t('congratulationsLoadingHeader')}</Heading>
+          <Heading level={3}>{MailPoet.I18n.t('congratulationsLoadingBody')}</Heading>
+          <div className="mailpoet-gap-large" />
+          <div className="mailpoet-gap-large" />
+          <Loader size={64} />
+        </div>
+      )}
     </div>
   );
 }
 
 Loading.propTypes = {
-  illustrationImageUrl: PropTypes.string.isRequired,
   showRichLoadingScreen: PropTypes.bool.isRequired,
 };
 

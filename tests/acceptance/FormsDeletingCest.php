@@ -5,63 +5,90 @@ namespace MailPoet\Test\Acceptance;
 use MailPoet\Test\DataFactories\Form;
 
 class FormsDeletingCest {
-
-  function moveFormToTrash(\AcceptanceTester $I) {
-    $form_name = 'Move to trash form';
+  public function moveFormToTrash(\AcceptanceTester $i) {
+    $formName = 'Move to trash form';
     $form = new Form();
-    $form->withName($form_name)->create();
+    $form->withName($formName)->create();
 
-    $I->wantTo('Move a form to trash');
+    $i->wantTo('Move a form to trash');
 
-    $I->login();
-    $I->amOnMailpoetPage('Forms');
-    $I->waitForText($form_name);
+    $i->login();
+    $i->amOnMailpoetPage('Forms');
+    $i->waitForText($formName);
 
-    $I->clickItemRowActionByItemName($form_name, 'Move to trash');
+    $i->clickItemRowActionByItemName($formName, 'Move to trash');
 
-    $I->waitForElement('[data-automation-id="filters_trash"]');
-    $I->click('[data-automation-id="filters_trash"]');
+    $i->waitForElement('[data-automation-id="filters_trash"]');
+    $i->click('[data-automation-id="filters_trash"]');
 
-    $I->waitForText($form_name);
+    $i->waitForText($formName);
   }
 
-  function restoreFormFromTrash(\AcceptanceTester $I) {
-    $form_name = 'Restore from trash form';
+  public function restoreFormFromTrash(\AcceptanceTester $i) {
+    $formName = 'Restore from trash form';
     $form = new Form();
-    $form->withName($form_name)->withDeleted()->create();
+    $form->withName($formName)->withDeleted()->create();
 
-    $I->wantTo('Restore a form from trash');
+    $i->wantTo('Restore a form from trash');
 
-    $I->login();
-    $I->amOnMailpoetPage('Forms');
+    $i->login();
+    $i->amOnMailpoetPage('Forms');
 
-    $I->waitForElement('[data-automation-id="filters_trash"]');
-    $I->click('[data-automation-id="filters_trash"]');
-    $I->waitForText($form_name);
+    $i->waitForElement('[data-automation-id="filters_trash"]');
+    $i->click('[data-automation-id="filters_trash"]');
+    $i->waitForText($formName);
 
-    $I->clickItemRowActionByItemName($form_name, 'Restore');
-    $I->click('[data-automation-id="filters_all"]');
-    $I->waitForText($form_name);
+    $i->clickItemRowActionByItemName($formName, 'Restore');
+    $i->waitForText('1 form has been restored from the trash.');
+    $i->waitForElement('[data-automation-id="filters_all"]');
+    $i->click('[data-automation-id="filters_all"]');
+    $i->waitForText($formName);
   }
 
-  function deleteFormPermanently(\AcceptanceTester $I) {
-    $form_name = 'Delete form permanently';
+  public function deleteFormPermanently(\AcceptanceTester $i) {
+    $formName = 'Delete form permanently';
     $form = new Form();
-    $form->withName($form_name)->withDeleted()->create();
+    $form->withName($formName)->withDeleted()->create();
+    $form->withName($formName . '2')->withDeleted()->create();
 
-    $I->wantTo('Delete a form permanently trash');
+    $i->wantTo('Delete a form permanently trash');
 
-    $I->login();
-    $I->amOnMailpoetPage('Forms');
+    $i->login();
+    $i->amOnMailpoetPage('Forms');
 
-    $I->waitForElement('[data-automation-id="filters_trash"]');
-    $I->click('[data-automation-id="filters_trash"]');
-    $I->waitForText($form_name);
+    $i->waitForElement('[data-automation-id="filters_trash"]');
+    $i->click('[data-automation-id="filters_trash"]');
+    $i->waitForText($formName);
 
-    $I->clickItemRowActionByItemName($form_name, 'Delete Permanently');
+    $i->clickItemRowActionByItemName($formName, 'Delete Permanently');
 
-    $I->waitForText('1 form was permanently deleted.');
-    $I->waitForElementNotVisible($form_name);
+    $i->waitForText('1 form was permanently deleted.');
+    $i->waitForElementNotVisible($formName);
+    $i->waitForText($formName . '2');
   }
 
+  public function emptyTrash(\AcceptanceTester $i) {
+    $formName = 'Delete form permanently';
+    $form = new Form();
+    $form->withName($formName)->withDeleted()->create();
+    $form = new Form();
+    $form->withName($formName . '2')->create();
+
+    $i->wantTo('Empty a trash on Forms page');
+
+    $i->login();
+    $i->amOnMailpoetPage('Forms');
+
+    $i->waitForElement('[data-automation-id="filters_trash"]');
+    $i->click('[data-automation-id="filters_trash"]');
+    $i->waitForText($formName);
+
+    $i->click('[data-automation-id="empty_trash"]');
+
+    $i->waitForText('1 form was permanently deleted.');
+    $i->waitForElementNotVisible($formName);
+    $i->click('[data-automation-id="filters_all"]');
+
+    $i->waitForText($formName . '2');
+  }
 }

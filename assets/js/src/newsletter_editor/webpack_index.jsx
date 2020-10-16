@@ -33,6 +33,7 @@ import 'newsletter_editor/behaviors/ResizableBehavior.js'; // side effect - assi
 import 'newsletter_editor/behaviors/SortableBehavior.js'; // side effect - assigns to BehaviorsLookup
 import 'newsletter_editor/behaviors/ShowSettingsBehavior.js'; // side effect - assigns to BehaviorsLookup
 import 'newsletter_editor/behaviors/TextEditorBehavior.js'; // side effect - assigns to BehaviorsLookup
+import 'newsletter_editor/behaviors/WooCommerceStylesBehavior.js'; // side effect - assigns to BehaviorsLookup
 
 // blocks
 import 'newsletter_editor/blocks/container.js'; // side effect - calls App.on()
@@ -47,4 +48,7 @@ import 'newsletter_editor/blocks/automatedLatestContent.js'; // side effect - ca
 import 'newsletter_editor/blocks/automatedLatestContentLayout.js'; // side effect - calls App.on()
 import 'newsletter_editor/blocks/posts.js'; // side effect - calls App.on()
 import 'newsletter_editor/blocks/products.js'; // side effect - calls App.on()
+import 'newsletter_editor/blocks/abandonedCartContent.js'; // side effect - calls App.on()
 import 'newsletter_editor/blocks/social.js'; // side effect - calls App.on()
+import 'newsletter_editor/blocks/woocommerceContent.js'; // side effect - calls App.on()
+import 'newsletter_editor/blocks/woocommerceHeading.js'; // side effect - calls App.on()

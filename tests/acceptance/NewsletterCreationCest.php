@@ -2,80 +2,139 @@
 
 namespace MailPoet\Test\Acceptance;
 
+use Codeception\Scenario;
+use MailPoet\Test\DataFactories\Settings;
+
 class NewsletterCreationCest {
+  public function createPostNotification(\AcceptanceTester $i) {
+    $i->wantTo('Create and configure post notification email');
 
-  function createPostNotification(\AcceptanceTester $I) {
-    $I->wantTo('Create and configure post notification email');
+    $newsletterTitle = 'Post Notification ' . \MailPoet\Util\Security::generateRandomString();
+    $segmentName = $i->createListWithSubscriber();
 
-    $newsletter_title = 'Post Notification ' . \MailPoet\Util\Security::generateRandomString();
-    $segment_name = $I->createListWithSubscriber();
-
-    $I->login();
-    $I->amOnMailpoetPage('Emails');
-    $I->click('[data-automation-id="new_email"]');
+    $i->login();
+    $i->amOnMailpoetPage('Emails');
 
     // step 1 - select notification type
-    $I->click('[data-automation-id="create_notification"]');
+    $i->click('[data-automation-id="create_notification"]');
 
     // step 2 - configure schedule
-    $I->waitForText('Latest Post Notifications');
-    $I->selectOption('select[name=intervalType]', 'immediately');
-    $I->click('Next');
+    $i->waitForElement('[data-automation-id="post_notification_creation_heading"]');
+    $i->selectOption('select[name=intervalType]', 'immediately');
+    $i->click('Next');
 
     // step 3 - select template
-    $post_notification_template = '[data-automation-id="select_template_2"]';
-    $I->waitForElement($post_notification_template);
-    $I->see('Post Notifications', ['css' => 'a.current']);
-    $I->click($post_notification_template);
+    $postNotificationTemplate = $i->checkTemplateIsPresent(1, 'notification');
+    $i->see('Post Notifications', ['css' => '.mailpoet-categories-item.active']);
+    $i->click($postNotificationTemplate);
 
     // step 4 - design newsletter (update subject)
-    $title_element = '[data-automation-id="newsletter_title"]';
-    $I->waitForElement($title_element);
-    $I->fillField($title_element, $newsletter_title);
-    $I->click('Next');
+    $titleElement = '[data-automation-id="newsletter_title"]';
+    $i->waitForElement($titleElement);
+    $i->fillField($titleElement, $newsletterTitle);
+    $i->click('Next');
 
     // step 5 - activate
-    $search_field_element = 'input.select2-search__field';
-    $I->waitForElement($search_field_element);
-    $I->see('Select a frequency');
-    $newsletter_listing_element = '[data-automation-id="listing_item_' . basename($I->getCurrentUrl()) . '"]';
-    $I->selectOptionInSelect2($segment_name);
-    $I->click('Activate');
-    $I->waitForElement($newsletter_listing_element);
-    $I->see($newsletter_title, $newsletter_listing_element);
-    $I->see("Send immediately if there's new content to " . $segment_name . ".", $newsletter_listing_element);
+    $searchFieldElement = 'input.select2-search__field';
+    $i->waitForElement($searchFieldElement);
+    $i->see('Select a frequency');
+    $newsletterListingElement = '[data-automation-id="listing_item_' . basename($i->getCurrentUrl()) . '"]';
+    $i->selectOptionInSelect2($segmentName);
+    $i->click('Activate');
+    $i->waitForElement($newsletterListingElement);
+    $i->see($newsletterTitle, $newsletterListingElement);
+    $i->see("Send immediately if there's new content to " . $segmentName . ".", $newsletterListingElement);
   }
 
-  function createStandardNewsletter(\AcceptanceTester $I) {
-    $I->wantTo('Create and configure standard newsletter');
+  public function createStandardNewsletter(\AcceptanceTester $i) {
+    $i->wantTo('Create and configure standard newsletter');
 
-    $newsletter_title = 'Testing Newsletter ' . \MailPoet\Util\Security::generateRandomString();
-    $segment_name = $I->createListWithSubscriber();
+    $newsletterTitle = 'Testing Newsletter ' . \MailPoet\Util\Security::generateRandomString();
+    $segmentName = $i->createListWithSubscriber();
 
-    $I->login();
-    $I->amOnMailpoetPage('Emails');
-    $I->click('[data-automation-id="new_email"]');
+    $i->login();
+    $i->amOnMailpoetPage('Emails');
 
-    // step 1 - select notification type
-    $I->click('[data-automation-id="create_standard"]');
+    // step 1 - select newsletter type
+    $i->click('[data-automation-id="create_standard"]');
 
     // step 2 - select template
-    $standard_template = '[data-automation-id="select_template_0"]';
-    $I->waitForElement($standard_template);
-    $I->see('Newsletters', ['css' => 'a.current']);
-    $I->click($standard_template);
+    $standardTemplate = $i->checkTemplateIsPresent(0);
+    $i->see('Newsletters', ['css' => '.mailpoet-categories-item.active']);
+    $i->click($standardTemplate);
 
     // step 3 - design newsletter (update subject)
-    $title_element = '[data-automation-id="newsletter_title"]';
-    $I->waitForElement($title_element);
-    $I->fillField($title_element, $newsletter_title);
-    $I->click('Next');
+    $titleElement = '[data-automation-id="newsletter_title"]';
+    $i->waitForElement($titleElement);
+    $i->fillField($titleElement, $newsletterTitle);
+    $i->click('Next');
 
-    // step 4 - Choose list and send
-    $send_form_element = '[data-automation-id="newsletter_send_form"]';
-    $I->waitForElement($send_form_element);
-    $I->selectOptionInSelect2($segment_name);
-    $I->click('Send');
+    // step 4 - choose list and send
+    $sendFormElement = '[data-automation-id="newsletter_send_form"]';
+    $i->waitForElement($sendFormElement);
+    $i->selectOptionInSelect2($segmentName);
+    $i->click('Send');
+
+    // step 5 - verify recently sent newsletter tab and sent newsletter
+    $niceJobText = 'Nice job! Check back in 6 hour(s) for more stats.';
+    $i->waitForText('Emails');
+    $i->waitForText('The newsletter is being sent...');
+    $i->reloadPage();
+    $i->click('[data-automation-id="new_email"]');
+    $i->click('[data-automation-id="create_standard"]');
+    $i->waitForElement('[data-automation-id="email_template_selection_heading"]');
+    $i->see('Recently sent', ['css' => '.mailpoet-categories-item.active']);
+    $i->click($standardTemplate);
+    $i->waitForElement($titleElement);
+    $i->fillField($titleElement, $newsletterTitle);
+    $i->click('Next');
+    $i->waitForElement($sendFormElement);
+    $i->selectOptionInSelect2($segmentName);
+    $i->click('Send');
+    $i->waitForText('Newsletters');
+    $i->see($niceJobText);
   }
 
+  public function createNewsletterWhenKeyPendingApproval(\AcceptanceTester $i, Scenario $scenario) {
+    $mailPoetSendingKey = getenv('WP_TEST_MAILER_MAILPOET_API');
+    if (!getenv('WP_TEST_MAILER_MAILPOET_API')) {
+      $scenario->skip("Skipping, 'WP_TEST_MAILER_MAILPOET_API' not set.");
+    }
+    $settings = new Settings();
+    $settings->withSendingMethodMailPoet();
+    $settings->withMssKeyPendingApproval();
+
+    $i->createListWithSubscriber();
+
+    $i->login();
+    $i->amOnMailpoetPage('Emails');
+
+    // step 1 - select type
+    $i->click('[data-automation-id="create_standard"]');
+
+    // step 2 - select template
+    $standardTemplate = $i->checkTemplateIsPresent(0);
+    $i->see('Newsletters', ['css' => '.mailpoet-categories-item.active']);
+    $i->click($standardTemplate);
+
+    // step 3 - see notice in 'Send preview' with link to authorized emails
+    $i->waitForElement('.mailpoet_show_preview');
+    $i->click('.mailpoet_show_preview');
+    $i->waitForElement('[data-automation-id="switch_send_to_email"]');
+    $i->click('[data-automation-id="switch_send_to_email"]');
+    $i->waitForText('You’ll soon be able to send once our team reviews your account. In the meantime, you can send previews to your authorized emails.');
+    $href = $i->grabAttributeFrom('//a[text()="your authorized emails"]', 'href');
+    expect($href)->same('https://account.mailpoet.com/authorization');
+    $i->click('#mailpoet_modal_close');
+    $i->scrollToTop();
+    $i->click('Next');
+
+    // step 4 - see notice in 'Send preview' with link to authorized emails, 'Send' button must be disabled
+    $i->waitForElement('[data-automation-id="newsletter_send_heading"]');
+    $i->waitForText('You’ll soon be able to send once our team reviews your account. In the meantime, you can send previews to your authorized emails.');
+    $href = $i->grabAttributeFrom('//a[text()="your authorized emails"]', 'href');
+    $sendButton = $i->grabAttributeFrom('[data-automation-id="email-submit"]', 'class');
+    expect($href)->same('https://account.mailpoet.com/authorization');
+    expect($sendButton)->contains('mailpoet-disabled');
+  }
 }

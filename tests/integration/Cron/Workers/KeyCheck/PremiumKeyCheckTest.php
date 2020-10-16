@@ -1,33 +1,38 @@
 <?php
+
 namespace MailPoet\Test\Cron\Workers\KeyCheck;
 
 use Codeception\Util\Stub;
 use MailPoet\Cron\Workers\KeyCheck\PremiumKeyCheck;
-use MailPoet\Models\Setting;
 use MailPoet\Services\Bridge;
 use MailPoet\Settings\SettingsController;
+use MailPoet\Settings\SettingsRepository;
+use PHPUnit\Framework\MockObject\MockObject;
 
 class PremiumKeyCheckTest extends \MailPoetTest {
+  public $worker;
+  public $premiumKey;
 
   /** @var SettingsController */
   private $settings;
 
-  function _before() {
+  public function _before() {
     parent::_before();
-    $this->settings = new SettingsController();
-    $this->premium_key = '123457890abcdef';
-    $this->worker = new PremiumKeyCheck($this->settings, microtime(true));
+    $this->settings = SettingsController::getInstance();
+    $this->premiumKey = '123457890abcdef';
+    $this->worker = new PremiumKeyCheck($this->settings);
   }
 
-  function testItRequiresPremiumKeyToBeSpecified() {
+  public function testItRequiresPremiumKeyToBeSpecified() {
     expect($this->worker->checkProcessingRequirements())->false();
     $this->fillPremiumKey();
     expect($this->worker->checkProcessingRequirements())->true();
   }
 
-  function testItChecksPremiumKey() {
+  public function testItChecksPremiumKey() {
     $response = ['code' => Bridge::KEY_VALID];
-    $this->worker->bridge = Stub::make(
+    /** @var MockObject $bridge */
+    $bridge = Stub::make(
       new Bridge,
       [
         'checkPremiumKey' => $response,
@@ -35,13 +40,14 @@ class PremiumKeyCheckTest extends \MailPoetTest {
       ],
       $this
     );
+    $this->worker->bridge = $bridge;
     $this->worker->bridge->expects($this->once())
       ->method('checkPremiumKey')
-      ->with($this->equalTo($this->premium_key));
+      ->with($this->equalTo($this->premiumKey));
     $this->worker->bridge->expects($this->once())
       ->method('storePremiumKeyAndState')
       ->with(
-        $this->equalTo($this->premium_key),
+        $this->equalTo($this->premiumKey),
         $this->equalTo($response)
       );
     $this->fillPremiumKey();
@@ -51,11 +57,11 @@ class PremiumKeyCheckTest extends \MailPoetTest {
   private function fillPremiumKey() {
     $this->settings->set(
       Bridge::PREMIUM_KEY_SETTING_NAME,
-      $this->premium_key
+      $this->premiumKey
     );
   }
 
-  function _after() {
-    \ORM::raw_execute('TRUNCATE ' . Setting::$_table);
+  public function _after() {
+    $this->diContainer->get(SettingsRepository::class)->truncate();
   }
 }

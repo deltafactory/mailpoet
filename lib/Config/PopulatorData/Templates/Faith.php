@@ -3,20 +3,18 @@ namespace MailPoet\Config\PopulatorData\Templates;
 
 use MailPoet\WP\Functions as WPFunctions;
 
-if (!defined('ABSPATH')) exit;
-
 
 class Faith {
 
   private $template_image_url;
   private $social_icon_url;
 
-  function __construct($assets_url) {
+  public function __construct($assets_url) {
      $this->template_image_url = 'https://ps.w.org/mailpoet/assets/newsletter-templates/faith';
      $this->social_icon_url = $assets_url . '/img/newsletter_editor/social-icons';
   }
 
-  function get() {
+  public function get() {
     return [
       'name' => WPFunctions::get()->__("Faith", 'mailpoet'),
       'categories' => json_encode(['standard', 'all']),
@@ -352,7 +350,7 @@ class Faith {
                 'blocks' => [
                   0 => [
                     'type' => 'footer',
-                    'text' => '<a href="[link:subscription_unsubscribe_url]">Unsubscribe</a> | <a href="[link:subscription_manage_url]">Manage subscription</a><br /><b>Add your postal address here!</b>',
+                    'text' => '<a href="[link:subscription_unsubscribe_url]">'.WPFunctions::get()->__("Unsubscribe", 'mailpoet').'</a> | <a href="[link:subscription_manage_url]">'.WPFunctions::get()->__("Manage your subscription", 'mailpoet').'</a><br /><b>'.WPFunctions::get()->__("Add your postal address here!", 'mailpoet').'</b>',
                     'styles' => [
                       'block' => [
                         'backgroundColor' => '#e7eff6',

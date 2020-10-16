@@ -8,20 +8,28 @@ use MailPoet\Models\Segment;
 use MailPoet\Models\Subscriber;
 use MailPoet\Models\SubscriberCustomField;
 use MailPoet\Models\SubscriberSegment;
-use MailPoet\Subscribers\ImportExport\Export\Export;
 use MailPoet\Subscribers\ImportExport\Export\DefaultSubscribersGetter;
+use MailPoet\Subscribers\ImportExport\Export\Export;
+use MailPoetVendor\Idiorm\ORM;
 
 class ExportTest extends \MailPoetTest {
-  function _before() {
+  public $export;
+  public $segmentsData;
+  public $customFieldsData;
+  public $subscribersData;
+  public $subscriberFields;
+  public $jSONData;
+
+  public function _before() {
     parent::_before();
-    $this->JSON_data = json_decode(file_get_contents(dirname(__FILE__) . '/ExportTestData.json'), true);
-    $this->subscriber_fields = [
+    $this->jSONData = json_decode((string)file_get_contents(dirname(__FILE__) . '/ExportTestData.json'), true);
+    $this->subscriberFields = [
       'first_name' => 'First name',
       'last_name' => 'Last name',
       'email' => 'Email',
       1 => 'Country',
     ];
-    $this->subscribers_data = [
+    $this->subscribersData = [
       [
         'first_name' => 'Adam',
         'last_name' => 'Smith',
@@ -45,13 +53,13 @@ class ExportTest extends \MailPoetTest {
         'email' => 'paul@newman.com',
       ],
     ];
-    $this->custom_fields_data = [
+    $this->customFieldsData = [
       [
         'name' => 'Country',
         'type' => 'text',
       ],
     ];
-    $this->segments_data = [
+    $this->segmentsData = [
       [
         'name' => 'Newspapers',
       ],
@@ -59,7 +67,7 @@ class ExportTest extends \MailPoetTest {
         'name' => 'Journals',
       ],
     ];
-    foreach ($this->subscribers_data as $subscriber) {
+    foreach ($this->subscribersData as $subscriber) {
       if (isset($subscriber[1])) {
         unset($subscriber[1]);
       }
@@ -67,45 +75,45 @@ class ExportTest extends \MailPoetTest {
       $entity->hydrate($subscriber);
       $entity->save();
     }
-    foreach ($this->segments_data as $segment) {
+    foreach ($this->segmentsData as $segment) {
       $entity = Segment::create();
       $entity->hydrate($segment);
       $entity->save();
     }
-    foreach ($this->custom_fields_data as $custom_field) {
+    foreach ($this->customFieldsData as $customField) {
       $entity = CustomField::create();
-      $entity->hydrate($custom_field);
+      $entity->hydrate($customField);
       $entity->save();
     }
     $entity = SubscriberCustomField::create();
-    $entity->subscriber_id = 2;
-    $entity->custom_field_id = 1;
-    $entity->value = $this->subscribers_data[1][1];
+    $entity->subscriberId = 2;
+    $entity->customFieldId = 1;
+    $entity->value = $this->subscribersData[1][1];
     $entity->save();
     $entity = SubscriberSegment::create();
-    $entity->subscriber_id = 1;
-    $entity->segment_id = 1;
+    $entity->subscriberId = 1;
+    $entity->segmentId = 1;
     $entity->status = Subscriber::STATUS_UNSUBSCRIBED;
     $entity->save();
     $entity = SubscriberSegment::create();
-    $entity->subscriber_id = 1;
-    $entity->segment_id = 2;
+    $entity->subscriberId = 1;
+    $entity->segmentId = 2;
     $entity->save();
     $entity = SubscriberSegment::create();
-    $entity->subscriber_id = 2;
-    $entity->segment_id = 1;
+    $entity->subscriberId = 2;
+    $entity->segmentId = 1;
     $entity->save();
     $entity = SubscriberSegment::create();
-    $entity->subscriber_id = 3;
-    $entity->segment_id = 2;
+    $entity->subscriberId = 3;
+    $entity->segmentId = 2;
     $entity->save();
-    $this->export = new Export($this->JSON_data);
+    $this->export = new Export($this->jSONData);
   }
 
-  function testItCanConstruct() {
-    expect($this->export->export_format_option)
+  public function testItCanConstruct() {
+    expect($this->export->exportFormatOption)
       ->equals('csv');
-    expect($this->export->subscriber_fields)
+    expect($this->export->subscriberFields)
       ->equals(
         [
           'email',
@@ -113,88 +121,88 @@ class ExportTest extends \MailPoetTest {
           '1',
         ]
       );
-    expect($this->export->subscriber_custom_fields)
+    expect($this->export->subscriberCustomFields)
       ->equals($this->export->getSubscriberCustomFields());
-    expect($this->export->formatted_subscriber_fields)
+    expect($this->export->formattedSubscriberFields)
       ->equals(
         $this->export->formatSubscriberFields(
-          $this->export->subscriber_fields,
-          $this->export->subscriber_custom_fields
+          $this->export->subscriberFields,
+          $this->export->subscriberCustomFields
         )
       );
     expect(
       preg_match(
         '|' .
-        preg_quote(Env::$temp_path, '|') . '/MailPoet_export_[a-f0-9]{15}.' .
-        $this->export->export_format_option .
-        '|', $this->export->export_file)
+        preg_quote(Env::$tempPath, '|') . '/MailPoet_export_[a-z0-9]{15}.' .
+        $this->export->exportFormatOption .
+        '|', $this->export->exportFile)
     )->equals(1);
     expect(
       preg_match(
         '|' .
-        preg_quote(Env::$temp_url, '|') . '/' .
-        basename($this->export->export_file) .
-        '|', $this->export->export_file_URL)
+        preg_quote(Env::$tempUrl, '|') . '/' .
+        basename($this->export->exportFile) .
+        '|', $this->export->exportFileURL)
     )->equals(1);
   }
 
-  function testItCanGetSubscriberCustomFields() {
-    $source = CustomField::where('name', $this->custom_fields_data[0]['name'])
+  public function testItCanGetSubscriberCustomFields() {
+    $source = CustomField::where('name', $this->customFieldsData[0]['name'])
       ->findOne();
     $target = $this->export->getSubscriberCustomFields();
     expect($target)->equals([$source->id => $source->name]);
   }
 
-  function testItCanFormatSubscriberFields() {
-    $formatted_subscriber_fields = $this->export->formatSubscriberFields(
-      array_keys($this->subscriber_fields),
+  public function testItCanFormatSubscriberFields() {
+    $formattedSubscriberFields = $this->export->formatSubscriberFields(
+      array_keys($this->subscriberFields),
       $this->export->getSubscriberCustomFields()
     );
-    expect($formatted_subscriber_fields)
-      ->equals(array_values($this->subscriber_fields));
+    expect($formattedSubscriberFields)
+      ->equals(array_values($this->subscriberFields));
   }
 
-  function testItProperlyReturnsSubscriberCustomFields() {
+  public function testItProperlyReturnsSubscriberCustomFields() {
     $subscribers = $this->export->getSubscribers(0, 10);
     foreach ($subscribers as $subscriber) {
-      if ($subscriber['email'] === $this->subscribers_data[1]) {
+      if ($subscriber['email'] === $this->subscribersData[1]) {
         expect($subscriber['Country'])
-          ->equals($this->subscribers_data[1][1]);
+          ->equals($this->subscribersData[1][1]);
       }
     }
   }
 
-  function testItCanGetSubscribers() {
-    $this->export->default_subscribers_getter = new DefaultSubscribersGetter([1], 100);
+  public function testItCanGetSubscribers() {
+    $this->export->defaultSubscribersGetter = new DefaultSubscribersGetter([1], 100);
     $subscribers = $this->export->getSubscribers();
     expect($subscribers)->count(2);
 
-    $this->export->default_subscribers_getter = new DefaultSubscribersGetter([2], 100);
+    $this->export->defaultSubscribersGetter = new DefaultSubscribersGetter([2], 100);
     $subscribers = $this->export->getSubscribers();
     expect($subscribers)->count(2);
 
-    $this->export->default_subscribers_getter = new DefaultSubscribersGetter([1, 2], 100);
+    $this->export->defaultSubscribersGetter = new DefaultSubscribersGetter([1, 2], 100);
     $subscribers = $this->export->getSubscribers();
     expect($subscribers)->count(4);
 
   }
 
-  function testItAlwaysGroupsSubscribersBySegments() {
-    $this->export->default_subscribers_getter = new DefaultSubscribersGetter([0, 1, 2], 100);
+  public function testItAlwaysGroupsSubscribersBySegments() {
+    $this->export->defaultSubscribersGetter = new DefaultSubscribersGetter([0, 1, 2], 100);
     $subscribers = $this->export->getSubscribers();
     expect($subscribers)->count(5);
   }
 
-  function testItCanGetSubscribersOnlyWithoutSegments() {
-    $this->export->default_subscribers_getter = new DefaultSubscribersGetter([0], 100);
+  public function testItCanGetSubscribersOnlyWithoutSegments() {
+    $this->export->defaultSubscribersGetter = new DefaultSubscribersGetter([0], 100);
     $subscribers = $this->export->getSubscribers();
     expect($subscribers)->count(1);
     expect($subscribers[0]['segment_name'])->equals('Not In Segment');
   }
 
-  function testItRequiresWritableExportFile() {
+  public function testItRequiresWritableExportFile() {
     try {
-      $this->export->export_path = '/fake_folder';
+      $this->export->exportPath = '/fake_folder';
       $this->export->process();
       $this->fail('Export did not throw an exception');
     } catch (\Exception $e) {
@@ -203,10 +211,10 @@ class ExportTest extends \MailPoetTest {
     }
   }
 
-  function testItCanProcess() {
+  public function testItCanProcess() {
     try {
-      $this->export->export_file = $this->export->getExportFile('csv');
-      $this->export->export_format_option = 'csv';
+      $this->export->exportFile = $this->export->getExportFile('csv');
+      $this->export->exportFormatOption = 'csv';
       $result = $this->export->process();
     } catch (\Exception $e) {
       $this->fail('Export to .csv process threw an exception');
@@ -215,8 +223,8 @@ class ExportTest extends \MailPoetTest {
     expect($result['exportFileURL'])->notEmpty();
 
     try {
-      $this->export->export_file = $this->export->getExportFile('xlsx');
-      $this->export->export_format_option = 'xlsx';
+      $this->export->exportFile = $this->export->getExportFile('xlsx');
+      $this->export->exportFormatOption = 'xlsx';
       $result = $this->export->process();
     } catch (\Exception $e) {
       $this->fail('Export to .xlsx process threw an exception');
@@ -225,11 +233,11 @@ class ExportTest extends \MailPoetTest {
     expect($result['exportFileURL'])->notEmpty();
   }
 
-  function _after() {
-    \ORM::raw_execute('TRUNCATE ' . Subscriber::$_table);
-    \ORM::raw_execute('TRUNCATE ' . Segment::$_table);
-    \ORM::raw_execute('TRUNCATE ' . SubscriberSegment::$_table);
-    \ORM::raw_execute('TRUNCATE ' . CustomField::$_table);
-    \ORM::raw_execute('TRUNCATE ' . SubscriberCustomField::$_table);
+  public function _after() {
+    ORM::raw_execute('TRUNCATE ' . Subscriber::$_table);
+    ORM::raw_execute('TRUNCATE ' . Segment::$_table);
+    ORM::raw_execute('TRUNCATE ' . SubscriberSegment::$_table);
+    ORM::raw_execute('TRUNCATE ' . CustomField::$_table);
+    ORM::raw_execute('TRUNCATE ' . SubscriberCustomField::$_table);
   }
 }

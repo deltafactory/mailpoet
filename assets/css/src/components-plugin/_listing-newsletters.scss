@@ -1,0 +1,190 @@
+#newsletters_container {
+  h2.nav-tab-wrapper {
+    margin-bottom: 1rem;
+  }
+}
+
+.mailpoet_stats_text {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.mailpoet_stat_excellent {
+  color: $color-badge-excellent;
+}
+
+.mailpoet_stat_good {
+  color: $color-badge-good;
+}
+
+.mailpoet_stat_bad {
+  color: $color-badge-bad;
+}
+
+.mailpoet_stat_hidden {
+  display: none;
+}
+
+.mailpoet_stat_link_small {
+  font-size: .75rem;
+  text-decoration: underline !important;
+}
+
+.mailpoet_badge {
+  border-radius: 3px;
+  color: white;
+  cursor: pointer;
+  font-size: .5625rem;
+  font-weight: 500;
+  letter-spacing: 1px;
+  margin-right: 4px;
+  padding: 4px 6px 3px;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.mailpoet_badge_excellent,
+.mailpoet_badge_teal {
+  background: $color-badge-excellent;
+}
+
+.mailpoet_badge_good,
+.mailpoet_badge_yellow {
+  background: $color-badge-good;
+}
+
+.mailpoet_badge_bad,
+.mailpoet_badge_red {
+  background: $color-badge-bad;
+}
+
+.mailpoet_badge_green {
+  background: $color-badge-green;
+}
+
+.mailpoet_badge_video {
+  background: $color-badge-video-guide;
+  display: inline-block;
+  line-height: 20px;
+  padding: 3px 6px;
+  text-decoration: none;
+  vertical-align: top;
+
+  &:hover,
+  &:active,
+  &:focus {
+    background: $color-badge-green;
+    color: #fff;
+  }
+
+  .dashicons {
+    font-size: 14px;
+    line-height: 20px;
+  }
+}
+
+.mailpoet_badge_video_grey {
+  background: #c3c3c3;
+}
+
+// h1.title needed to override WP styles specificity
+h1.title.mailpoet-newsletter-listing-heading {
+  margin-bottom: $grid-gap;
+}
+
+.mailpoet-listing-status {
+  display: flex;
+  height: 24px;
+  justify-items: center;
+  padding-left: 24px;
+  position: relative;
+
+  svg {
+    left: 0;
+    position: absolute;
+    top: 0;
+  }
+}
+
+.mailpoet-listing-status-unknown {
+  color: $color-text-light;
+  font-weight: bold;
+
+  .mailpoet-listing-status-percentage {
+    stroke: $color-text-light;
+  }
+}
+
+.mailpoet-listing-status-scheduled,
+.mailpoet-listing-status-in-progress {
+  color: $color-secondary;
+
+  .mailpoet-listing-status-percentage {
+    stroke: $color-secondary;
+  }
+}
+
+.mailpoet-listing-status-sent {
+  color: $color-tertiary;
+
+  .mailpoet-listing-status-percentage {
+    stroke: $color-tertiary;
+  }
+}
+
+.mailpoet-listing-status-percentage {
+  stroke-width: 2px;
+}
+
+.mailpoet-listing-status-label {
+  font-size: 12px;
+  line-height: 24px;
+  padding-left: 8px;
+}
+
+.mailpoet-listing-status-percentage-background {
+  fill: none;
+  stroke: $color-tertiary-light;
+  stroke-width: 2px;
+}
+
+.mailpoet-listing-status-scheduled-icon {
+  fill: none;
+  stroke: $color-secondary;
+  stroke-width: 2px;
+}
+
+.mailpoet-listing-stats {
+  color: $color-tertiary;
+  font-size: $font-size-small;
+  font-weight: 600;
+
+  .__react_component_tooltip.show {
+    opacity: 1 !important;
+  }
+}
+
+.mailpoet-listing-stats a {
+  color: $color-tertiary !important;
+}
+
+.mailpoet-listing-stats-opened-clicked {
+  display: flex;
+  line-height: 22px;
+
+  + div { margin-top: 4px; }
+}
+
+.mailpoet-listing-stats-percentages {
+  margin-right: 5px;
+}
+
+.mailpoet-listing-stats-tooltip-title {
+  font-size: $font-size-extra-small;
+  text-align: center;
+}
+
+.mailpoet-listing-stats-tooltip-content {
+  font-size: $font-size-extra-small;
+  font-weight: normal;
+}

@@ -1,25 +1,24 @@
 import Hooks from 'wp-js-hooks';
-import Breadcrumb from 'newsletters/breadcrumb.jsx';
 import MailPoet from 'mailpoet';
 import React from 'react';
 import ReactDOM from 'react-dom';
+import ListingHeadingSteps from 'newsletters/listings/heading_steps.jsx';
 import displayTutorial from './tutorial.jsx';
 
-const renderBreadcrumb = (newsletterType) => {
-  const breadcrumbContainer = document.getElementById('mailpoet_editor_breadcrumb');
-  const breadcrumb = Hooks.applyFilters(
-    'mailpoet_newsletters_editor_breadcrumb',
-    <Breadcrumb step="editor" />,
-    newsletterType,
-    'editor'
-  );
+const renderHeading = (newsletterType) => {
+  if (newsletterType !== 'wc_transactional') {
+    const stepsHeadingContainer = document.getElementById('mailpoet_editor_steps_heading');
+    const stepsHeading = (
+      <ListingHeadingSteps emailType={newsletterType} step={3} />
+    );
 
-  ReactDOM.render(breadcrumb, breadcrumbContainer);
+    ReactDOM.render(stepsHeading, stepsHeadingContainer);
+  }
 };
 
 const initializeEditor = (config) => {
   const editorContainer = document.getElementById('mailpoet_editor');
-  const getUrlParam = param => (document.location.search.split(`${param}=`)[1] || '').split('&')[0];
+  const getUrlParam = (param) => (document.location.search.split(`${param}=`)[1] || '').split('&')[0];
 
   if (!editorContainer || !window.EditorApplication) return;
 
@@ -39,9 +38,13 @@ const initializeEditor = (config) => {
       const newsletter = response.data;
 
       Promise.resolve(Hooks.applyFilters('mailpoet_newsletters_editor_extend_config', config, newsletter)).then((extendedConfig) => {
+        const blockDefaults = {
+          ...extendedConfig.blockDefaults,
+          container: {},
+        };
         window.EditorApplication.start({
           newsletter,
-          config: extendedConfig,
+          config: { ...extendedConfig, blockDefaults },
         });
       }).catch(() => {
         window.EditorApplication.start({
@@ -50,7 +53,7 @@ const initializeEditor = (config) => {
         });
       });
 
-      renderBreadcrumb(newsletter.type);
+      renderHeading(newsletter.type);
 
       if (newsletter.status === 'sending' && newsletter.queue && newsletter.queue.status === null) {
         MailPoet.Ajax.post({
@@ -65,7 +68,7 @@ const initializeEditor = (config) => {
           .fail((pauseFailResponse) => {
             if (pauseFailResponse.errors.length > 0) {
               MailPoet.Notice.error(
-                pauseFailResponse.errors.map(error => error.message),
+                pauseFailResponse.errors.map((error) => error.message),
                 { scroll: true, static: true }
               );
             }
@@ -75,7 +78,7 @@ const initializeEditor = (config) => {
     .fail((response) => {
       if (response.errors.length > 0) {
         MailPoet.Notice.error(
-          response.errors.map(error => error.message),
+          response.errors.map((error) => error.message),
           { scroll: true, static: true }
         );
       }

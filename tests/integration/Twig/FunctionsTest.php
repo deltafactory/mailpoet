@@ -7,25 +7,21 @@ use MailPoet\Twig\Functions;
 use MailPoet\WP\Functions as WPFunctions;
 
 class FunctionsTest extends \MailPoetTest {
-  function testItExecutesIsRtlFunction() {
+  public function testItExecutesIsRtlFunction() {
     $template = ['template' => '{% if is_rtl() %}rtl{% endif %}'];
-    $twig = new \MailPoetVendor\Twig_Environment(new \MailPoetVendor\Twig_Loader_Array($template));
+    $twig = new \MailPoetVendor\Twig_Environment(new \MailPoetVendor\Twig\Loader\ArrayLoader($template));
+    WPFunctions::set(Stub::make(new WPFunctions, [
+      'isRtl' => Stub::consecutive(true, false),
+    ]));
+
     $twig->addExtension(new Functions());
-
-    WPFunctions::set(Stub::make(new WPFunctions, [
-      'isRtl' => true,
-    ]));
-    $result = $twig->render('template');
-    expect($result)->equals('rtl');
-
-    WPFunctions::set(Stub::make(new WPFunctions, [
-      'isRtl' => false,
-    ]));
-    $result = $twig->render('template');
-    expect($result)->isEmpty();
+    $resultRtl = $twig->render('template');
+    expect($resultRtl)->equals('rtl');
+    $resultNoRtl = $twig->render('template');
+    expect($resultNoRtl)->isEmpty();
   }
 
-  function _after() {
+  public function _after() {
     WPFunctions::set(new WPFunctions);
   }
 }

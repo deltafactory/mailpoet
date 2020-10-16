@@ -3,17 +3,39 @@ import MailPoet from 'mailpoet';
 import Hooks from 'wp-js-hooks';
 import Scheduling from 'newsletters/types/notification/scheduling.jsx';
 import SenderField from 'newsletters/send/sender_address_field.jsx';
+import GATrackingField from 'newsletters/send/ga_tracking.jsx';
 
 let fields = [
   {
-    name: 'subject',
-    label: MailPoet.I18n.t('subjectLine'),
-    tip: MailPoet.I18n.t('postNotificationSubjectLineTip'),
-    type: 'text',
-    validation: {
-      'data-parsley-required': true,
-      'data-parsley-required-message': MailPoet.I18n.t('emptySubjectLineError'),
-    },
+    name: 'email-header',
+    label: null,
+    tip: null,
+    fields: [
+      {
+        name: 'subject',
+        customLabel: MailPoet.I18n.t('subjectLabel'),
+        className: 'mailpoet-form-field-subject',
+        placeholder: MailPoet.I18n.t('subjectLine'),
+        tooltip: MailPoet.I18n.t('subjectLineTip'),
+        type: 'text',
+        validation: {
+          'data-parsley-required': true,
+          'data-parsley-required-message': MailPoet.I18n.t('emptySubjectLineError'),
+          maxLength: 250,
+        },
+      },
+      {
+        name: 'preheader',
+        customLabel: MailPoet.I18n.t('preheaderLabel'),
+        className: 'mailpoet-form-field-preheader',
+        placeholder: MailPoet.I18n.t('preheaderLine'),
+        tooltip: `${MailPoet.I18n.t('preheaderLineTip1')} ${MailPoet.I18n.t('preheaderLineTip2')}`,
+        type: 'textarea',
+        validation: {
+          maxLength: 250,
+        },
+      },
+    ],
   },
   {
     name: 'options',
@@ -35,11 +57,14 @@ let fields = [
       return !segment.deleted_at;
     },
     getLabel: function getLabel(segment) {
-      return `${segment.name} (${parseInt(segment.subscribers, 10).toLocaleString()})`;
+      return segment.name;
+    },
+    getCount: function getCount(segment) {
+      return parseInt(segment.subscribers, 10).toLocaleString();
     },
     transformChangedValue: function transformChangedValue(segmentIds) {
       const allSegments = this.getItems();
-      return _.map(segmentIds, id => _.find(allSegments, segment => segment.id === id));
+      return _.map(segmentIds, (id) => _.find(allSegments, (segment) => segment.id === id));
     },
     validation: {
       'data-parsley-required': true,
@@ -71,6 +96,7 @@ let fields = [
       },
     ],
   },
+  GATrackingField,
   {
     name: 'reply-to',
     label: MailPoet.I18n.t('replyTo'),

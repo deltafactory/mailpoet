@@ -2,16 +2,20 @@
 
 namespace MailPoet\Test\Acceptance;
 
+use MailPoet\Test\DataFactories\Form;
+
 class FormsListingCest {
+  public function formsListing(\AcceptanceTester $i) {
+    $form = new Form();
+    $form->withName('Test Form');
+    $form->create();
 
-  function formsListing(\AcceptanceTester $I) {
-    $I->wantTo('Open forms listings page');
+    $i->wantTo('Open forms listings page');
 
-    $I->login();
-    $I->amOnMailpoetPage('Forms');
+    $i->login();
+    $i->amOnMailpoetPage('Forms');
 
-    $I->waitForText('Test Form', 5, '[data-automation-id="listing_item_1"]');
-    $I->seeNoJSErrors();
+    $i->waitForText('Test Form', 5, '.mailpoet-listing-table');
+    $i->seeNoJSErrors();
   }
-
 }

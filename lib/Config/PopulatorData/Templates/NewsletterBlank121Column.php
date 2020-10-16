@@ -1,10 +1,8 @@
 <?php
+
 namespace MailPoet\Config\PopulatorData\Templates;
 
 use MailPoet\WP\Functions as WPFunctions;
-
-if (!defined('ABSPATH')) exit;
-
 
 class NewsletterBlank121Column {
 
@@ -13,17 +11,17 @@ class NewsletterBlank121Column {
   private $template_image_url;
   private $social_icon_url;
 
-  function __construct($assets_url) {
+  public function __construct($assets_url) {
     $this->assets_url = $assets_url;
     $this->external_template_image_url = 'https://ps.w.org/mailpoet/assets/newsletter-templates/newsletter-blank-1-2-1-column';
     $this->template_image_url = $this->assets_url . '/img/blank_templates';
     $this->social_icon_url = $this->assets_url . '/img/newsletter_editor/social-icons';
   }
 
-  function get() {
+  public function get() {
     return [
       'name' => WPFunctions::get()->__("Newsletter: Blank 1:2:1 Column", 'mailpoet'),
-      'categories' => json_encode(['standard']),
+      'categories' => json_encode(['standard', 'blank']),
       'readonly' => 1,
       'thumbnail' => $this->getThumbnail(),
       'body' => json_encode($this->getBody()),
@@ -61,7 +59,7 @@ class NewsletterBlank121Column {
                 "blocks" => [
                   [
                     "type" => "header",
-                    "text" => WPFunctions::get()->__("Display problems? <a href=\"[link:newsletter_view_in_browser_url]\">Open this email in your web browser.</a>", 'mailpoet'),
+                    "text" => '<a href="[link:newsletter_view_in_browser_url]">'.WPFunctions::get()->__("View this in your browser.", 'mailpoet').'</a>',
                     "styles" => [
                       "block" => [
                         "backgroundColor" => "transparent",
@@ -163,7 +161,7 @@ class NewsletterBlank121Column {
                 "blocks" => [
                   [
                     "type" => "text",
-                    "text" => WPFunctions::get()->__("<h2>This template has...</h2>", 'mailpoet'),
+                    "text" => '<h2>' . WPFunctions::get()->__('This template has...', 'mailpoet') . '</h2>',
                   ],
                   [
                     "type" => "text",
@@ -182,11 +180,11 @@ class NewsletterBlank121Column {
                 "blocks" => [
                   [
                     "type" => "text",
-                    "text" => WPFunctions::get()->__("<h2>... a 2-column layout.</h2>", 'mailpoet'),
+                    "text" => '<h2>' . WPFunctions::get()->__('... a 2-column layout.', 'mailpoet') . '</h2>',
                   ],
                   [
                     "type" => "text",
-                    "text" => WPFunctions::get()->__("<p>You can change a layout's background color by clicking on the settings icon on the right edge of the Designer. Simply hover over this area to see the Settings (gear) icon.</p>", 'mailpoet'),
+                    "text" => '<p>' . WPFunctions::get()->__("You can change a layout's background color by clicking on the settings icon on the right edge of the Designer. Simply hover over this area to see the Settings (gear) icon.", 'mailpoet') . '</p>',
                   ],
                 ],
               ],
@@ -320,7 +318,7 @@ class NewsletterBlank121Column {
                   ],
                   [
                     "type" => "footer",
-                    "text" => WPFunctions::get()->__("<p><a href=\"[link:subscription_unsubscribe_url]\">Unsubscribe</a> | <a href=\"[link:subscription_manage_url]\">Manage your subscription</a><br />Add your postal address here!</p>", 'mailpoet'),
+                    "text" => '<p><a href="[link:subscription_unsubscribe_url]">'.WPFunctions::get()->__("Unsubscribe", 'mailpoet').'</a> | <a href="[link:subscription_manage_url]">'.WPFunctions::get()->__("Manage your subscription", 'mailpoet').'</a><br />'.WPFunctions::get()->__("Add your postal address here!", 'mailpoet').'</p>',
                     "styles" => [
                       "block" => [
                         "backgroundColor" => "transparent",
@@ -381,7 +379,4 @@ class NewsletterBlank121Column {
   private function getThumbnail() {
     return $this->external_template_image_url . '/thumbnail.20190411-1500.jpg';
   }
-
 }
-
-

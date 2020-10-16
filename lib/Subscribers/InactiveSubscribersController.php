@@ -2,169 +2,198 @@
 
 namespace MailPoet\Subscribers;
 
-use Carbon\Carbon;
 use MailPoet\Config\MP2Migrator;
 use MailPoet\Models\ScheduledTask;
 use MailPoet\Models\ScheduledTaskSubscriber;
 use MailPoet\Models\SendingQueue;
-use MailPoet\Models\Setting;
 use MailPoet\Models\StatisticsOpens;
 use MailPoet\Models\Subscriber;
-
-if (!defined('ABSPATH')) exit;
+use MailPoet\Settings\SettingsRepository;
+use MailPoetVendor\Carbon\Carbon;
+use MailPoetVendor\Idiorm\ORM;
 
 class InactiveSubscribersController {
 
-  /**
-   * @param int $days_to_inactive
-   * @param int $batch_size
-   * @return int
-   */
-  function markInactiveSubscribers($days_to_inactive, $batch_size) {
-    $threshold_date = $this->getThresholdDate($days_to_inactive);
-    return $this->deactivateSubscribers($threshold_date, $batch_size);
+  private $inactivesTaskIdsTableCreated = false;
+
+  /** @var SettingsRepository */
+  private $settingsRepository;
+
+  public function __construct(SettingsRepository $settingsRepository) {
+    $this->settingsRepository = $settingsRepository;
   }
 
   /**
-   * @param int $days_to_inactive
-   * @param int $batch_size
+   * @param int $daysToInactive
+   * @param int $batchSize
+   * @return int|bool
+   */
+  public function markInactiveSubscribers($daysToInactive, $batchSize, $startId = null) {
+    $thresholdDate = $this->getThresholdDate($daysToInactive);
+    return $this->deactivateSubscribers($thresholdDate, $batchSize, $startId);
+  }
+
+  /**
+   * @param int $daysToInactive
+   * @param int $batchSize
    * @return int
    */
-  function markActiveSubscribers($days_to_inactive, $batch_size) {
-    $threshold_date = $this->getThresholdDate($days_to_inactive);
-    return $this->activateSubscribers($threshold_date, $batch_size);
+  public function markActiveSubscribers($daysToInactive, $batchSize) {
+    $thresholdDate = $this->getThresholdDate($daysToInactive);
+    return $this->activateSubscribers($thresholdDate, $batchSize);
   }
 
   /**
    * @return void
    */
-  function reactivateInactiveSubscribers() {
-    $reactivate_all_inactive_query = sprintf(
+  public function reactivateInactiveSubscribers() {
+    $reactivateAllInactiveQuery = sprintf(
       "UPDATE %s SET status = '%s' WHERE status = '%s';",
       Subscriber::$_table, Subscriber::STATUS_SUBSCRIBED, Subscriber::STATUS_INACTIVE
     );
-    \ORM::rawExecute($reactivate_all_inactive_query);
+    ORM::rawExecute($reactivateAllInactiveQuery);
   }
 
   /**
-   * @param int $days_to_inactive
+   * @param int $daysToInactive
    * @return Carbon
    */
-  private function getThresholdDate($days_to_inactive) {
+  private function getThresholdDate($daysToInactive) {
     $now = new Carbon();
-    return $now->subDays($days_to_inactive);
+    return $now->subDays($daysToInactive);
   }
 
   /**
-   * @param Carbon $threshold_date
-   * @param int $batch_size
-   * @return int
+   * @param Carbon $thresholdDate
+   * @param int $batchSize
+   * @return int|bool
    */
-  private function deactivateSubscribers(Carbon $threshold_date, $batch_size) {
-    $subscribers_table = Subscriber::$_table;
-    $scheduled_tasks_table = ScheduledTask::$_table;
-    $scheduled_task_subcribres_table = ScheduledTaskSubscriber::$_table;
-    $statistics_opens_table = StatisticsOpens::$_table;
-    $sending_queues_table = SendingQueue::$_table;
+  private function deactivateSubscribers(Carbon $thresholdDate, $batchSize, $startId = null) {
+    $subscribersTable = Subscriber::$_table;
+    $scheduledTasksTable = ScheduledTask::$_table;
+    $scheduledTaskSubcribresTable = ScheduledTaskSubscriber::$_table;
+    $statisticsOpensTable = StatisticsOpens::$_table;
+    $sendingQueuesTable = SendingQueue::$_table;
 
-    $threshold_date_iso = $threshold_date->toIso8601String();
-    $day_ago = new Carbon();
-    $day_ago_iso = $day_ago->subDay()->toIso8601String();
-
-    // We take into account only emails which have at least one opening tracked
-    // to ensure that tracking was enabled for the particular email
-    $scheduled_task_ids_query = sprintf("
-      SELECT task_id as id FROM $sending_queues_table as sq
-        JOIN (SELECT newsletter_id as id FROM $statistics_opens_table as so WHERE so.created_at > '%s' GROUP BY newsletter_id) newsletters_ids ON newsletters_ids.id = sq.newsletter_id
-        JOIN $scheduled_tasks_table as st ON sq.task_id = st.id AND st.processed_at > '%s' AND st.processed_at < '%s'
-      GROUP BY task_id",
-      $threshold_date_iso, $threshold_date_iso, $day_ago_iso
-    );
+    $thresholdDateIso = $thresholdDate->toDateTimeString();
+    $dayAgo = new Carbon();
+    $dayAgoIso = $dayAgo->subDay()->toDateTimeString();
 
     // If MP2 migration occurred during detection interval we can't deactivate subscribers
     // because they are imported with original subscription date but they were not present in a list for whole period
-    $mp2_migration_date = $this->getMP2MigrationDate();
-    if ($mp2_migration_date && $mp2_migration_date > $threshold_date) {
-      return 0;
+    $mp2MigrationDate = $this->getMP2MigrationDate();
+    if ($mp2MigrationDate && $mp2MigrationDate > $thresholdDate) {
+      return false;
+    }
+
+    // We take into account only emails which have at least one opening tracked
+    // to ensure that tracking was enabled for the particular email
+    if (!$this->inactivesTaskIdsTableCreated) {
+      $inactivesTaskIdsTable = sprintf("
+      CREATE TEMPORARY TABLE IF NOT EXISTS inactives_task_ids
+      (INDEX task_id_ids (id))
+      SELECT DISTINCT task_id as id FROM $sendingQueuesTable as sq
+        JOIN $scheduledTasksTable as st ON sq.task_id = st.id
+        WHERE st.processed_at > '%s'
+        AND st.processed_at < '%s'
+        AND EXISTS (
+          SELECT 1
+          FROM $statisticsOpensTable as so
+          WHERE so.created_at > '%s'
+          AND so.newsletter_id = sq.newsletter_id
+        )",
+        $thresholdDateIso, $dayAgoIso, $thresholdDateIso
+      );
+      ORM::rawExecute($inactivesTaskIdsTable);
+      $this->inactivesTaskIdsTableCreated = true;
     }
 
     // Select subscribers who received a recent tracked email but didn't open it
-    $ids_to_deactivate = \ORM::forTable($subscribers_table)->rawQuery("
-      SELECT s.id FROM $subscribers_table as s
-        JOIN $scheduled_task_subcribres_table as sts ON s.id = sts.subscriber_id
-        JOIN ($scheduled_task_ids_query) task_ids ON task_ids.id = sts.task_id
-        LEFT OUTER JOIN $statistics_opens_table as so ON s.id = so.subscriber_id AND so.created_at > ?
-      WHERE s.created_at < ? AND (s.confirmed_at IS NULL OR s.confirmed_at < ?) AND s.status = ? AND so.id IS NULL
-      GROUP BY s.id LIMIT ?",
-      [$threshold_date_iso, $threshold_date_iso, $threshold_date_iso, Subscriber::STATUS_SUBSCRIBED, $batch_size]
+    $startId = (int)$startId;
+    $endId = $startId + $batchSize;
+    $inactiveSubscriberIdsTmpTable = 'inactive_subscriber_ids';
+    ORM::rawExecute("
+      CREATE TEMPORARY TABLE IF NOT EXISTS $inactiveSubscriberIdsTmpTable
+      (UNIQUE subscriber_id (id))
+      SELECT DISTINCT s.id FROM $subscribersTable as s
+        JOIN $scheduledTaskSubcribresTable as sts USE INDEX (subscriber_id) ON s.id = sts.subscriber_id
+        JOIN inactives_task_ids task_ids ON task_ids.id = sts.task_id
+      WHERE s.last_subscribed_at < ? AND s.status = ? AND s.id >= ? AND s.id < ?",
+      [$thresholdDateIso, Subscriber::STATUS_SUBSCRIBED, $startId, $endId]
+    );
+
+    $idsToDeactivate = ORM::forTable($inactiveSubscriberIdsTmpTable)->rawQuery("
+      SELECT s.id FROM $inactiveSubscriberIdsTmpTable s
+        LEFT OUTER JOIN $statisticsOpensTable as so ON s.id = so.subscriber_id AND so.created_at > ?
+        WHERE so.id IS NULL",
+      [$thresholdDateIso]
     )->findArray();
 
-    $ids_to_deactivate = array_map(
+    ORM::rawExecute("DROP TABLE $inactiveSubscriberIdsTmpTable");
+
+    $idsToDeactivate = array_map(
       function ($id) {
         return (int)$id['id'];
       },
-      $ids_to_deactivate
+      $idsToDeactivate
     );
-    if (!count($ids_to_deactivate)) {
+    if (!count($idsToDeactivate)) {
       return 0;
     }
-    \ORM::rawExecute(sprintf(
+    ORM::rawExecute(sprintf(
       "UPDATE %s SET status='" . Subscriber::STATUS_INACTIVE . "' WHERE id IN (%s);",
-      $subscribers_table,
-      implode(',', $ids_to_deactivate)
+      $subscribersTable,
+      implode(',', $idsToDeactivate)
     ));
-    return count($ids_to_deactivate);
+    return count($idsToDeactivate);
   }
 
   /**
-   * @param Carbon $threshold_date
-   * @param int $batch_size
+   * @param Carbon $thresholdDate
+   * @param int $batchSize
    * @return int
    */
-  private function activateSubscribers(Carbon $threshold_date, $batch_size) {
-    $subscribers_table = Subscriber::$_table;
-    $stats_opens_table = StatisticsOpens::$_table;
+  private function activateSubscribers(Carbon $thresholdDate, $batchSize) {
+    $subscribersTable = Subscriber::$_table;
+    $statsOpensTable = StatisticsOpens::$_table;
 
-    $mp2_migration_date = $this->getMP2MigrationDate();
-    if ($mp2_migration_date && $mp2_migration_date > $threshold_date) {
+    $mp2MigrationDate = $this->getMP2MigrationDate();
+    if ($mp2MigrationDate && $mp2MigrationDate > $thresholdDate) {
       // If MP2 migration occurred during detection interval re-activate all subscribers created before migration
-      $ids_to_activate = \ORM::forTable($subscribers_table)->select("$subscribers_table.id")
-        ->whereLt("$subscribers_table.created_at", $mp2_migration_date)
-        ->where("$subscribers_table.status", Subscriber::STATUS_INACTIVE)
-        ->limit($batch_size)
+      $idsToActivate = ORM::forTable($subscribersTable)->select("$subscribersTable.id")
+        ->whereLt("$subscribersTable.created_at", $mp2MigrationDate)
+        ->where("$subscribersTable.status", Subscriber::STATUS_INACTIVE)
+        ->limit($batchSize)
         ->findArray();
     } else {
-      $ids_to_activate = \ORM::forTable($subscribers_table)->select("$subscribers_table.id")
-        ->leftOuterJoin($stats_opens_table, "$subscribers_table.id = $stats_opens_table.subscriber_id AND $stats_opens_table.created_at > '$threshold_date'")
-        ->whereLt("$subscribers_table.created_at", $threshold_date)
-        ->where("$subscribers_table.status", Subscriber::STATUS_INACTIVE)
-        ->whereRaw("$stats_opens_table.id IS NOT NULL")
-        ->limit($batch_size)
-        ->groupByExpr("$subscribers_table.id")
+      $idsToActivate = ORM::forTable($subscribersTable)->select("$subscribersTable.id")
+        ->leftOuterJoin($statsOpensTable, "$subscribersTable.id = $statsOpensTable.subscriber_id AND $statsOpensTable.created_at > '$thresholdDate'")
+        ->whereLt("$subscribersTable.last_subscribed_at", $thresholdDate)
+        ->where("$subscribersTable.status", Subscriber::STATUS_INACTIVE)
+        ->whereRaw("$statsOpensTable.id IS NOT NULL")
+        ->limit($batchSize)
+        ->groupByExpr("$subscribersTable.id")
         ->findArray();
     }
 
-    $ids_to_activate = array_map(
+    $idsToActivate = array_map(
       function($id) {
         return (int)$id['id'];
-      }, $ids_to_activate
+      }, $idsToActivate
     );
-    if (!count($ids_to_activate)) {
+    if (!count($idsToActivate)) {
       return 0;
     }
-    \ORM::rawExecute(sprintf(
+    ORM::rawExecute(sprintf(
       "UPDATE %s SET status='" . Subscriber::STATUS_SUBSCRIBED . "' WHERE id IN (%s);",
-      $subscribers_table,
-      implode(',', $ids_to_activate)
+      $subscribersTable,
+      implode(',', $idsToActivate)
     ));
-    return count($ids_to_activate);
+    return count($idsToActivate);
   }
 
   private function getMP2MigrationDate() {
-    $migration_complete = Setting::where('name', MP2Migrator::MIGRATION_COMPLETE_SETTING_KEY)->findOne();
-    if ($migration_complete === false) {
-      return null;
-    }
-    return new Carbon($migration_complete->created_at);
+    $setting = $this->settingsRepository->findOneByName(MP2Migrator::MIGRATION_COMPLETE_SETTING_KEY);
+    return $setting ? Carbon::instance($setting->getCreatedAt()) : null;
   }
 }

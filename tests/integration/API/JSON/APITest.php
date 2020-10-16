@@ -5,6 +5,8 @@ namespace MailPoet\Test\API\JSON;
 use Codeception\Stub;
 use Codeception\Stub\Expected;
 use MailPoet\API\JSON\API as JSONAPI;
+use MailPoet\API\JSON\Endpoint;
+use MailPoet\API\JSON\ErrorHandler;
 use MailPoet\API\JSON\Response;
 use MailPoet\API\JSON\Response as APIResponse;
 use MailPoet\API\JSON\SuccessResponse;
@@ -12,10 +14,10 @@ use MailPoet\API\JSON\v1\APITestNamespacedEndpointStubV1;
 use MailPoet\API\JSON\v2\APITestNamespacedEndpointStubV2;
 use MailPoet\Config\AccessControl;
 use MailPoet\DI\ContainerConfigurator;
-use MailPoet\Settings\SettingsController;
-use MailPoetVendor\Symfony\Component\DependencyInjection\Container;
 use MailPoet\DI\ContainerFactory;
+use MailPoet\Settings\SettingsController;
 use MailPoet\WP\Functions as WPFunctions;
+use MailPoetVendor\Symfony\Component\DependencyInjection\Container;
 
 // required to be able to use wp_delete_user()
 require_once(ABSPATH . 'wp-admin/includes/user.php');
@@ -23,38 +25,45 @@ require_once('APITestNamespacedEndpointStubV1.php');
 require_once('APITestNamespacedEndpointStubV2.php');
 
 class APITest extends \MailPoetTest {
+  public $api;
+  public $wpUserId;
   /** @var Container */
   private $container;
+
+  /** @var ErrorHandler */
+  private $errorHandler;
 
   /** @var SettingsController */
   private $settings;
 
-  function _before() {
+  public function _before() {
     parent::_before();
     // create WP user
-    $this->wp_user_id = null;
-    $wp_user_id = wp_create_user('WP User', 'pass', 'wp_user@mailpoet.com');
-    if (is_wp_error($wp_user_id)) {
+    $this->wpUserId = null;
+    $wpUserId = wp_create_user('WP User', 'pass', 'wp_user@mailpoet.com');
+    if (is_wp_error($wpUserId)) {
       // user already exists
-      $this->wp_user_id = email_exists('wp_user@mailpoet.com');
+      $this->wpUserId = email_exists('wp_user@mailpoet.com');
     } else {
-      $this->wp_user_id = $wp_user_id;
+      $this->wpUserId = $wpUserId;
     }
-    $container_factory = new ContainerFactory(new ContainerConfigurator());
-    $this->container = $container_factory->getConfiguredContainer();
+    $containerFactory = new ContainerFactory(new ContainerConfigurator());
+    $this->container = $containerFactory->getConfiguredContainer();
     $this->container->autowire(APITestNamespacedEndpointStubV1::class)->setPublic(true);
     $this->container->autowire(APITestNamespacedEndpointStubV2::class)->setPublic(true);
     $this->container->compile();
+    $this->errorHandler = $this->container->get(ErrorHandler::class);
     $this->settings = $this->container->get(SettingsController::class);
     $this->api = new \MailPoet\API\JSON\API(
       $this->container,
       $this->container->get(AccessControl::class),
+      $this->errorHandler,
       $this->settings,
       new WPFunctions
     );
   }
 
-  function testItCallsAPISetupAction() {
+  public function testItCallsAPISetupAction() {
     $called = false;
     (new WPFunctions)->addAction(
       'mailpoet_api_setup',
@@ -76,7 +85,7 @@ class APITest extends \MailPoetTest {
     expect($called)->true();
   }
 
-  function testItCanAddEndpointNamespaces() {
+  public function testItCanAddEndpointNamespaces() {
     expect($this->api->getEndpointNamespaces())->count(1);
 
     $namespace = [
@@ -90,17 +99,17 @@ class APITest extends \MailPoetTest {
     expect($namespaces[$namespace['version']][0])->equals($namespace['name']);
   }
 
-  function testItReturns400ErrorWhenAPIVersionIsNotSpecified() {
+  public function testItReturns400ErrorWhenAPIVersionIsNotSpecified() {
     $data = [
       'endpoint' => 'a_p_i_test_namespaced_endpoint_stub_v1',
       'method' => 'test',
     ];
 
-    $response = $this->api->setRequestData($data);
+    $response = $this->api->setRequestData($data, Endpoint::TYPE_POST);
     expect($response->status)->equals(APIResponse::STATUS_BAD_REQUEST);
   }
 
-  function testItAcceptsAndProcessesAPIVersion() {
+  public function testItAcceptsAndProcessesAPIVersion() {
     $namespace = [
       'name' => 'MailPoet\API\JSON\v2',
       'version' => 'v2',
@@ -112,7 +121,7 @@ class APITest extends \MailPoetTest {
       'api_version' => 'v2',
       'method' => 'test',
     ];
-    $this->api->setRequestData($data);
+    $this->api->setRequestData($data, Endpoint::TYPE_POST);
 
     expect($this->api->getRequestedAPIVersion())->equals('v2');
     expect($this->api->getRequestedEndpointClass())->equals(
@@ -120,7 +129,7 @@ class APITest extends \MailPoetTest {
     );
   }
 
-  function testItCallsAddedEndpoints() {
+  public function testItCallsAddedEndpoints() {
     $namespace = [
       'name' => 'MailPoet\API\JSON\v1',
       'version' => 'v1',
@@ -133,13 +142,32 @@ class APITest extends \MailPoetTest {
       'api_version' => 'v1',
       'data' => ['test' => 'data'],
     ];
-    $this->api->setRequestData($data);
+    $this->api->setRequestData($data, Endpoint::TYPE_POST);
     $response = $this->api->processRoute();
 
     expect($response->getData()['data'])->equals($data['data']);
   }
 
-  function testItCallsAddedEndpointsForSpecificAPIVersion() {
+  public function testItConvertsExceptionToErrorResponse() {
+    $namespace = [
+      'name' => 'MailPoet\API\JSON\v1',
+      'version' => 'v1',
+    ];
+    $this->api->addEndpointNamespace($namespace['name'], $namespace['version']);
+
+    $data = [
+      'endpoint' => 'a_p_i_test_namespaced_endpoint_stub_v1',
+      'method' => 'testBadRequest',
+      'api_version' => 'v1',
+      'data' => ['test' => 'data'],
+    ];
+    $this->api->setRequestData($data, Endpoint::TYPE_POST);
+    $response = $this->api->processRoute();
+
+    expect($response->errors)->equals([['error' => 'key', 'message' => 'value']]);
+  }
+
+  public function testItCallsAddedEndpointsForSpecificAPIVersion() {
     $namespace = [
       'name' => 'MailPoet\API\JSON\v2',
       'version' => 'v2',
@@ -151,12 +179,12 @@ class APITest extends \MailPoetTest {
       'api_version' => 'v2',
       'method' => 'testVersion',
     ];
-    $this->api->setRequestData($data);
+    $this->api->setRequestData($data, Endpoint::TYPE_POST);
     $response = $this->api->processRoute();
     expect($response->getData()['data'])->equals($data['api_version']);
   }
 
-  function testItValidatesPermissionBeforeProcessingEndpointMethod() {
+  public function testItValidatesPermissionBeforeProcessingEndpointMethod() {
     $namespace = [
       'name' => 'MailPoet\API\JSON\v1',
       'version' => 'v1',
@@ -187,12 +215,12 @@ class APITest extends \MailPoetTest {
       ]
     );
     $api->addEndpointNamespace($namespace['name'], $namespace['version']);
-    $api->setRequestData($data);
+    $api->setRequestData($data, Endpoint::TYPE_POST);
     $response = $api->processRoute();
     expect($response->getData()['data'])->equals($data['data']);
   }
 
-  function testItReturnsForbiddenResponseWhenPermissionFailsValidation() {
+  public function testItReturnsForbiddenResponseWhenPermissionFailsValidation() {
     $namespace = [
       'name' => 'MailPoet\API\JSON\v1',
       'version' => 'v1',
@@ -203,25 +231,25 @@ class APITest extends \MailPoetTest {
       'api_version' => 'v1',
       'data' => ['test' => 'data'],
     ];
-    $access_control = Stub::make(
-      new AccessControl(new WPFunctions()),
+    $accessControl = Stub::make(
+      new AccessControl(),
       ['validatePermission' => false]
     );
 
-    $api = new JSONAPI($this->container, $access_control, $this->settings, new WPFunctions);
+    $api = new JSONAPI($this->container, $accessControl, $this->errorHandler, $this->settings, new WPFunctions);
     $api->addEndpointNamespace($namespace['name'], $namespace['version']);
-    $api->setRequestData($data);
+    $api->setRequestData($data, Endpoint::TYPE_POST);
     $response = $api->processRoute();
     expect($response->status)->equals(Response::STATUS_FORBIDDEN);
   }
 
-  function testItValidatesGlobalPermission() {
+  public function testItValidatesGlobalPermission() {
     $permissions = [
       'global' => AccessControl::PERMISSION_MANAGE_SETTINGS,
     ];
 
-    $access_control = Stub::make(
-      new AccessControl(new WPFunctions()),
+    $accessControl = Stub::make(
+      new AccessControl(),
       [
         'validatePermission' => Expected::once(function($cap) {
           expect($cap)->equals(AccessControl::PERMISSION_MANAGE_SETTINGS);
@@ -230,11 +258,11 @@ class APITest extends \MailPoetTest {
       ]
     );
 
-    $api = new JSONAPI($this->container, $access_control, $this->settings, new WPFunctions);
+    $api = new JSONAPI($this->container, $accessControl, $this->errorHandler, $this->settings, new WPFunctions);
     expect($api->validatePermissions(null, $permissions))->false();
 
-    $access_control = Stub::make(
-      new AccessControl(new WPFunctions()),
+    $accessControl = Stub::make(
+      new AccessControl(),
       [
         'validatePermission' => Expected::once(function($cap) {
           expect($cap)->equals(AccessControl::PERMISSION_MANAGE_SETTINGS);
@@ -242,11 +270,11 @@ class APITest extends \MailPoetTest {
         }),
       ]
     );
-    $api = new JSONAPI($this->container, $access_control, $this->settings, new WPFunctions);
+    $api = new JSONAPI($this->container, $accessControl, $this->errorHandler, $this->settings, new WPFunctions);
     expect($api->validatePermissions(null, $permissions))->true();
   }
 
-  function testItValidatesEndpointMethodPermission() {
+  public function testItValidatesEndpointMethodPermission() {
     $permissions = [
       'global' => null,
       'methods' => [
@@ -254,8 +282,8 @@ class APITest extends \MailPoetTest {
       ],
     ];
 
-    $access_control = Stub::make(
-      new AccessControl(new WPFunctions()),
+    $accessControl = Stub::make(
+      new AccessControl(),
       [
         'validatePermission' => Expected::once(function($cap) {
           expect($cap)->equals(AccessControl::PERMISSION_MANAGE_SETTINGS);
@@ -264,11 +292,11 @@ class APITest extends \MailPoetTest {
       ]
     );
 
-    $api = new JSONAPI($this->container, $access_control, $this->settings, new WPFunctions);
+    $api = new JSONAPI($this->container, $accessControl, $this->errorHandler, $this->settings, new WPFunctions);
     expect($api->validatePermissions('test', $permissions))->false();
 
-    $access_control = Stub::make(
-      new AccessControl(new WPFunctions()),
+    $accessControl = Stub::make(
+      new AccessControl(),
       [
         'validatePermission' => Expected::once(function($cap) {
           expect($cap)->equals(AccessControl::PERMISSION_MANAGE_SETTINGS);
@@ -277,11 +305,11 @@ class APITest extends \MailPoetTest {
       ]
     );
 
-    $api = new JSONAPI($this->container, $access_control, $this->settings, new WPFunctions);
+    $api = new JSONAPI($this->container, $accessControl, $this->errorHandler, $this->settings, new WPFunctions);
     expect($api->validatePermissions('test', $permissions))->true();
   }
 
-  function testItThrowsExceptionWhenInvalidEndpointMethodIsCalled() {
+  public function testItThrowsExceptionWhenInvalidEndpointMethodIsCalled() {
     $namespace = [
       'name' => 'MailPoet\API\JSON\v2',
       'version' => 'v2',
@@ -293,14 +321,14 @@ class APITest extends \MailPoetTest {
       'api_version' => 'v2',
       'method' => 'fakeMethod',
     ];
-    $this->api->setRequestData($data);
+    $this->api->setRequestData($data, Endpoint::TYPE_POST);
     $response = $this->api->processRoute();
 
     expect($response->status)->equals(Response::STATUS_BAD_REQUEST);
     expect($response->errors[0]['message'])->equals('Invalid API endpoint method.');
   }
 
-  function _after() {
-    wp_delete_user($this->wp_user_id);
+  public function _after() {
+    wp_delete_user($this->wpUserId);
   }
 }

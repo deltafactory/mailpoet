@@ -7,8 +7,6 @@ use MailPoet\Config\AccessControl;
 use MailPoet\WP\Functions as WPFunctions;
 use MailPoet\WP\Posts as WPPosts;
 
-if (!defined('ABSPATH')) exit;
-
 class AutomatedLatestContent extends APIEndpoint {
   /** @var \MailPoet\Newsletter\AutomatedLatestContent  */
   public $ALC;
@@ -17,33 +15,33 @@ class AutomatedLatestContent extends APIEndpoint {
     'global' => AccessControl::PERMISSION_MANAGE_EMAILS,
   ];
 
-  function __construct(\MailPoet\Newsletter\AutomatedLatestContent $alc, WPFunctions $wp) {
+  public function __construct(\MailPoet\Newsletter\AutomatedLatestContent $alc, WPFunctions $wp) {
     $this->ALC = $alc;
     $this->wp = $wp;
   }
 
-  function getPostTypes() {
-    $post_types = array_map(function($post_type) {
+  public function getPostTypes() {
+    $postTypes = array_map(function($postType) {
       return [
-        'name' => $post_type->name,
-        'label' => $post_type->label,
+        'name' => $postType->name,
+        'label' => $postType->label,
       ];
     }, WPPosts::getTypes([], 'objects'));
     return $this->successResponse(
-      array_filter($post_types)
+      array_filter($postTypes)
     );
   }
 
-  function getTaxonomies($data = []) {
-    $post_type = (isset($data['postType'])) ? $data['postType'] : 'post';
-    $all_taxonomies = WPFunctions::get()->getObjectTaxonomies($post_type, 'objects');
-    $taxonomies_with_label = array_filter($all_taxonomies, function($taxonomy) {
+  public function getTaxonomies($data = []) {
+    $postType = (isset($data['postType'])) ? $data['postType'] : 'post';
+    $allTaxonomies = WPFunctions::get()->getObjectTaxonomies($postType, 'objects');
+    $taxonomiesWithLabel = array_filter($allTaxonomies, function($taxonomy) {
       return $taxonomy->label;
     });
-    return $this->successResponse($taxonomies_with_label);
+    return $this->successResponse($taxonomiesWithLabel);
   }
 
-  function getTerms($data = []) {
+  public function getTerms($data = []) {
     $taxonomies = (isset($data['taxonomies'])) ? $data['taxonomies'] : [];
     $search = (isset($data['search'])) ? $data['search'] : '';
     $limit = (isset($data['limit'])) ? (int)$data['limit'] : 100;
@@ -64,32 +62,32 @@ class AutomatedLatestContent extends APIEndpoint {
     return $this->successResponse(array_values($terms));
   }
 
-  function getPosts($data = []) {
+  public function getPosts($data = []) {
     return $this->successResponse(
       $this->ALC->getPosts($data)
     );
   }
 
-  function getTransformedPosts($data = []) {
+  public function getTransformedPosts($data = []) {
     $posts = $this->ALC->getPosts($data);
     return $this->successResponse(
       $this->ALC->transformPosts($data, $posts)
     );
   }
 
-  function getBulkTransformedPosts($data = []) {
-    $used_posts = [];
-    $rendered_posts = [];
+  public function getBulkTransformedPosts($data = []) {
+    $usedPosts = [];
+    $renderedPosts = [];
 
     foreach ($data['blocks'] as $block) {
-      $posts = $this->ALC->getPosts($block, $used_posts);
-      $rendered_posts[] = $this->ALC->transformPosts($block, $posts);
+      $posts = $this->ALC->getPosts($block, $usedPosts);
+      $renderedPosts[] = $this->ALC->transformPosts($block, $posts);
 
       foreach ($posts as $post) {
-        $used_posts[] = $post->ID;
+        $usedPosts[] = $post->ID;
       }
     }
 
-    return $this->successResponse($rendered_posts);
+    return $this->successResponse($renderedPosts);
   }
 }

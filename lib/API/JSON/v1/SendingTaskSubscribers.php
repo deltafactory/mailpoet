@@ -2,19 +2,17 @@
 
 namespace MailPoet\API\JSON\v1;
 
-use MailPoet\Listing;
+use MailPoet\API\JSON\Endpoint as APIEndpoint;
+use MailPoet\API\JSON\Error as APIError;
+use MailPoet\Config\AccessControl;
 use MailPoet\Cron\CronHelper;
+use MailPoet\Listing;
 use MailPoet\Models\Newsletter;
 use MailPoet\Models\ScheduledTask;
-use MailPoet\Config\AccessControl;
-use MailPoet\API\JSON\Error as APIError;
+use MailPoet\Models\ScheduledTaskSubscriber;
+use MailPoet\Models\SendingQueue as SendingQueueModel;
 use MailPoet\Settings\SettingsController;
 use MailPoet\WP\Functions as WPFunctions;
-use MailPoet\Models\ScheduledTaskSubscriber;
-use MailPoet\API\JSON\Endpoint as APIEndpoint;
-use MailPoet\Models\SendingQueue as SendingQueueModel;
-
-if (!defined('ABSPATH')) exit;
 
 class SendingTaskSubscribers extends APIEndpoint {
   public $permissions = [
@@ -22,72 +20,87 @@ class SendingTaskSubscribers extends APIEndpoint {
   ];
 
   /** @var Listing\Handler */
-  private $listing_handler;
+  private $listingHandler;
 
   /** @var SettingsController */
   private $settings;
 
+  /** @var CronHelper */
+  private $cronHelper;
+
   /** @var WPFunctions */
   private $wp;
 
-  function __construct(
-    Listing\Handler $listing_handler,
+  public function __construct(
+    Listing\Handler $listingHandler,
     SettingsController $settings,
+    CronHelper $cronHelper,
     WPFunctions $wp
   ) {
-    $this->listing_handler = $listing_handler;
+    $this->listingHandler = $listingHandler;
     $this->settings = $settings;
+    $this->cronHelper = $cronHelper;
     $this->wp = $wp;
   }
 
-  function listing($data = []) {
-    $newsletter_id = !empty($data['params']['id']) ? (int)$data['params']['id'] : false;
-    $tasks_ids = SendingQueueModel::select('task_id')
-      ->where('newsletter_id', $newsletter_id)
+  public function listing($data = []) {
+    $newsletterId = !empty($data['params']['id']) ? (int)$data['params']['id'] : false;
+    $tasksIds = SendingQueueModel::select('task_id')
+      ->where('newsletter_id', $newsletterId)
       ->findArray();
-    if (empty($tasks_ids)) {
+    if (empty($tasksIds)) {
       return $this->errorResponse([
         APIError::NOT_FOUND => __('This email has not been sent yet.', 'mailpoet'),
       ]);
     }
-    $data['params']['task_ids'] = array_column($tasks_ids, 'task_id');
-    $listing_data = $this->listing_handler->get('\MailPoet\Models\ScheduledTaskSubscriber', $data);
+    $data['params']['task_ids'] = array_column($tasksIds, 'task_id');
+    $listingData = $this->listingHandler->get('\MailPoet\Models\ScheduledTaskSubscriber', $data);
 
     $items = [];
-    foreach ($listing_data['items'] as $item) {
+    foreach ($listingData['items'] as $item) {
       $items[] = $item->asArray();
     }
 
     return $this->successResponse($items, [
-      'count' => $listing_data['count'],
-      'filters' => $listing_data['filters'],
-      'groups' => $listing_data['groups'],
+      'count' => $listingData['count'],
+      'filters' => $listingData['filters'],
+      'groups' => $listingData['groups'],
       'mta_log' => $this->settings->get('mta_log'),
       'mta_method' => $this->settings->get('mta.method'),
-      'cron_accessible' => CronHelper::isDaemonAccessible(),
+      'cron_accessible' => $this->cronHelper->isDaemonAccessible(),
       'current_time' => $this->wp->currentTime('mysql'),
     ]);
   }
 
-  function resend($data = []) {
-    $task_id = !empty($data['taskId']) ? (int)$data['taskId'] : false;
-    $subscriber_id = !empty($data['subscriberId']) ? (int)$data['subscriberId'] : false;
-    $task_subscriber = ScheduledTaskSubscriber::where('task_id', $task_id)
-      ->where('subscriber_id', $subscriber_id)
+  public function resend($data = []) {
+    $taskId = !empty($data['taskId']) ? (int)$data['taskId'] : false;
+    $subscriberId = !empty($data['subscriberId']) ? (int)$data['subscriberId'] : false;
+    $taskSubscriber = ScheduledTaskSubscriber::where('task_id', $taskId)
+      ->where('subscriber_id', $subscriberId)
       ->findOne();
-    $task = ScheduledTask::findOne($task_id);
-    $sending_queue = SendingQueueModel::where('task_id', $task_id)->findOne();
-    if (!$task || !$task_subscriber || !$sending_queue || $task_subscriber->failed != 1) {
+    $task = ScheduledTask::findOne($taskId);
+    $sendingQueue = SendingQueueModel::where('task_id', $taskId)->findOne();
+    if (
+      !($task instanceof ScheduledTask)
+      || !($taskSubscriber instanceof ScheduledTaskSubscriber)
+      || !($sendingQueue instanceof SendingQueueModel)
+      || $taskSubscriber->failed != 1
+    ) {
       return $this->errorResponse([
         APIError::NOT_FOUND => __('Failed sending task not found!', 'mailpoet'),
       ]);
     }
-    $newsletter = Newsletter::findOne($sending_queue->newsletter_id);
+    $newsletter = Newsletter::findOne($sendingQueue->newsletterId);
+    if (!($newsletter instanceof Newsletter)) {
+      return $this->errorResponse([
+        APIError::NOT_FOUND => __('Newsletter not found!', 'mailpoet'),
+      ]);
+    }
 
-    $task_subscriber->error = '';
-    $task_subscriber->failed = 0;
-    $task_subscriber->processed = 0;
-    $task_subscriber->save();
+    $taskSubscriber->error = '';
+    $taskSubscriber->failed = 0;
+    $taskSubscriber->processed = 0;
+    $taskSubscriber->save();
 
     $task->status = null;
     $task->save();

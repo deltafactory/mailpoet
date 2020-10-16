@@ -4,107 +4,114 @@ namespace MailPoet\Newsletter\Shortcodes\Categories;
 
 use MailPoet\Newsletter\Url as NewsletterUrl;
 use MailPoet\Settings\SettingsController;
-use MailPoet\Statistics\Track\Unsubscribes;
-use MailPoet\Subscription\Url as SubscriptionUrl;
+use MailPoet\Subscription\SubscriptionUrlFactory;
+use MailPoet\Tasks\Sending;
 use MailPoet\WP\Functions as WPFunctions;
 
 class Link {
   const CATEGORY_NAME = 'link';
 
-  static function process(
-    $shortcode_details,
+  public static function process(
+    $shortcodeDetails,
     $newsletter,
     $subscriber,
     $queue,
     $content,
-    $wp_user_preview
+    $wpUserPreview
   ) {
-    switch ($shortcode_details['action']) {
+    $subscriptionUrlFactory = SubscriptionUrlFactory::getInstance();
+
+    switch ($shortcodeDetails['action']) {
       case 'subscription_unsubscribe_url':
         return self::processUrl(
-          $shortcode_details['action'],
-          SubscriptionUrl::getUnsubscribeUrl($wp_user_preview ? null : $subscriber),
+          $shortcodeDetails['action'],
+          $subscriptionUrlFactory->getConfirmUnsubscribeUrl($wpUserPreview ? null : $subscriber, self::getSendingQueueId($queue)),
           $queue,
-          $wp_user_preview
+          $wpUserPreview
+        );
+
+      case 'subscription_instant_unsubscribe_url':
+        return self::processUrl(
+          $shortcodeDetails['action'],
+          $subscriptionUrlFactory->getUnsubscribeUrl($wpUserPreview ? null : $subscriber, self::getSendingQueueId($queue)),
+          $queue,
+          $wpUserPreview
         );
 
       case 'subscription_manage_url':
         return self::processUrl(
-          $shortcode_details['action'],
-          SubscriptionUrl::getManageUrl($wp_user_preview ? null : $subscriber),
+          $shortcodeDetails['action'],
+          $subscriptionUrlFactory->getManageUrl($wpUserPreview ? null : $subscriber),
           $queue,
-          $wp_user_preview
+          $wpUserPreview
         );
 
       case 'newsletter_view_in_browser_url':
         $url = NewsletterUrl::getViewInBrowserUrl(
-          $type = null,
           $newsletter,
-          $wp_user_preview ? false : $subscriber,
+          $wpUserPreview ? null : $subscriber,
           $queue,
-          $wp_user_preview
+          $wpUserPreview
         );
-        return self::processUrl($shortcode_details['action'], $url, $queue, $wp_user_preview);
+        return self::processUrl($shortcodeDetails['action'], $url, $queue, $wpUserPreview);
 
       default:
-        $shortcode = self::getFullShortcode($shortcode_details['action']);
+        $shortcode = self::getFullShortcode($shortcodeDetails['action']);
         $url = WPFunctions::get()->applyFilters(
           'mailpoet_newsletter_shortcode_link',
           $shortcode,
           $newsletter,
           $subscriber,
           $queue,
-          $wp_user_preview
+          $wpUserPreview
         );
         return ($url !== $shortcode) ?
-          self::processUrl($shortcode_details['action'], $url, $queue, $wp_user_preview) :
+          self::processUrl($shortcodeDetails['action'], $url, $queue, $wpUserPreview) :
           false;
     }
   }
 
-  static function processUrl($action, $url, $queue, $wp_user_preview = false) {
-    if ($wp_user_preview) return $url;
-    $settings = new SettingsController();
+  public static function processUrl($action, $url, $queue, $wpUserPreview = false) {
+    if ($wpUserPreview) return $url;
+    $settings = SettingsController::getInstance();
     return ($queue !== false && (boolean)$settings->get('tracking.enabled')) ?
       self::getFullShortcode($action) :
       $url;
   }
 
-  static function processShortcodeAction(
-    $shortcode_action, $newsletter, $subscriber, $queue, $wp_user_preview
+  public static function processShortcodeAction(
+    $shortcodeAction, $newsletter, $subscriber, $queue, $wpUserPreview
   ) {
-    switch ($shortcode_action) {
+    $subscriptionUrlFactory = SubscriptionUrlFactory::getInstance();
+    switch ($shortcodeAction) {
       case 'subscription_unsubscribe_url':
-        $settings = new SettingsController();
-        // track unsubscribe event
-        if ((boolean)$settings->get('tracking.enabled') && !$wp_user_preview) {
-          $unsubscribe_event = new Unsubscribes();
-          $unsubscribe_event->track($newsletter->id, $subscriber->id, $queue->id);
-        }
-        $url = SubscriptionUrl::getUnsubscribeUrl($subscriber);
+        $url = $subscriptionUrlFactory->getConfirmUnsubscribeUrl($subscriber, self::getSendingQueueId($queue));
+        break;
+      case 'subscription_instant_unsubscribe_url':
+        $url = $subscriptionUrlFactory->getUnsubscribeUrl($subscriber, self::getSendingQueueId($queue));
         break;
       case 'subscription_manage_url':
-        $url = SubscriptionUrl::getManageUrl($subscriber);
+        $url = $subscriptionUrlFactory->getManageUrl($subscriber);
         break;
       case 'newsletter_view_in_browser_url':
         $url = NewsletterUrl::getViewInBrowserUrl(
-          $type = null,
           $newsletter,
           $subscriber,
-          $queue
+          $queue,
+          false
         );
         break;
       default:
-        $shortcode = self::getFullShortcode($shortcode_action);
+        $shortcode = self::getFullShortcode($shortcodeAction);
         $url = WPFunctions::get()->applyFilters(
           'mailpoet_newsletter_shortcode_link',
           $shortcode,
           $newsletter,
           $subscriber,
           $queue,
-          $wp_user_preview
+          $wpUserPreview
         );
-        $url = ($url !== $shortcode_action) ? $url : false;
+        $url = ($url !== $shortcodeAction) ? $url : false;
         break;
     }
     return $url;
@@ -112,5 +119,15 @@ class Link {
 
   private static function getFullShortcode($action) {
     return sprintf('[link:%s]', $action);
+  }
+
+  /**
+   * @return int|null
+   */
+  private static function getSendingQueueId($queue) {
+    if ($queue instanceof Sending) {
+      return (int)$queue->id;
+    }
+    return null;
   }
 }

@@ -1,24 +1,24 @@
 <?php
+
 namespace MailPoet\Mailer\Methods\ErrorMappers;
 
+use InvalidArgumentException;
+use MailPoet\Mailer\Mailer;
 use MailPoet\Mailer\MailerError;
 use MailPoet\Mailer\SubscriberError;
 use MailPoet\Services\Bridge\API;
-use InvalidArgumentException;
-use MailPoet\Util\FreeDomains;
 use MailPoet\Util\Helpers;
-
 use MailPoet\WP\Functions as WPFunctions;
 
-if (!defined('ABSPATH')) exit;
-
-
 class MailPoetMapper {
+  use BlacklistErrorMapperTrait;
   use ConnectionErrorMapperTrait;
+
+  const METHOD = Mailer::METHOD_MAILPOET;
 
   const TEMPORARY_UNAVAILABLE_RETRY_INTERVAL = 300; // seconds
 
-  function getInvalidApiKeyError() {
+  public function getInvalidApiKeyError() {
     return new MailerError(
       MailerError::OPERATION_SEND,
       MailerError::LEVEL_HARD,
@@ -26,26 +26,26 @@ class MailPoetMapper {
     );
   }
 
-  function getErrorForResult(array $result, $subscribers, $sender = null, $newsletter = null) {
+  public function getErrorForResult(array $result, $subscribers, $sender = null, $newsletter = null) {
     $level = MailerError::LEVEL_HARD;
     $operation = MailerError::OPERATION_SEND;
-    $retry_interval = null;
-    $subscribers_errors = [];
-    $result_code = !empty($result['code']) ? $result['code'] : null;
+    $retryInterval = null;
+    $subscribersErrors = [];
+    $resultCode = !empty($result['code']) ? $result['code'] : null;
 
-    switch ($result_code) {
+    switch ($resultCode) {
       case API::RESPONSE_CODE_NOT_ARRAY:
         $message = WPFunctions::get()->__('JSON input is not an array', 'mailpoet');
         break;
       case API::RESPONSE_CODE_PAYLOAD_ERROR:
-        $result_parsed = json_decode($result['message'], true);
+        $resultParsed = json_decode($result['message'], true);
         $message = WPFunctions::get()->__('Error while sending.', 'mailpoet');
-        if (!is_array($result_parsed)) {
+        if (!is_array($resultParsed)) {
           $message .= ' ' . $result['message'];
           break;
         }
         try {
-          $subscribers_errors = $this->getSubscribersErrors($result_parsed, $subscribers);
+          $subscribersErrors = $this->getSubscribersErrors($resultParsed, $subscribers);
           $level = MailerError::LEVEL_SOFT;
         } catch (InvalidArgumentException $e) {
           $message .= ' ' . $e->getMessage();
@@ -53,12 +53,12 @@ class MailPoetMapper {
         break;
       case API::RESPONSE_CODE_TEMPORARY_UNAVAILABLE:
         $message = WPFunctions::get()->__('Email service is temporarily not available, please try again in a few minutes.', 'mailpoet');
-        $retry_interval = self::TEMPORARY_UNAVAILABLE_RETRY_INTERVAL;
+        $retryInterval = self::TEMPORARY_UNAVAILABLE_RETRY_INTERVAL;
         break;
       case API::RESPONSE_CODE_CAN_NOT_SEND:
         if ($result['message'] === MailerError::MESSAGE_EMAIL_NOT_AUTHORIZED) {
           $operation = MailerError::OPERATION_AUTHORIZATION;
-          $message = $this->getUnauthorizedEmailMessage($sender, $newsletter[0]);
+          $message = $this->getUnauthorizedEmailMessage($sender);
         } else {
           $message = $this->getAccountBannedMessage();
         }
@@ -68,31 +68,31 @@ class MailPoetMapper {
       default:
         $message = $result['message'];
     }
-    return new MailerError($operation, $level, $message, $retry_interval, $subscribers_errors);
+    return new MailerError($operation, $level, $message, $retryInterval, $subscribersErrors);
   }
 
-  private function getSubscribersErrors($result_parsed, $subscribers) {
+  private function getSubscribersErrors($resultParsed, $subscribers) {
     $errors = [];
-    foreach ($result_parsed as $result_error) {
-      if (!is_array($result_error) || !isset($result_error['index']) || !isset($subscribers[$result_error['index']])) {
+    foreach ($resultParsed as $resultError) {
+      if (!is_array($resultError) || !isset($resultError['index']) || !isset($subscribers[$resultError['index']])) {
         throw new InvalidArgumentException( WPFunctions::get()->__('Invalid MSS response format.', 'mailpoet'));
       }
-      $subscriber_errors = [];
-      if (isset($result_error['errors']) && is_array($result_error['errors'])) {
-        array_walk_recursive($result_error['errors'], function($item) use (&$subscriber_errors) {
-          $subscriber_errors[] = $item;
+      $subscriberErrors = [];
+      if (isset($resultError['errors']) && is_array($resultError['errors'])) {
+        array_walk_recursive($resultError['errors'], function($item) use (&$subscriberErrors) {
+          $subscriberErrors[] = $item;
         });
       }
-      $message = join(', ', $subscriber_errors);
-      $errors[] = new SubscriberError($subscribers[$result_error['index']], $message);
+      $message = join(', ', $subscriberErrors);
+      $errors[] = new SubscriberError($subscribers[$resultError['index']], $message);
     }
     return $errors;
   }
 
-  private function getUnauthorizedEmailMessage($sender, $newsletter) {
+  private function getUnauthorizedEmailMessage($sender) {
     $email = $sender ? $sender['from_email'] : null;
     $message = '<p>';
-    $message .= sprintf(WPFunctions::get()->__('The MailPoet Sending Service did not send your latest email because the address <i>%s</i> is not yet authorized.', 'mailpoet'), $email ?: WPFunctions::get()->__('Unknown address'));
+    $message .= sprintf(WPFunctions::get()->__('The MailPoet Sending Service did not send your latest email because the address %s is not yet authorized.', 'mailpoet'), '<i>' . ( $email ?: WPFunctions::get()->__('Unknown address') ) . '</i>' );
     $message .= '</p><p>';
     $message .= Helpers::replaceLinkTags(
       WPFunctions::get()->__('[link]Authorize your email in your account now.[/link]', 'mailpoet'),
@@ -109,13 +109,26 @@ class MailPoetMapper {
   }
 
   private function getAccountBannedMessage() {
-    return Helpers::replaceLinkTags(
-      WPFunctions::get()->__('You currently are not permitted to send any emails with MailPoet Sending Service, which may have happened due to poor deliverability. Please [link]contact our support team[/link] to resolve the issue.', 'mailpoet'),
+    $message = WPFunctions::get()->__('The MailPoet Sending Service has stopped sending your emails for one of the following reasons:', 'mailpoet');
+
+    $subscriberLimitMessage = Helpers::replaceLinkTags(
+      WPFunctions::get()->__('You may have reached the subscriber limit of your plan. [link]Manage your subscriptions[/link].', 'mailpoet'),
+      'https://account.mailpoet.com/account',
+      [
+        'target' => '_blank',
+        'rel' => 'noopener noreferrer',
+      ]
+    );
+
+    $deliverabilityMessage = Helpers::replaceLinkTags(
+      WPFunctions::get()->__('You may have had a poor deliverability rate. Please [link]contact our support team[/link] to resolve the issue.', 'mailpoet'),
       'https://www.mailpoet.com/support/',
       [
         'target' => '_blank',
         'rel' => 'noopener noreferrer',
       ]
     );
+
+    return "$message<br><br>$subscriberLimitMessage<br>$deliverabilityMessage<br>";
   }
 }

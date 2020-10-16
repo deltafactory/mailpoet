@@ -2,48 +2,50 @@
 
 namespace MailPoet\Features;
 
-use MailPoet\Models\FeatureFlag;
+use MailPoetVendor\Doctrine\DBAL\Exception\TableNotFoundException;
 
 class FeaturesController {
 
-  // Define features below in the following form:
-  //   const FEATURE_NAME_OF_FEATURE = 'name-of-feature';
-  const FEATURE_DISPLAY_WOOCOMMERCE_REVENUES = 'display-woocommerce-revenues'; // may also have 'display_revenues' setting
-  const FEATURE_ABANDONED_SHOPPING_CART = 'abandoned-shopping-cart';
-  const FEATURE_INACTIVE_SUBSCRIBERS_NOTICE = 'inactive-subscribers-notice';
-
   // Define feature defaults in the array below in the following form:
   //   self::FEATURE_NAME_OF_FEATURE => true,
-  private $defaults = [
-    self::FEATURE_DISPLAY_WOOCOMMERCE_REVENUES => false,
-    self::FEATURE_ABANDONED_SHOPPING_CART => false,
-    self::FEATURE_INACTIVE_SUBSCRIBERS_NOTICE => false,
-  ];
+  private $defaults = [];
 
   /** @var array */
   private $flags;
 
+  /** @var FeatureFlagsRepository */
+  private $featureFlagsRepository;
+
+  public function __construct(FeatureFlagsRepository $featureFlagsRepository) {
+    $this->featureFlagsRepository = $featureFlagsRepository;
+  }
+
   /** @return bool */
-  function isSupported($feature) {
+  public function isSupported($feature) {
     if (!$this->exists($feature)) {
       throw new \RuntimeException("Unknown feature '$feature'");
     }
-    $this->ensureFlagsLoaded();
+    // ensure controller works even if used before migrator, return default value in such case
+    try {
+      $this->ensureFlagsLoaded();
+    } catch (TableNotFoundException $e) {
+      return $this->defaults[$feature];
+    }
     return $this->flags[$feature];
   }
 
   /** @return bool */
-  function exists($feature) {
+  public function exists($feature) {
     return array_key_exists($feature, $this->defaults);
   }
 
   /** @return array */
-  function getDefaults() {
+  public function getDefaults() {
     return $this->defaults;
   }
 
   /** @return array */
-  function getAllFlags() {
+  public function getAllFlags() {
     $this->ensureFlagsLoaded();
     return $this->flags;
   }
@@ -53,18 +55,18 @@ class FeaturesController {
       return;
     }
 
-    $this->flags = [];
     $flagsMap = $this->getValueMap();
+    $this->flags = [];
     foreach ($this->defaults as $name => $default) {
       $this->flags[$name] = isset($flagsMap[$name]) ? $flagsMap[$name] : $default;
     }
   }
 
   private function getValueMap() {
-    $features = FeatureFlag::selectMany(['name', 'value'])->findMany();
+    $features = $this->featureFlagsRepository->findAll();
     $featuresMap = [];
     foreach ($features as $feature) {
-      $featuresMap[$feature->name] = (bool)$feature->value;
+      $featuresMap[$feature->getName()] = (bool)$feature->getValue();
     }
     return $featuresMap;
   }

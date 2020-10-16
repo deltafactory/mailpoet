@@ -1,10 +1,15 @@
 import PropTypes from 'prop-types';
 import React from 'react';
 import MailPoet from 'mailpoet';
-import Breadcrumb from 'newsletters/breadcrumb.jsx';
+import ListingHeadingStepsRoute from 'newsletters/listings/heading_steps_route.jsx';
 import _ from 'underscore';
 import Scheduling from 'newsletters/types/notification/scheduling.jsx';
+import Background from 'common/background/background';
+import Button from 'common/button/button';
+import Heading from 'common/typography/heading/heading';
+import Grid from 'common/grid';
 import { withRouter } from 'react-router-dom';
+import { GlobalContext } from 'context/index.jsx';
 
 const field = {
   name: 'options',
@@ -13,21 +18,18 @@ const field = {
 };
 
 class NewsletterNotification extends React.Component {
-  static propTypes = {
-    history: PropTypes.shape({
-      push: PropTypes.func.isRequired,
-    }).isRequired,
-  };
-
-  state = {
-    options: {
-      intervalType: 'daily',
-      timeOfDay: 0,
-      weekDay: 1,
-      monthDay: 0,
-      nthWeekDay: 1,
-    },
-  };
+  constructor(props) {
+    super(props);
+    this.state = {
+      options: {
+        intervalType: 'daily',
+        timeOfDay: 0,
+        weekDay: 1,
+        monthDay: 0,
+        nthWeekDay: 1,
+      },
+    };
+  }
 
   handleValueChange = (event) => {
     const state = this.state;
@@ -48,8 +50,8 @@ class NewsletterNotification extends React.Component {
       this.showTemplateSelection(response.data.id);
     }).fail((response) => {
       if (response.errors.length > 0) {
-        MailPoet.Notice.error(
-          response.errors.map(error => error.message),
+        this.context.notices.error(
+          response.errors.map((error) => <p key={error.message}>{error.message}</p>),
           { scroll: true }
         );
       }
@@ -63,28 +65,38 @@ class NewsletterNotification extends React.Component {
   render() {
     return (
       <div>
-        <h1>{MailPoet.I18n.t('postNotificationNewsletterTypeTitle')}</h1>
-        <Breadcrumb step="type" />
+        <Background color="#fff" />
 
-        <h3>{MailPoet.I18n.t('selectFrequency')}</h3>
+        <ListingHeadingStepsRoute emailType="notification" automationId="post_notification_creation_heading" />
 
-        <Scheduling
-          item={this.state}
-          field={field}
-          onValueChange={this.handleValueChange}
-        />
+        <Grid.Column align="center" className="mailpoet-schedule-email">
+          <Heading level={4}>{MailPoet.I18n.t('selectFrequency')}</Heading>
 
-        <p className="submit">
-          <input
-            className="button button-primary"
-            type="button"
-            onClick={this.handleNext}
-            value={MailPoet.I18n.t('next')}
+          <Scheduling
+            item={this.state}
+            field={field}
+            onValueChange={this.handleValueChange}
           />
-        </p>
+
+          <Button
+            isFullWidth
+            onClick={this.handleNext}
+            type="button"
+          >
+            {MailPoet.I18n.t('next')}
+          </Button>
+        </Grid.Column>
       </div>
     );
   }
 }
+
+NewsletterNotification.contextType = GlobalContext;
+
+NewsletterNotification.propTypes = {
+  history: PropTypes.shape({
+    push: PropTypes.func.isRequired,
+  }).isRequired,
+};
 
 export default withRouter(NewsletterNotification);

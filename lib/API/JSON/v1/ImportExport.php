@@ -2,22 +2,20 @@
 
 namespace MailPoet\API\JSON\v1;
 
-use Carbon\Carbon;
 use MailPoet\API\JSON\Endpoint as APIEndpoint;
 use MailPoet\Config\AccessControl;
 use MailPoet\Cron\Workers\WooCommerceSync;
 use MailPoet\Models\ScheduledTask;
 use MailPoet\Models\Segment;
 use MailPoet\Subscribers\ImportExport\Import\MailChimp;
-
-if (!defined('ABSPATH')) exit;
+use MailPoetVendor\Carbon\Carbon;
 
 class ImportExport extends APIEndpoint {
   public $permissions = [
     'global' => AccessControl::PERMISSION_MANAGE_SUBSCRIBERS,
   ];
 
-  function getMailChimpLists($data) {
+  public function getMailChimpLists($data) {
     try {
       $mailChimp = new MailChimp($data['api_key']);
       $lists = $mailChimp->getLists();
@@ -29,7 +27,7 @@ class ImportExport extends APIEndpoint {
     }
   }
 
-  function getMailChimpSubscribers($data) {
+  public function getMailChimpSubscribers($data) {
     try {
       $mailChimp = new MailChimp($data['api_key']);
       $subscribers = $mailChimp->getSubscribers($data['lists']);
@@ -41,7 +39,7 @@ class ImportExport extends APIEndpoint {
     }
   }
 
-  function addSegment($data) {
+  public function addSegment($data) {
     $segment = Segment::createOrUpdate($data);
     $errors = $segment->getErrors();
 
@@ -54,7 +52,7 @@ class ImportExport extends APIEndpoint {
     }
   }
 
-  function processImport($data) {
+  public function processImport($data) {
     try {
       $import = new \MailPoet\Subscribers\ImportExport\Import\Import(
         json_decode($data, true)
@@ -68,7 +66,7 @@ class ImportExport extends APIEndpoint {
     }
   }
 
-  function processExport($data) {
+  public function processExport($data) {
     try {
       $export = new \MailPoet\Subscribers\ImportExport\Export\Export(
         json_decode($data, true)
@@ -82,20 +80,20 @@ class ImportExport extends APIEndpoint {
     }
   }
 
-  function setupWooCommerceInitialImport() {
+  public function setupWooCommerceInitialImport() {
     try {
       $task = ScheduledTask::where('type', WooCommerceSync::TASK_TYPE)
         ->whereRaw('status = ? OR status IS NULL', [ScheduledTask::STATUS_SCHEDULED])
         ->findOne();
-      if ($task && $task->status === null) {
+      if (($task instanceof ScheduledTask) && $task->status === null) {
         return $this->successResponse();
       }
-      if (!$task) {
+      if (!($task instanceof ScheduledTask)) {
         $task = ScheduledTask::create();
         $task->type = WooCommerceSync::TASK_TYPE;
         $task->status = ScheduledTask::STATUS_SCHEDULED;
       }
-      $task->scheduled_at = Carbon::createFromTimestamp(current_time('timestamp'));
+      $task->scheduledAt = Carbon::createFromTimestamp((int)current_time('timestamp'));
       $task->save();
       return $this->successResponse();
     } catch (\Exception $e) {

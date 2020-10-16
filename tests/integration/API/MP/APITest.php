@@ -2,21 +2,22 @@
 
 namespace MailPoet\Test\API\MP;
 
-use AspectMock\Test as Mock;
-use Codeception\Util\Fixtures;
 use Codeception\Stub;
 use Codeception\Stub\Expected;
+use Codeception\Util\Fixtures;
 use MailPoet\CustomFields\ApiDataSanitizer;
 use MailPoet\Models\CustomField;
 use MailPoet\Models\ScheduledTask;
 use MailPoet\Models\Segment;
 use MailPoet\Models\SendingQueue;
 use MailPoet\Models\Subscriber;
+use MailPoet\Newsletter\Scheduler\WelcomeScheduler;
 use MailPoet\Settings\SettingsController;
 use MailPoet\Subscribers\ConfirmationEmailMailer;
 use MailPoet\Subscribers\NewSubscriberNotificationMailer;
 use MailPoet\Subscribers\RequiredCustomFieldValidator;
 use MailPoet\Tasks\Sending;
+use MailPoetVendor\Idiorm\ORM;
 
 class APITest extends \MailPoetTest {
   const VERSION = 'v1';
@@ -26,11 +27,12 @@ class APITest extends \MailPoetTest {
       Stub::makeEmpty(NewSubscriberNotificationMailer::class, ['send']),
       Stub::makeEmpty(ConfirmationEmailMailer::class, ['sendConfirmationEmail']),
       Stub::makeEmptyExcept(RequiredCustomFieldValidator::class, 'validate'),
-      Stub::makeEmpty(ApiDataSanitizer::class)
+      Stub::makeEmpty(ApiDataSanitizer::class),
+      Stub::makeEmpty(WelcomeScheduler::class)
     );
   }
 
-  function testItReturnsDefaultSubscriberFields() {
+  public function testItReturnsDefaultSubscriberFields() {
     $response = $this->getApi()->getSubscriberFields();
 
     expect($response)->contains([
@@ -59,20 +61,20 @@ class APITest extends \MailPoetTest {
     ]);
   }
 
-  function testItReturnsCustomFields() {
-    $custom_field1 = CustomField::createOrUpdate([
+  public function testItReturnsCustomFields() {
+    $customField1 = CustomField::createOrUpdate([
       'name' => 'text custom field',
       'type' => CustomField::TYPE_TEXT,
       'params' => ['required' => '1', 'date_type' => 'year_month_day'],
     ]);
-    $custom_field2 = CustomField::createOrUpdate([
+    $customField2 = CustomField::createOrUpdate([
       'name' => 'checkbox custom field',
       'type' => CustomField::TYPE_CHECKBOX,
       'params' => ['required' => ''],
     ]);
     $response = $this->getApi()->getSubscriberFields();
     expect($response)->contains([
-      'id' => 'cf_' . $custom_field1->id,
+      'id' => 'cf_' . $customField1->id,
       'name' => 'text custom field',
       'type' => 'text',
       'params' => [
@@ -82,7 +84,7 @@ class APITest extends \MailPoetTest {
       ],
     ]);
     expect($response)->contains([
-      'id' => 'cf_' . $custom_field2->id,
+      'id' => 'cf_' . $customField2->id,
       'name' => 'checkbox custom field',
       'type' => 'checkbox',
       'params' => [
@@ -92,7 +94,7 @@ class APITest extends \MailPoetTest {
     ]);
   }
 
-  function testItDoesNotSubscribeMissingSubscriberToLists() {
+  public function testItDoesNotSubscribeMissingSubscriberToLists() {
     try {
       $this->getApi()->subscribeToLists(false, [1,2,3]);
       $this->fail('Subscriber does not exist exception should have been thrown.');
@@ -101,7 +103,7 @@ class APITest extends \MailPoetTest {
     }
   }
 
-  function testItDoesNotSubscribeSubscriberToMissingLists() {
+  public function testItDoesNotSubscribeSubscriberToMissingLists() {
     $subscriber = Subscriber::create();
     $subscriber->hydrate(Fixtures::get('subscriber_template'));
     $subscriber->save();
@@ -121,7 +123,7 @@ class APITest extends \MailPoetTest {
     }
   }
 
-  function testItDoesNotSubscribeSubscriberToWPUsersList() {
+  public function testItDoesNotSubscribeSubscriberToWPUsersList() {
     $subscriber = Subscriber::create();
     $subscriber->hydrate(Fixtures::get('subscriber_template'));
     $subscriber->save();
@@ -139,7 +141,7 @@ class APITest extends \MailPoetTest {
     }
   }
 
-  function testItDoesNotSubscribeSubscriberToWooCommerceCustomersList() {
+  public function testItDoesNotSubscribeSubscriberToWooCommerceCustomersList() {
     $subscriber = Subscriber::create();
     $subscriber->hydrate(Fixtures::get('subscriber_template'));
     $subscriber->save();
@@ -157,7 +159,7 @@ class APITest extends \MailPoetTest {
     }
   }
 
-  function testItDoesNotSubscribeSubscriberToListsWhenOneOrMoreListsAreMissing() {
+  public function testItDoesNotSubscribeSubscriberToListsWhenOneOrMoreListsAreMissing() {
     $subscriber = Subscriber::create();
     $subscriber->hydrate(Fixtures::get('subscriber_template'));
     $subscriber->save();
@@ -183,7 +185,7 @@ class APITest extends \MailPoetTest {
     }
   }
 
-  function testItUsesMultipleListsSubscribeMethodWhenSubscribingToSingleList() {
+  public function testItUsesMultipleListsSubscribeMethodWhenSubscribingToSingleList() {
     // subscribing to single list = converting list ID to an array and using
     // multiple lists subscription method
     $API = Stub::make($this->getApi(), [
@@ -202,7 +204,7 @@ class APITest extends \MailPoetTest {
     );
   }
 
-  function testItSubscribesSubscriberToMultipleLists() {
+  public function testItSubscribesSubscriberToMultipleLists() {
     $subscriber = Subscriber::create();
     $subscriber->hydrate(Fixtures::get('subscriber_template'));
     $subscriber->save();
@@ -226,7 +228,7 @@ class APITest extends \MailPoetTest {
     expect($result['subscriptions'][0]['segment_id'])->equals($segment->id);
   }
 
-  function testItSendsConfirmationEmailToASubscriberWhenBeingAddedToList() {
+  public function testItSendsConfirmationEmailToASubscriberWhenBeingAddedToList() {
     $subscriber = Subscriber::create();
     $subscriber->hydrate(Fixtures::get('subscriber_template'));
     $subscriber->status = Subscriber::STATUS_UNCONFIRMED;
@@ -256,13 +258,13 @@ class APITest extends \MailPoetTest {
 
     // should not send
     $sent = false;
-    $subscriber->count_confirmations = 1;
+    $subscriber->countConfirmations = 1;
     $subscriber->save();
     $API->subscribeToLists($subscriber->email, $segments, ['skip_subscriber_notification' => true]);
     expect($sent)->equals(false);
   }
 
-  function testItSendsNotifiationEmailWhenBeingAddedToList() {
+  public function testItSendsNotifiationEmailWhenBeingAddedToList() {
     $subscriber = Subscriber::create();
     $subscriber->hydrate(Fixtures::get('subscriber_template'));
     $subscriber->status = Subscriber::STATUS_SUBSCRIBED;
@@ -280,7 +282,8 @@ class APITest extends \MailPoetTest {
       $notificationMailer,
       $this->makeEmpty(ConfirmationEmailMailer::class),
       $this->makeEmpty(RequiredCustomFieldValidator::class),
-      $this->makeEmpty(ApiDataSanitizer::class)
+      $this->makeEmpty(ApiDataSanitizer::class),
+      Stub::makeEmpty(WelcomeScheduler::class)
     );
     $API->subscribeToLists($subscriber->email, $segments, ['send_confirmation_email' => false, 'skip_subscriber_notification' => true]);
 
@@ -291,12 +294,13 @@ class APITest extends \MailPoetTest {
       $notificationMailer,
       $this->makeEmpty(ConfirmationEmailMailer::class),
       $this->makeEmpty(RequiredCustomFieldValidator::class),
-      $this->makeEmpty(ApiDataSanitizer::class)
+      $this->makeEmpty(ApiDataSanitizer::class),
+      Stub::makeEmpty(WelcomeScheduler::class)
     );
     $API->subscribeToLists($subscriber->email, $segments, ['send_confirmation_email' => false, 'skip_subscriber_notification' => false]);
   }
 
-  function testItSubscribesSubscriberWithEmailIdentifier() {
+  public function testItSubscribesSubscriberWithEmailIdentifier() {
     $subscriber = Subscriber::create();
     $subscriber->hydrate(Fixtures::get('subscriber_template'));
     $subscriber->save();
@@ -312,7 +316,7 @@ class APITest extends \MailPoetTest {
     expect($result['subscriptions'][0]['segment_id'])->equals($segment->id);
   }
 
-  function testItSchedulesWelcomeNotificationByDefaultAfterSubscriberSubscriberToLists() {
+  public function testItSchedulesWelcomeNotificationByDefaultAfterSubscriberSubscriberToLists() {
     $API = Stub::makeEmptyExcept(
       \MailPoet\API\MP\v1\API::class,
       'subscribeToLists',
@@ -332,7 +336,7 @@ class APITest extends \MailPoetTest {
     $API->subscribeToLists($subscriber->id, [$segment->id], ['skip_subscriber_notification' => true]);
   }
 
-  function testItDoesNotScheduleWelcomeNotificationAfterSubscribingSubscriberToListsIfStatusIsNotSubscribed() {
+  public function testItDoesNotScheduleWelcomeNotificationAfterSubscribingSubscriberToListsIfStatusIsNotSubscribed() {
     $API = Stub::makeEmptyExcept(
       \MailPoet\API\MP\v1\API::class,
       'subscribeToLists',
@@ -351,7 +355,7 @@ class APITest extends \MailPoetTest {
     $API->subscribeToLists($subscriber->id, [$segment->id], ['skip_subscriber_notification' => true]);
   }
 
-  function testItDoesNotScheduleWelcomeNotificationAfterSubscribingSubscriberToListsWhenDisabledByOption() {
+  public function testItDoesNotScheduleWelcomeNotificationAfterSubscribingSubscriberToListsWhenDisabledByOption() {
     $API = Stub::makeEmptyExcept(
       \MailPoet\API\MP\v1\API::class,
       'subscribeToLists',
@@ -372,7 +376,7 @@ class APITest extends \MailPoetTest {
     $API->subscribeToLists($subscriber->id, [$segment->id], $options);
   }
 
-  function testItGetsSegments() {
+  public function testItGetsSegments() {
     $segment = Segment::createOrUpdate(
       [
         'name' => 'Default',
@@ -384,20 +388,20 @@ class APITest extends \MailPoetTest {
     expect($result[0]['id'])->equals($segment->id);
   }
 
-  function testItExcludesWPUsersAndWooCommerceCustomersSegmentsWhenGettingSegments() {
-    $default_segment = Segment::createOrUpdate(
+  public function testItExcludesWPUsersAndWooCommerceCustomersSegmentsWhenGettingSegments() {
+    $defaultSegment = Segment::createOrUpdate(
       [
         'name' => 'Default',
         'type' => Segment::TYPE_DEFAULT,
       ]
     );
-    $wp_segment = Segment::createOrUpdate(
+    $wpSegment = Segment::createOrUpdate(
       [
         'name' => 'Default',
         'type' => Segment::TYPE_WP_USERS,
       ]
     );
-    $wc_segment = Segment::createOrUpdate(
+    $wcSegment = Segment::createOrUpdate(
       [
         'name' => 'Default',
         'type' => Segment::TYPE_WC_USERS,
@@ -405,10 +409,10 @@ class APITest extends \MailPoetTest {
     );
     $result = $this->getApi()->getLists();
     expect($result)->count(1);
-    expect($result[0]['id'])->equals($default_segment->id);
+    expect($result[0]['id'])->equals($defaultSegment->id);
   }
 
-  function testItRequiresEmailAddressToAddSubscriber() {
+  public function testItRequiresEmailAddressToAddSubscriber() {
     try {
       $this->getApi()->addSubscriber([]);
       $this->fail('Subscriber email address required exception should have been thrown.');
@@ -417,8 +421,7 @@ class APITest extends \MailPoetTest {
     }
   }
 
-
-  function testItOnlyAcceptsWhitelistedProperties() {
+  public function testItOnlyAcceptsWhitelistedProperties() {
     $subscriber = [
       'email' => 'test-ignore-status@example.com',
       'first_name' => '',
@@ -430,7 +433,7 @@ class APITest extends \MailPoetTest {
     expect($result['status'])->equals('unconfirmed');
   }
 
-  function testItDoesNotAddExistingSubscriber() {
+  public function testItDoesNotAddExistingSubscriber() {
     $subscriber = Subscriber::create();
     $subscriber->hydrate(Fixtures::get('subscriber_template'));
     $subscriber->save();
@@ -442,7 +445,7 @@ class APITest extends \MailPoetTest {
     }
   }
 
-  function testItThrowsExceptionWhenSubscriberCannotBeAdded() {
+  public function testItThrowsExceptionWhenSubscriberCannotBeAdded() {
     $subscriber = [
       'email' => 'test', // invalid email
     ];
@@ -456,25 +459,38 @@ class APITest extends \MailPoetTest {
     }
   }
 
-  function testItAddsSubscriber() {
-    $custom_field = CustomField::create();
-    $custom_field->name = 'test custom field';
-    $custom_field->type = CustomField::TYPE_TEXT;
-    $custom_field->save();
+  public function testItAddsSubscriber() {
+    $customField = CustomField::create();
+    $customField->name = 'test custom field';
+    $customField->type = CustomField::TYPE_TEXT;
+    $customField->save();
 
     $subscriber = [
     'email' => 'test@example.com',
-    'cf_' . $custom_field->id => 'test',
+    'cf_' . $customField->id => 'test',
     ];
 
+    $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
     $result = $this->getApi()->addSubscriber($subscriber);
     expect($result['id'])->greaterThan(0);
     expect($result['email'])->equals($subscriber['email']);
-    expect($result['cf_' . $custom_field->id])->equals('test');
+    expect($result['cf_' . $customField->id])->equals('test');
     expect($result['source'])->equals('api');
+    expect($result['subscribed_ip'])->equals($_SERVER['REMOTE_ADDR']);
+    expect(strlen($result['unsubscribe_token']))->equals(15);
   }
 
-  function testItChecksForMandatoryCustomFields() {
+  public function testItAllowsToOverrideSubscriberIPAddress() {
+    $subscriber = [
+      'email' => 'test-ip-2@example.com',
+      'subscribed_ip' => '1.2.3.4',
+    ];
+
+    $result = $this->getApi()->addSubscriber($subscriber);
+    expect($result['subscribed_ip'])->equals($subscriber['subscribed_ip']);
+  }
+
+  public function testItChecksForMandatoryCustomFields() {
     CustomField::createOrUpdate([
       'name' => 'custom field',
       'type' => 'text',
@@ -485,11 +501,11 @@ class APITest extends \MailPoetTest {
       'email' => 'test@example.com',
     ];
 
-    $this->setExpectedException('Exception');
+    $this->expectException('Exception');
     $this->getApi()->addSubscriber($subscriber);
   }
 
-  function testItSubscribesToSegmentsWhenAddingSubscriber() {
+  public function testItSubscribesToSegmentsWhenAddingSubscriber() {
     $segment = Segment::createOrUpdate(
       [
         'name' => 'Default',
@@ -506,32 +522,39 @@ class APITest extends \MailPoetTest {
     expect($result['subscriptions'][0]['segment_id'])->equals($segment->id);
   }
 
-  function testItSchedulesWelcomeNotificationByDefaultAfterAddingSubscriber() {
-    $settings = new SettingsController();
-    $settings->set('signup_confirmation.enabled', false);
-    $API = Stub::makeEmptyExcept(
-      \MailPoet\API\MP\v1\API::class,
-      'addSubscriber',
+  public function testItSchedulesWelcomeNotificationByDefaultAfterAddingSubscriber() {
+    $segment = Segment::createOrUpdate(
       [
-        'new_subscriber_notification_mailer' => Stub::makeEmpty(NewSubscriberNotificationMailer::class, ['send']),
-        'required_custom_field_validator' => Stub::makeEmpty(RequiredCustomFieldValidator::class, ['validate']),
+        'name' => 'Default',
+        'type' => Segment::TYPE_DEFAULT,
+      ]
+    );
+    $settings = SettingsController::getInstance();
+    $settings->set('signup_confirmation.enabled', false);
+    $API = Stub::make(
+      \MailPoet\API\MP\v1\API::class,
+      [
+        'newSubscriberNotificationMailer' => Stub::makeEmpty(NewSubscriberNotificationMailer::class, ['send']),
+        'requiredCustomFieldValidator' => Stub::makeEmpty(RequiredCustomFieldValidator::class, ['validate']),
         '_scheduleWelcomeNotification' => Expected::once(),
-      ], $this);
+      ],
+      $this
+    );
     $subscriber = [
       'email' => 'test@example.com',
     ];
-    $segments = [1];
+    $segments = [$segment->id];
     $API->addSubscriber($subscriber, $segments);
   }
 
-  function testItThrowsIfWelcomeEmailFails() {
-    $settings = new SettingsController();
+  public function testItThrowsIfWelcomeEmailFails() {
+    $settings = SettingsController::getInstance();
     $settings->set('signup_confirmation.enabled', false);
     $task = ScheduledTask::create();
     $task->type = 'sending';
     $task->setError("Big Error");
     $sendingStub = Sending::create($task, SendingQueue::create());
-    Mock::double('MailPoet\Newsletter\Scheduler\Scheduler', [
+    $welcomeScheduler = $this->make('MailPoet\Newsletter\Scheduler\WelcomeScheduler', [
       'scheduleSubscriberWelcomeNotification' => [$sendingStub],
     ]);
     $segment = Segment::createOrUpdate(
@@ -540,25 +563,31 @@ class APITest extends \MailPoetTest {
         'type' => Segment::TYPE_DEFAULT,
       ]
     );
-    $API = $this->getApi();
+    $API = new \MailPoet\API\MP\v1\API(
+      Stub::makeEmpty(NewSubscriberNotificationMailer::class, ['send']),
+      Stub::makeEmpty(ConfirmationEmailMailer::class, ['sendConfirmationEmail']),
+      Stub::makeEmptyExcept(RequiredCustomFieldValidator::class, 'validate'),
+      Stub::makeEmpty(ApiDataSanitizer::class),
+      $welcomeScheduler
+    );
     $subscriber = [
       'email' => 'test@example.com',
     ];
     $segments = [$segment->id()];
-    $this->setExpectedException('\Exception');
+    $this->expectException('\Exception');
     $API->addSubscriber($subscriber, $segments, ['schedule_welcome_email' => true, 'send_confirmation_email' => false]);
   }
 
-  function testItDoesNotScheduleWelcomeNotificationAfterAddingSubscriberIfStatusIsNotSubscribed() {
+  public function testItDoesNotScheduleWelcomeNotificationAfterAddingSubscriberIfStatusIsNotSubscribed() {
     $API = Stub::makeEmptyExcept(
       \MailPoet\API\MP\v1\API::class,
       'addSubscriber',
       [
         '_scheduleWelcomeNotification' => Expected::never(),
-        'new_subscriber_notification_mailer' => Stub::makeEmpty(
+        'newSubscriberNotificationMailer' => Stub::makeEmpty(
           NewSubscriberNotificationMailer::class, ['send' => Expected::never()]
         ),
-        'required_custom_field_validator' => Stub::makeEmpty(RequiredCustomFieldValidator::class, ['validate']),
+        'requiredCustomFieldValidator' => Stub::makeEmpty(RequiredCustomFieldValidator::class, ['validate']),
       ], $this);
     $subscriber = [
       'email' => 'test@example.com',
@@ -567,14 +596,14 @@ class APITest extends \MailPoetTest {
     $API->addSubscriber($subscriber, $segments);
   }
 
-  function testItDoesNotScheduleWelcomeNotificationAfterAddingSubscriberWhenDisabledByOption() {
+  public function testItDoesNotScheduleWelcomeNotificationAfterAddingSubscriberWhenDisabledByOption() {
     $API = Stub::makeEmptyExcept(
       \MailPoet\API\MP\v1\API::class,
       'addSubscriber',
       [
         '_scheduleWelcomeNotification' => Expected::never(),
-        'new_subscriber_notification_mailer' => Stub::makeEmpty(NewSubscriberNotificationMailer::class, ['send']),
-        'required_custom_field_validator' => Stub::makeEmpty(RequiredCustomFieldValidator::class, ['validate']),
+        'newSubscriberNotificationMailer' => Stub::makeEmpty(NewSubscriberNotificationMailer::class, ['send']),
+        'requiredCustomFieldValidator' => Stub::makeEmpty(RequiredCustomFieldValidator::class, ['validate']),
       ], $this);
     $subscriber = [
       'email' => 'test@example.com',
@@ -585,17 +614,17 @@ class APITest extends \MailPoetTest {
     $API->addSubscriber($subscriber, $segments, $options);
   }
 
-  function testByDefaultItSendsConfirmationEmailAfterAddingSubscriber() {
+  public function testByDefaultItSendsConfirmationEmailAfterAddingSubscriber() {
     $API = $this->makeEmptyExcept(
       \MailPoet\API\MP\v1\API::class,
       'addSubscriber',
       [
-        'subscribeToLists' => Expected::once(function ($subscriber_id, $segments_ids, $options) {
+        'subscribeToLists' => Expected::once(function ($subscriberId, $segmentsIds, $options) {
           expect($options)->contains('send_confirmation_email');
           expect($options['send_confirmation_email'])->equals(true);
         }),
-        'required_custom_field_validator' => Stub::makeEmpty(RequiredCustomFieldValidator::class, ['validate']),
-        'new_subscriber_notification_mailer' => Stub::makeEmpty(NewSubscriberNotificationMailer::class, ['send']),
+        'requiredCustomFieldValidator' => Stub::makeEmpty(RequiredCustomFieldValidator::class, ['validate']),
+        'newSubscriberNotificationMailer' => Stub::makeEmpty(NewSubscriberNotificationMailer::class, ['send']),
       ]
     );
     $subscriber = [
@@ -605,9 +634,9 @@ class APITest extends \MailPoetTest {
     $API->addSubscriber($subscriber, $segments);
   }
 
-  function testItThrowsWhenConfirmationEmailFailsToSend() {
-    $confirmation_mailer = $this->createMock(ConfirmationEmailMailer::class);
-    $confirmation_mailer->expects($this->once())
+  public function testItThrowsWhenConfirmationEmailFailsToSend() {
+    $confirmationMailer = $this->createMock(ConfirmationEmailMailer::class);
+    $confirmationMailer->expects($this->once())
       ->method('sendConfirmationEmail')
       ->willReturnCallback(function (Subscriber $subscriber) {
         $subscriber->setError('Big Error');
@@ -615,7 +644,7 @@ class APITest extends \MailPoetTest {
       });
 
     $API = Stub::copy($this->getApi(), [
-      'confirmation_email_mailer' => $confirmation_mailer,
+      'confirmationEmailMailer' => $confirmationMailer,
     ]);
     $segment = Segment::createOrUpdate(
       [
@@ -626,18 +655,19 @@ class APITest extends \MailPoetTest {
     $subscriber = [
       'email' => 'test@example.com',
     ];
-    $this->setExpectedException('\Exception', 'Subscriber added to lists, but confirmation email failed to send: big error');
+    $this->expectException('\Exception');
+    $this->expectExceptionMessage('Subscriber added to lists, but confirmation email failed to send: big error');
     $API->addSubscriber($subscriber, [$segment->id], ['send_confirmation_email' => true]);
   }
 
-  function testItDoesNotSendConfirmationEmailAfterAddingSubscriberWhenOptionIsSet() {
+  public function testItDoesNotSendConfirmationEmailAfterAddingSubscriberWhenOptionIsSet() {
     $API = Stub::makeEmptyExcept(
       \MailPoet\API\MP\v1\API::class,
       'addSubscriber',
       [
         '__sendConfirmationEmail' => Expected::never(),
-        'required_custom_field_validator' => Stub::makeEmpty(RequiredCustomFieldValidator::class, ['validate']),
-        'new_subscriber_notification_mailer' => Stub::makeEmpty(NewSubscriberNotificationMailer::class, ['send']),
+        'requiredCustomFieldValidator' => Stub::makeEmpty(RequiredCustomFieldValidator::class, ['validate']),
+        'newSubscriberNotificationMailer' => Stub::makeEmpty(NewSubscriberNotificationMailer::class, ['send']),
       ], $this);
     $subscriber = [
       'email' => 'test@example.com',
@@ -647,7 +677,7 @@ class APITest extends \MailPoetTest {
     $API->addSubscriber($subscriber, $segments, $options);
   }
 
-  function testItRequiresNameToAddList() {
+  public function testItRequiresNameToAddList() {
     try {
       $this->getApi()->addList([]);
       $this->fail('List name required exception should have been thrown.');
@@ -656,7 +686,7 @@ class APITest extends \MailPoetTest {
     }
   }
 
-  function testItDoesOnlySaveWhiteListedPropertiesWhenAddingList() {
+  public function testItDoesOnlySaveWhiteListedPropertiesWhenAddingList() {
     $result = $this->getApi()->addList([
       'name' => 'Test segment123',
       'description' => 'Description',
@@ -668,7 +698,7 @@ class APITest extends \MailPoetTest {
     expect($result['type'])->equals('default');
   }
 
-  function testItDoesNotAddExistingList() {
+  public function testItDoesNotAddExistingList() {
     $segment = Segment::create();
     $segment->name = 'Test segment';
     $segment->save();
@@ -680,7 +710,7 @@ class APITest extends \MailPoetTest {
     }
   }
 
-  function testItAddsList() {
+  public function testItAddsList() {
     $segment = [
       'name' => 'Test segment',
     ];
@@ -690,7 +720,7 @@ class APITest extends \MailPoetTest {
     expect($result['name'])->equals($segment['name']);
   }
 
-  function testItDoesNotUnsubscribeMissingSubscriberFromLists() {
+  public function testItDoesNotUnsubscribeMissingSubscriberFromLists() {
     try {
       $this->getApi()->unsubscribeFromLists(false, [1,2,3]);
       $this->fail('Subscriber does not exist exception should have been thrown.');
@@ -699,7 +729,7 @@ class APITest extends \MailPoetTest {
     }
   }
 
-  function testItDoesNotUnsubscribeSubscriberFromMissingLists() {
+  public function testItDoesNotUnsubscribeSubscriberFromMissingLists() {
     $subscriber = Subscriber::create();
     $subscriber->hydrate(Fixtures::get('subscriber_template'));
     $subscriber->save();
@@ -719,7 +749,7 @@ class APITest extends \MailPoetTest {
     }
   }
 
-  function testItDoesNotUnsubscribeSubscriberFromListsWhenOneOrMoreListsAreMissing() {
+  public function testItDoesNotUnsubscribeSubscriberFromListsWhenOneOrMoreListsAreMissing() {
     $subscriber = Subscriber::create();
     $subscriber->hydrate(Fixtures::get('subscriber_template'));
     $subscriber->save();
@@ -745,7 +775,7 @@ class APITest extends \MailPoetTest {
     }
   }
 
-  function testItDoesNotUnsubscribeSubscriberFromWPUsersList() {
+  public function testItDoesNotUnsubscribeSubscriberFromWPUsersList() {
     $subscriber = Subscriber::create();
     $subscriber->hydrate(Fixtures::get('subscriber_template'));
     $subscriber->save();
@@ -763,7 +793,7 @@ class APITest extends \MailPoetTest {
     }
   }
 
-  function testItDoesNotUnsubscribeSubscriberFromWooCommerceCustomersList() {
+  public function testItDoesNotUnsubscribeSubscriberFromWooCommerceCustomersList() {
     $subscriber = Subscriber::create();
     $subscriber->hydrate(Fixtures::get('subscriber_template'));
     $subscriber->save();
@@ -781,7 +811,7 @@ class APITest extends \MailPoetTest {
     }
   }
 
-  function testItUsesMultipleListsUnsubscribeMethodWhenUnsubscribingFromSingleList() {
+  public function testItUsesMultipleListsUnsubscribeMethodWhenUnsubscribingFromSingleList() {
     // unsubscribing from single list = converting list ID to an array and using
     // multiple lists unsubscribe method
     $API = Stub::make(\MailPoet\API\MP\v1\API::class, [
@@ -799,7 +829,7 @@ class APITest extends \MailPoetTest {
     );
   }
 
-  function testItUnsubscribesSubscriberFromMultipleLists() {
+  public function testItUnsubscribesSubscriberFromMultipleLists() {
     $subscriber = Subscriber::create();
     $subscriber->hydrate(Fixtures::get('subscriber_template'));
     $subscriber->save();
@@ -824,7 +854,7 @@ class APITest extends \MailPoetTest {
     expect($result['subscriptions'][0]['status'])->equals(Subscriber::STATUS_UNSUBSCRIBED);
   }
 
-  function testItGetsSubscriber() {
+  public function testItGetsSubscriber() {
     $subscriber = Subscriber::create();
     $subscriber->hydrate(Fixtures::get('subscriber_template'));
     $subscriber->save();
@@ -850,16 +880,15 @@ class APITest extends \MailPoetTest {
     }
   }
 
-  function _before() {
-    $settings = new SettingsController();
+  public function _before() {
+    $settings = SettingsController::getInstance();
     $settings->set('signup_confirmation.enabled', true);
   }
 
-  function _after() {
-    Mock::clean();
-    \ORM::raw_execute('TRUNCATE ' . Subscriber::$_table);
-    \ORM::raw_execute('TRUNCATE ' . CustomField::$_table);
-    \ORM::raw_execute('TRUNCATE ' . Segment::$_table);
-    \ORM::raw_execute('TRUNCATE ' . SendingQueue::$_table);
+  public function _after() {
+    ORM::raw_execute('TRUNCATE ' . Subscriber::$_table);
+    ORM::raw_execute('TRUNCATE ' . CustomField::$_table);
+    ORM::raw_execute('TRUNCATE ' . Segment::$_table);
+    ORM::raw_execute('TRUNCATE ' . SendingQueue::$_table);
   }
 }

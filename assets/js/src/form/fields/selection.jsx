@@ -2,7 +2,7 @@ import React from 'react';
 import jQuery from 'jquery';
 import _ from 'underscore';
 import 'react-dom';
-import 'select2';
+import 'select2/dist/js/select2.full';
 import PropTypes from 'prop-types';
 
 class Selection extends React.Component {
@@ -52,7 +52,7 @@ class Selection extends React.Component {
     if (this.props.item !== undefined && this.props.field.name !== undefined) {
       if (this.allowMultipleValues()) {
         if (_.isArray(this.props.item[this.props.field.name])) {
-          return this.props.item[this.props.field.name].map(item => item.id);
+          return this.props.item[this.props.field.name].map((item) => item.id);
         }
       } else {
         return this.props.item[this.props.field.name];
@@ -99,10 +99,35 @@ class Selection extends React.Component {
     return item.id;
   };
 
+  getCount = (item) => {
+    if (this.props.field.getCount !== undefined) {
+      return this.props.field.getCount(item, this.props.item);
+    }
+    return null;
+  };
+
+  getTag = (item) => {
+    if (this.props.field.getTag !== undefined) {
+      return this.props.field.getTag(item, this.props.item);
+    }
+    return null;
+  };
+
   setupSelect2 = () => {
     if (this.isSelect2Initialized()) {
       return;
     }
+    const templateRendered = (option) => {
+      let tpl = '';
+      if (option.tag) {
+        tpl += `<span class="mailpoet-form-select2-tag">${option.tag}</span>`;
+      }
+      tpl += `<span class="mailpoet-form-select2-text"><span>${option.text}</span></span>`;
+      if (option.count) {
+        tpl += `<span class="mailpoet-form-select2-count">${option.count}</span>`;
+      }
+      return tpl;
+    };
 
     let select2Options = {
       disabled: this.props.disabled || false,
@@ -111,15 +136,10 @@ class Selection extends React.Component {
         id: '', // the value of the option
         text: this.props.field.placeholder,
       },
-      templateResult: function templateResult(item) {
-        if (item.element && item.element.selected) {
-          return null;
-        }
-        if (item.title) {
-          return item.title;
-        }
-        return item.text;
-      },
+      dropdownCssClass: 'mailpoet-form-select2-dropdown',
+      escapeMarkup: (markup) => markup,
+      templateResult: templateRendered,
+      templateSelection: templateRendered,
     };
 
     const remoteQuery = this.props.field.remoteQuery || null;
@@ -158,6 +178,23 @@ class Selection extends React.Component {
         },
         minimumInputLength: remoteQuery.minimumInputLength || 2,
       });
+    } else {
+      const items = this.getItems(this.props.field);
+      let selectedValues = this.getSelectedValues() || [];
+      if (!Array.isArray(selectedValues)) {
+        selectedValues = [selectedValues];
+      }
+      const data = items.map((item) => {
+        const id = this.getValue(item);
+        return {
+          id,
+          tag: this.getTag(item),
+          text: this.getLabel(item),
+          count: this.getCount(item),
+          selected: selectedValues.indexOf(id) > -1,
+        };
+      });
+      select2Options = Object.assign(select2Options, { data });
     }
 
     if (this.props.field.extendSelect2Options !== undefined) {
@@ -243,7 +280,11 @@ class Selection extends React.Component {
     // For single selects only, in order for the placeholder value to appear,
     // we must have a blank <option> as the first option in the <select> control.
     if (this.allowMultipleValues()) return undefined;
-    if (this.props.field.placeholder) return (<option className="default" />);
+    if (this.props.field.placeholder) {
+      return (
+        <option className="default" /> // eslint-disable-line jsx-a11y/control-has-associated-label
+      );
+    }
     return undefined;
   };
 
@@ -254,7 +295,6 @@ class Selection extends React.Component {
       const label = this.getLabel(item);
       const searchLabel = this.getSearchLabel(item);
       const value = this.getValue(item);
-
       return (
         <option
           key={`option-${item.id}`}
@@ -266,20 +306,21 @@ class Selection extends React.Component {
         </option>
       );
     });
-
     return (
-      <select
-        id={this.getFieldId()}
-        ref={this.selectRef}
-        disabled={this.props.field.disabled}
-        data-placeholder={this.props.field.placeholder}
-        multiple={this.props.field.multiple}
-        defaultValue={selectedValues}
-        {...this.props.field.validation}
-      >
-        { this.insertEmptyOption() }
-        { options }
-      </select>
+      <div className="mailpoet-form-select mailpoet-form-input">
+        <select
+          id={this.getFieldId()}
+          ref={this.selectRef}
+          disabled={this.props.field.disabled}
+          data-placeholder={this.props.field.placeholder}
+          multiple={this.props.field.multiple}
+          defaultValue={selectedValues}
+          {...this.props.field.validation}// eslint-disable-line react/jsx-props-no-spreading
+        >
+          { this.insertEmptyOption() }
+          { options }
+        </select>
+      </div>
     );
   }
 }
@@ -299,6 +340,8 @@ Selection.propTypes = {
     filter: PropTypes.func,
     getSearchLabel: PropTypes.func,
     getValue: PropTypes.func,
+    getCount: PropTypes.func,
+    getTag: PropTypes.func,
     placeholder: PropTypes.string,
     remoteQuery: PropTypes.object,
     extendSelect2Options: PropTypes.object,

@@ -1,15 +1,69 @@
-version: 2
-jobs:
-  build_and_code_qa:
+version: 2.1
+
+anchors:
+  default_job_config: &default_job_config
+    resource_class: small
     working_directory: /home/circleci/mailpoet
-    docker:
-      - image: mailpoet/wordpress:7.3_20190306.1
     environment:
       TZ: /usr/share/zoneinfo/Etc/UTC
+
+  only_master_and_release: &only_master_and_release
+    filters:
+      branches:
+        only:
+          - master
+          - release
+
+  multisite_acceptance_config: &multisite_acceptance_config
+    multisite: 1
+    requires:
+      - unit_tests
+      - static_analysis
+    <<: *only_master_and_release
+
+executors:
+  wpcli_php_oldest:
+    <<: *default_job_config
+    docker:
+    - image: mailpoet/wordpress:7.1_20201009.1
+
+  wpcli_php_latest:
+    <<: *default_job_config
+    docker:
+      - image: mailpoet/wordpress:7.4_20200123.1
+
+  wpcli_php_mysql_oldest:
+    <<: *default_job_config
+    docker:
+    - image: mailpoet/wordpress:7.1_20201009.1
+    - image: circleci/mysql:5.5-ram
+
+  wpcli_php_mysql_latest:
+    <<: *default_job_config
+    docker:
+      - image: mailpoet/wordpress:7.4_20200123.1
+      - image: circleci/mysql:8.0-ram
+        command: [--default-authentication-plugin=mysql_native_password]
+
+jobs:
+  build:
+    executor: wpcli_php_latest
+    resource_class: medium
     steps:
       - checkout
+      - run:
+          name: "Compute checksum for prefixer"
+          command: find prefixer -type f -not -path 'prefixer/build/*' -not -path 'prefixer/vendor/*' | sort | xargs cat | sha512sum > prefixer-checksum
+      - restore_cache:
+          key: tools-{{ checksum "tools/install.php" }}
+      - restore_cache:
+          key: composer-{{ checksum "tasks/phpstan/composer.json" }}-{{ checksum "tasks/phpstan/composer.lock" }}
+      - restore_cache:
+          key: composer-{{ checksum "tasks/code_sniffer/composer.json" }}-{{ checksum "tasks/code_sniffer/composer.lock" }}
       - restore_cache:
           key: composer-{{ checksum "composer.json" }}-{{ checksum "composer.lock" }}
+      - restore_cache:
+          key: composer-prefixed-{{ checksum "prefixer-checksum" }}
       - restore_cache:
           keys:
             - npm-{{ checksum "package-lock.json" }}
@@ -18,20 +72,37 @@ jobs:
           name: "Set up test environment"
           command: |
             # install plugin dependencies
-            curl -sL https://github.com/humbug/php-scoper/releases/download/0.11.4/php-scoper.phar --output php-scoper.phar
-            chmod 755 php-scoper.phar
-            mkdir -p vendor-prefixed
-            curl -sS https://getcomposer.org/installer | php
-            ./composer.phar validate --no-check-all --no-check-publish
-            ./composer.phar validate --no-check-all --no-check-publish --working-dir=prefixer
-            ./composer.phar install
+            COMPOSER_DEV_MODE=1 php tools/install.php
+            ./tools/vendor/composer.phar validate --no-check-all --no-check-publish
+            ./tools/vendor/composer.phar validate --no-check-all --no-check-publish --working-dir=prefixer
             touch .env
             ./do install
             ./do compile:all --env production
+            ./do doctrine:generate-metadata
+            ./do doctrine:generate-proxies
+            vendor/bin/codecept build
+      - save_cache:
+          key: tools-{{ checksum "tools/install.php" }}
+          paths:
+            - tools/vendor
+      - save_cache:
+          key: composer-{{ checksum "tasks/phpstan/composer.json" }}-{{ checksum "tasks/phpstan/composer.lock" }}
+          paths:
+            - tasks/phpstan/vendor
+      - save_cache:
+          key: composer-{{ checksum "tasks/code_sniffer/composer.json" }}-{{ checksum "tasks/code_sniffer/composer.lock" }}
+          paths:
+            - tasks/code_sniffer/vendor
       - save_cache:
           key: composer-{{ checksum "composer.json" }}-{{ checksum "composer.lock" }}
           paths:
             - vendor
+      - save_cache:
+          key: composer-prefixed-{{ checksum "prefixer-checksum" }}
+          paths:
+            - prefixer/build
+            - prefixer/vendor
+            - vendor-prefixed
       - save_cache:
           key: npm-{{ checksum "package-lock.json" }}
           paths:
@@ -47,21 +118,55 @@ jobs:
       - run:
           name: Dump tests ENV variables for acceptance tests
           command: |
-            printenv | grep WP_TEST_ > .env
+            (printenv | grep WP_TEST_ > .env) || true
+      - persist_to_workspace:
+          root: /home/circleci/mailpoet
+          paths:
+            - .
+  build_premium:
+    executor: wpcli_php_latest
+    resource_class: medium
+    steps:
+      - attach_workspace:
+          at: /home/circleci/mailpoet
+      - add_ssh_keys
       - run:
-          name: "QA Scripts"
-          command: ./do qa
+          name: "Install Premium plugin"
+          command: |
+            # Add GitHub to known_hosts because there is no checkout step in this job
+            echo "github.com ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ==" >> ~/.ssh/known_hosts
+            git clone ${MAILPOET_PREMIUM_REPO_URL} mp3premium
+      - restore_cache:
+          key: premium-tools-{{ checksum "mp3premium/tools/install.php" }}
+      - restore_cache:
+          key: premium-composer-{{ checksum "mp3premium/composer.json" }}-{{ checksum "mp3premium/composer.lock" }}
+      - run:
+          name: "Set up test environment"
+          command: |
+            # install Premium dependencies
+            MAILPOET_FREE_PATH=$(pwd)
+            cd mp3premium
+            COMPOSER_DEV_MODE=1 php tools/install.php
+            echo "MAILPOET_FREE_PATH=${MAILPOET_FREE_PATH}" > .env
+            ./tools/vendor/composer.phar validate --no-check-all --no-check-publish
+            ./do install
+            ./do compile:all --env production
+            cd ..
+      - save_cache:
+          key: premium-tools-{{ checksum "mp3premium/tools/install.php" }}
+          paths:
+            - mp3premium/tools/vendor
+      - save_cache:
+          key: premium-composer-{{ checksum "mp3premium/composer.json" }}-{{ checksum "mp3premium/composer.lock" }}
+          paths:
+            - mp3premium/vendor
       - persist_to_workspace:
           root: /home/circleci/mailpoet
           paths:
             - .
   static_analysis:
-    working_directory: /home/circleci/mailpoet
-    docker:
-    - image: mailpoet/wordpress:7.3_20190306.1
-    - image: circleci/mysql:5.7-ram
-    environment:
-      TZ: /usr/share/zoneinfo/Etc/UTC
+    executor: wpcli_php_mysql_latest
+    resource_class: medium
     steps:
     - attach_workspace:
         at: /home/circleci/mailpoet
@@ -69,230 +174,99 @@ jobs:
         name: "Set up environment"
         command: |
           source ./.circleci/setup.bash && setup php7
-          wget https://github.com/phpstan/phpstan/releases/download/0.11.5/phpstan.phar
     - run:
         name: "Static analysis"
         command: ./do qa:phpstan
-  php5_unit:
-    working_directory: /home/circleci/mailpoet
-    docker:
-    - image: mailpoet/wordpress:5.6.30_20180417.1
-    - image: circleci/mysql:5.7-ram
-    environment:
-      TZ: /usr/share/zoneinfo/Etc/UTC
+  qa_js:
+    executor: wpcli_php_latest
+    steps:
+      - attach_workspace:
+          at: /home/circleci/mailpoet
+      - run:
+          name: "QA Frontend Assets"
+          command: ./do qa:frontend-assets
+  qa_php:
+    executor: wpcli_php_latest
+    steps:
+      - attach_workspace:
+          at: /home/circleci/mailpoet
+      - run:
+          name: "QA PHP"
+          command: ./do qa:php
+  js_tests:
+    executor: wpcli_php_oldest
     steps:
     - attach_workspace:
        at: /home/circleci/mailpoet
-    - run:
-        name: "Set up virtual host"
-        command: echo 127.0.0.1 mailpoet.loc | sudo tee -a /etc/hosts
-    - run:
-        name: "Set up test environment"
-        command: source ./.circleci/setup.bash && setup php5
-    - run:
-        name: "PHP Unit tests"
-        command: |
-          WP_ROOT="/home/circleci/mailpoet/wordpress" ./do t:u --xml
-    - store_test_results:
-        path: tests/_output
-    - store_artifacts:
-        path: tests/_output
-        destination: codeception
-    - store_artifacts:
-        path: /tmp/fake-mailer/
-        destination: fake-mailer
-  php5_integration_and_js:
-    working_directory: /home/circleci/mailpoet
-    docker:
-    - image: mailpoet/wordpress:5.6.30_20180417.1
-    - image: circleci/mysql:5.7-ram
-    environment:
-      TZ: /usr/share/zoneinfo/Etc/UTC
-    steps:
-    - attach_workspace:
-       at: /home/circleci/mailpoet
-    - run:
-        name: "Set up virtual host"
-        command: echo 127.0.0.1 mailpoet.loc | sudo tee -a /etc/hosts
-    - run:
-        name: "Set up test environment"
-        command: source ./.circleci/setup.bash && setup php5
     - run:
         name: "Preparing test results folder"
         command: mkdir test-results
     - run:
-        name: "JS tests"
+        name: "JS Newsletter Editor Tests"
         command: |
           mkdir test-results/mocha
-          ./do t:j test-results/mocha/junit.xml
+          ./do t:newsletter-editor test-results/mocha/newsletter_editor_junit.xml
     - run:
-        name: "PHP Integration tests"
+        name: "JS Tests"
         command: |
-          WP_ROOT="/home/circleci/mailpoet/wordpress" ./do test:integration --xml
+          ./do t:j test-results/mocha/junit.xml
     - store_test_results:
         path: test-results/mocha
     - store_artifacts:
         path: test-results/mocha
         destination: mocha
-    - store_test_results:
-        path: tests/_output
-    - store_artifacts:
-        path: tests/_output
-        destination: codeception
-    - store_artifacts:
-        path: /tmp/fake-mailer/
-        destination: fake-mailer
-  acceptance_tests_1:
+  acceptance_tests:
     working_directory: /home/circleci/mailpoet
     machine: true
-    steps:
-      - attach_workspace:
-          at: /home/circleci/mailpoet
-      - run:
-          name: "Set up virtual host"
-          command: echo 127.0.0.1 mailpoet.loc | sudo tee -a /etc/hosts
-      - run:
-          name: Run acceptance tests
-          command: |
-              cd tests/docker
-              docker-compose run -e SKIP_DEPS=1 codeception -g acceptance_group_1 --steps --debug -vvv --html --xml
-      - store_artifacts:
-          path: tests/_output
-      - store_test_results:
-          path: tests/_output
-  acceptance_tests_2:
-    working_directory: /home/circleci/mailpoet
-    machine: true
-    steps:
-      - attach_workspace:
-          at: /home/circleci/mailpoet
-      - run:
-          name: "Set up virtual host"
-          command: echo 127.0.0.1 mailpoet.loc | sudo tee -a /etc/hosts
-      - run:
-          name: Run acceptance tests
-          command: |
-              cd tests/docker
-              docker-compose run -e SKIP_DEPS=1 codeception -g acceptance_group_2 --steps --debug -vvv --html --xml
-      - store_artifacts:
-          path: tests/_output
-      - store_test_results:
-          path: tests/_output
-  acceptance_tests_3:
-    working_directory: /home/circleci/mailpoet
-    machine: true
-    steps:
-      - attach_workspace:
-          at: /home/circleci/mailpoet
-      - run:
-          name: "Set up virtual host"
-          command: echo 127.0.0.1 mailpoet.loc | sudo tee -a /etc/hosts
-      - run:
-          name: Run acceptance tests
-          command: |
-              cd tests/docker
-              docker-compose run -e SKIP_DEPS=1 codeception -g acceptance_group_3 --steps --debug -vvv --html --xml
-      - store_artifacts:
-          path: tests/_output
-      - store_test_results:
-          path: tests/_output
-  acceptance_tests_4:
-    working_directory: /home/circleci/mailpoet
-    machine: true
-    steps:
-      - attach_workspace:
-          at: /home/circleci/mailpoet
-      - run:
-          name: "Set up virtual host"
-          command: echo 127.0.0.1 mailpoet.loc | sudo tee -a /etc/hosts
-      - run:
-          name: Run acceptance tests
-          command: |
-              cd tests/docker
-              docker-compose run -e SKIP_DEPS=1 codeception -g acceptance_group_4 --steps --debug -vvv --html --xml
-      - store_artifacts:
-          path: tests/_output
-      - store_test_results:
-          path: tests/_output
-  acceptance_tests_multisite_1:
-    working_directory: /home/circleci/mailpoet
-    machine: true
-    steps:
-      - attach_workspace:
-          at: /home/circleci/mailpoet
-      - run:
-          name: "Set up virtual host"
-          command: echo 127.0.0.1 mailpoet.loc | sudo tee -a /etc/hosts
-      - run:
-          name: Run acceptance tests
-          command: |
-              cd tests/docker
-              docker-compose run -e SKIP_DEPS=1 -e MULTISITE=1 codeception -g acceptance_group_1 --steps --debug -vvv --html --xml
-      - store_artifacts:
-          path: tests/_output
-      - store_test_results:
-          path: tests/_output
-  acceptance_tests_multisite_2:
-    working_directory: /home/circleci/mailpoet
-    machine: true
-    steps:
-      - attach_workspace:
-          at: /home/circleci/mailpoet
-      - run:
-          name: "Set up virtual host"
-          command: echo 127.0.0.1 mailpoet.loc | sudo tee -a /etc/hosts
-      - run:
-          name: Run acceptance tests
-          command: |
-              cd tests/docker
-              docker-compose run -e SKIP_DEPS=1 -e MULTISITE=1 codeception -g acceptance_group_2 --steps --debug -vvv --html --xml
-      - store_artifacts:
-          path: tests/_output
-      - store_test_results:
-          path: tests/_output
-  acceptance_tests_multisite_3:
-    working_directory: /home/circleci/mailpoet
-    machine: true
-    steps:
-      - attach_workspace:
-          at: /home/circleci/mailpoet
-      - run:
-          name: "Set up virtual host"
-          command: echo 127.0.0.1 mailpoet.loc | sudo tee -a /etc/hosts
-      - run:
-          name: Run acceptance tests
-          command: |
-              cd tests/docker
-              docker-compose run -e SKIP_DEPS=1 -e MULTISITE=1 codeception -g acceptance_group_3 --steps --debug -vvv --html --xml
-      - store_artifacts:
-          path: tests/_output
-      - store_test_results:
-          path: tests/_output
-  acceptance_tests_multisite_4:
-    working_directory: /home/circleci/mailpoet
-    machine: true
-    steps:
-      - attach_workspace:
-          at: /home/circleci/mailpoet
-      - run:
-          name: "Set up virtual host"
-          command: echo 127.0.0.1 mailpoet.loc | sudo tee -a /etc/hosts
-      - run:
-          name: Run acceptance tests
-          command: |
-              cd tests/docker
-              docker-compose run -e SKIP_DEPS=1 -e MULTISITE=1 codeception -g acceptance_group_4 --steps --debug -vvv --html --xml
-      - store_artifacts:
-          path: tests/_output
-      - store_test_results:
-          path: tests/_output
-  php7_unit:
-    working_directory: /home/circleci/mailpoet
-    docker:
-      - image: mailpoet/wordpress:7.3_20190306.1
-      - image: circleci/mysql:5.7-ram
+    parameters:
+      group_arg:
+        type: string
+        default: ''
+      multisite:
+        type: integer
+        default: 0
+      mysql_command:
+        type: string
+        default: ''
+      mysql_image_version:
+        type: string
+        default: ''
+      wordpress_image_version:
+        type: string
+        default: ''
     environment:
-      TZ: /usr/share/zoneinfo/Etc/UTC
+      MYSQL_COMMAND: << parameters.mysql_command >>
+      MYSQL_IMAGE_VERSION: << parameters.mysql_image_version >>
+      WORDPRESS_IMAGE_VERSION: << parameters.wordpress_image_version >>
+    steps:
+      - attach_workspace:
+          at: /home/circleci/mailpoet
+      - run:
+          name: "Set up virtual host"
+          command: echo 127.0.0.1 mailpoet.loc | sudo tee -a /etc/hosts
+      - run:
+          name: Run acceptance tests
+          command: |
+              mkdir -m 777 -p tests/_output/exceptions
+              cd tests/docker
+              docker-compose run -e SKIP_DEPS=1 -e CIRCLE_BRANCH=${CIRCLE_BRANCH} -e CIRCLE_JOB=${CIRCLE_JOB} -e MULTISITE=<< parameters.multisite >> codeception << parameters.group_arg >> --steps --debug -vvv --html --xml
+      - run:
+          name: Check exceptions
+          command: |
+              if [ "$(ls tests/_output/exceptions/*.html)" ]; then
+                echo "There were some exceptions during the tests run"
+                exit 1
+              fi
+      - store_artifacts:
+          path: tests/_output
+      - store_test_results:
+          path: tests/_output
+  unit_tests:
+    parameters:
+      executor:
+        type: string
+        default: wpcli_php_mysql_latest
+    executor: << parameters.executor >>
     steps:
       - attach_workspace:
          at: /home/circleci/mailpoet
@@ -317,13 +291,18 @@ jobs:
       - store_artifacts:
           path: /tmp/fake-mailer/
           destination: fake-mailer
-  php7_integration:
-    working_directory: /home/circleci/mailpoet
-    docker:
-      - image: mailpoet/wordpress:7.3_20190306.1
-      - image: circleci/mysql:5.7-ram
-    environment:
-      TZ: /usr/share/zoneinfo/Etc/UTC
+  integration_tests:
+    parameters:
+      executor:
+        type: string
+        default: wpcli_php_mysql_latest
+      setup_command:
+        type: string
+        default: source ./.circleci/setup.bash && setup php7
+      run_command:
+        type: string
+        default: ./do test:integration --xml
+    executor: << parameters.executor >>
     steps:
       - attach_workspace:
          at: /home/circleci/mailpoet
@@ -335,42 +314,10 @@ jobs:
           command: echo 127.0.0.1 example.com | sudo tee -a /etc/hosts
       - run:
           name: "Set up test environment"
-          command: source ./.circleci/setup.bash && setup php7
+          command: << parameters.setup_command >>
       - run:
           name: "PHP Integration tests"
-          command: |
-            ./do test:integration --xml
-      - store_test_results:
-          path: tests/_output
-      - store_artifacts:
-          path: tests/_output
-          destination: codeception
-      - store_artifacts:
-          path: /tmp/fake-mailer/
-          destination: fake-mailer
-  php7_integration_multisite:
-    working_directory: /home/circleci/mailpoet
-    docker:
-      - image: mailpoet/wordpress:7.3_20190306.1
-      - image: circleci/mysql:5.7-ram
-    environment:
-      TZ: /usr/share/zoneinfo/Etc/UTC
-    steps:
-      - attach_workspace:
-          at: /home/circleci/mailpoet
-      - run:
-          name: "Set up virtual host"
-          command: echo 127.0.0.1 mailpoet.loc | sudo tee -a /etc/hosts
-      - run:
-          name: "Prepare example.com for testing"
-          command: echo 127.0.0.1 example.com | sudo tee -a /etc/hosts
-      - run:
-          name: "Set up test environment"
-          command: source ./.circleci/setup.bash && setup php7_multisite
-      - run:
-          name: "PHP Integration tests"
-          command: |
-            ./do t:multisite-integration --xml
+          command:  << parameters.run_command >>
       - store_test_results:
           path: tests/_output
       - store_artifacts:
@@ -380,12 +327,8 @@ jobs:
           path: /tmp/fake-mailer/
           destination: fake-mailer
   build_release_zip:
-    working_directory: /home/circleci/mailpoet
-    docker:
-      - image: mailpoet/wordpress:7.3_20190306.1
-      - image: circleci/mysql:5.7-ram
-    environment:
-      TZ: /usr/share/zoneinfo/Etc/UTC
+    executor: wpcli_php_mysql_latest
+    resource_class: medium
     steps:
       - attach_workspace:
           at: /home/circleci/mailpoet
@@ -409,11 +352,7 @@ jobs:
           paths:
           - release_zip_build_number.txt
   test_deployment:
-    working_directory: /home/circleci/mailpoet
-    docker:
-      - image: mailpoet/wordpress:7.1_20181009.1
-    environment:
-      TZ: /usr/share/zoneinfo/Etc/UTC
+    executor: wpcli_php_latest
     steps:
       - attach_workspace:
           at: /home/circleci/mailpoet
@@ -426,81 +365,167 @@ jobs:
           path: deploy.log
 
 workflows:
-  version: 2
   build_and_test:
     jobs:
-      - build_and_code_qa
-      - php5_unit:
+      - build
+      - unit_tests:
+          name: unit_tests
           requires:
-            - build_and_code_qa
-      - php7_unit:
-          requires:
-            - build_and_code_qa
+            - build
       - static_analysis:
           requires:
-            - build_and_code_qa
-      - acceptance_tests_1:
+            - build
+      - qa_js:
           requires:
-            - php5_unit
-      - acceptance_tests_2:
+            - build
+      - qa_php:
           requires:
-            - php5_unit
-      - acceptance_tests_3:
+            - build
+      - acceptance_tests:
+          name: acceptance_tests_1
+          group_arg: -g acceptance_group_1
           requires:
-            - php5_unit
-      - acceptance_tests_4:
+            - unit_tests
+            - static_analysis
+            - qa_js
+            - qa_php
+      - acceptance_tests:
+          name: acceptance_tests_2
+          group_arg: -g acceptance_group_2
           requires:
-            - php5_unit
-      - php5_integration_and_js:
+            - unit_tests
+            - static_analysis
+            - qa_js
+            - qa_php
+      - acceptance_tests:
+          name: acceptance_tests_3
+          group_arg: -g acceptance_group_3
           requires:
-            - php5_unit
-      - php7_integration:
+            - unit_tests
+            - static_analysis
+            - qa_js
+            - qa_php
+      - acceptance_tests:
+          name: acceptance_tests_4
+          group_arg: -g acceptance_group_4
           requires:
-            - php7_unit
-      - acceptance_tests_multisite_1:
+            - unit_tests
+            - static_analysis
+            - qa_js
+            - qa_php
+      - acceptance_tests:
+          name: acceptance_tests_5
+          group_arg: -g acceptance_group_5
           requires:
-            - php5_unit
-          filters:
-            branches:
-              only: master
-      - acceptance_tests_multisite_2:
+            - unit_tests
+            - static_analysis
+            - qa_js
+            - qa_php
+      - js_tests:
           requires:
-            - php5_unit
-          filters:
-            branches:
-              only: master
-      - acceptance_tests_multisite_3:
+            - build
+      - integration_tests:
           requires:
-            - php5_unit
-          filters:
-            branches:
-              only: master
-      - acceptance_tests_multisite_4:
+            - unit_tests
+            - static_analysis
+            - qa_js
+            - qa_php
+      - acceptance_tests:
+          <<: *multisite_acceptance_config
+          name: acceptance_tests_multisite_1
+          group_arg: -g acceptance_group_1
+      - acceptance_tests:
+          <<: *multisite_acceptance_config
+          name: acceptance_tests_multisite_2
+          group_arg: -g acceptance_group_2
+      - acceptance_tests:
+          <<: *multisite_acceptance_config
+          name: acceptance_tests_multisite_3
+          group_arg: -g acceptance_group_3
+      - acceptance_tests:
+          <<: *multisite_acceptance_config
+          name: acceptance_tests_multisite_4
+          group_arg: -g acceptance_group_4
+      - acceptance_tests:
+          <<: *multisite_acceptance_config
+          name: acceptance_tests_multisite_5
+          group_arg: -g acceptance_group_5
+      - integration_tests:
+          <<: *only_master_and_release
+          name: integration_tests_multisite
+          setup_command: source ./.circleci/setup.bash && setup php7_multisite
+          run_command: ./do test:multisite-integration --xml
           requires:
-            - php5_unit
-          filters:
-            branches:
-              only: master
-      - php7_integration_multisite:
-          requires:
-            - php7_unit
-          filters:
-            branches:
-              only: master
+            - unit_tests
+            - static_analysis
+            - qa_js
+            - qa_php
       - build_release_zip:
           requires:
-            - build_and_code_qa
+            - build
             - acceptance_tests_1
             - acceptance_tests_2
             - acceptance_tests_3
             - acceptance_tests_4
-            - php5_integration_and_js
-            - php7_integration
+            - acceptance_tests_5
+            - js_tests
+            - integration_tests
       - test_deployment:
+          <<: *only_master_and_release
           requires:
             - build_release_zip
+
+  nightly:
+    triggers:
+      - schedule:
+          cron: "0 22 * * 1-5"
           filters:
             branches:
               only:
                 - master
-                - release
+    jobs:
+      - build
+      - acceptance_tests:
+          name: acceptance_latest
+          requires:
+            - build
+      - acceptance_tests:
+          name: acceptance_oldest
+          mysql_command: --max_allowed_packet=100M
+          mysql_image_version: 5.5-ram
+          wordpress_image_version: wp-5.0_php7.1_20200928.1
+          requires:
+            - build
+      - unit_tests:
+          name: unit_latest
+          requires:
+            - build
+      - unit_tests:
+          name: unit_oldest
+          executor: wpcli_php_mysql_oldest
+          requires:
+            - build
+      - integration_tests:
+          name: integration_latest
+          requires:
+            - build
+      - integration_tests:
+          name: integration_oldest
+          executor: wpcli_php_mysql_oldest
+          requires:
+            - build
+      - build_premium:
+          requires:
+            - build
+      - acceptance_tests:
+          name: acceptance_with_premium_latest
+          requires:
+            - build_premium
+      - unit_tests:
+          name: unit_with_premium_latest
+          requires:
+            - build_premium
+      - integration_tests:
+          name: integration_with_premium_latest
+          requires:
+            - build_premium

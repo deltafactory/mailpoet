@@ -1,47 +1,90 @@
 <?php
+
 namespace MailPoet\Newsletter\Renderer;
 
 use MailPoet\Config\Env;
+use MailPoet\Entities\NewsletterEntity;
 use MailPoet\Models\Newsletter;
+use MailPoet\Newsletter\NewslettersRepository;
+use MailPoet\Newsletter\Renderer\EscapeHelper as EHelper;
+use MailPoet\RuntimeException;
 use MailPoet\Services\Bridge;
+use MailPoet\Tasks\Sending as SendingTask;
 use MailPoet\Util\License\License;
 use MailPoet\Util\pQuery\DomNode;
 use MailPoet\WP\Functions as WPFunctions;
-use MailPoet\Newsletter\Renderer\EscapeHelper as EHelper;
-
-if (!defined('ABSPATH')) exit;
 
 class Renderer {
-  public $blocks_renderer;
-  public $columns_renderer;
-  public $CSS_inliner;
-  public $newsletter;
-  public $preview;
-  public $premium_activated;
-  public $mss_activated;
-  private $template;
   const NEWSLETTER_TEMPLATE = 'Template.html';
   const FILTER_POST_PROCESS = 'mailpoet_rendering_post_process';
 
-  /**
-   * @param \MailPoet\Models\Newsletter|array $newsletter
-   */
-  function __construct($newsletter, $preview = false) {
-    $this->newsletter = ($newsletter instanceof Newsletter) ? $newsletter->asArray() : $newsletter;
-    $this->preview = $preview;
-    $this->blocks_renderer = new Blocks\Renderer($this->newsletter);
-    $this->columns_renderer = new Columns\Renderer();
-    $this->CSS_inliner = new \MailPoet\Util\CSS();
-    $this->template = file_get_contents(dirname(__FILE__) . '/' . self::NEWSLETTER_TEMPLATE);
-    $this->premium_activated = License::getLicense();
-    $bridge = new Bridge();
-    $this->mss_activated = $bridge->isMPSendingServiceEnabled();
+  /** @var Blocks\Renderer */
+  private $blocksRenderer;
+
+  /** @var Columns\Renderer */
+  private $columnsRenderer;
+
+  /** @var Preprocessor */
+  private $preprocessor;
+
+  /** @var \MailPoetVendor\CSS */
+  private $cSSInliner;
+
+  /** @var Bridge */
+  private $bridge;
+
+  /** @var License */
+  private $license;
+
+  /** @var NewslettersRepository */
+  private $newslettersRepository;
+
+  public function __construct(
+    Blocks\Renderer $blocksRenderer,
+    Columns\Renderer $columnsRenderer,
+    Preprocessor $preprocessor,
+    \MailPoetVendor\CSS $cSSInliner,
+    Bridge $bridge,
+    NewslettersRepository $newslettersRepository,
+    License $license
+  ) {
+    $this->blocksRenderer = $blocksRenderer;
+    $this->columnsRenderer = $columnsRenderer;
+    $this->preprocessor = $preprocessor;
+    $this->cSSInliner = $cSSInliner;
+    $this->bridge = $bridge;
+    $this->license = $license;
+    $this->newslettersRepository = $newslettersRepository;
   }
 
-  function render($type = false) {
-    $newsletter = $this->newsletter;
-    $body = (is_array($newsletter['body']))
-      ? $newsletter['body']
+  /**
+   * This is only temporary, when all calls are refactored to doctrine and only entity is passed we don't need this
+   * @param \MailPoet\Models\Newsletter|NewsletterEntity $newsletter
+   * @return NewsletterEntity|null
+   */
+  private function getNewsletter($newsletter) {
+    if ($newsletter instanceof NewsletterEntity) return $newsletter;
+    if ($newsletter instanceof Newsletter) {
+      $newsletterId = $newsletter->id;
+    }
+    return $this->newslettersRepository->findOneById($newsletterId);
+  }
+
+  public function render($newsletter, SendingTask $sendingTask = null, $type = false) {
+    return $this->_render($newsletter, $sendingTask, $type);
+  }
+
+  public function renderAsPreview($newsletter, $type = false) {
+    return $this->_render($newsletter, null, $type, true);
+  }
+
+  private function _render($newsletter, SendingTask $sendingTask = null, $type = false, $preview = false) {
+    $newsletter = $this->getNewsletter($newsletter);
+    if (!$newsletter instanceof NewsletterEntity) {
+      throw new RuntimeException('Newsletter was not found');
+    }
+    $body = (is_array($newsletter->getBody()))
+      ? $newsletter->getBody()
       : [];
     $content = (array_key_exists('content', $body))
       ? $body['content']
@@ -50,79 +93,65 @@ class Renderer {
       ? $body['globalStyles']
       : [];
 
-    if (!$this->premium_activated && !$this->mss_activated && !$this->preview) {
+    if (
+      !$this->license->hasLicense()
+      && !$this->bridge->isMailpoetSendingServiceEnabled()
+      && !$preview
+    ) {
       $content = $this->addMailpoetLogoContentBlock($content, $styles);
     }
 
-    $content = $this->preProcessALC($content);
-    $rendered_body = $this->renderBody($content);
-    $rendered_styles = $this->renderStyles($styles);
-    $custom_fonts_links = StylesHelper::getCustomFontsLinks($styles);
+    $content = $this->preprocessor->process($newsletter, $content, $preview, $sendingTask);
+    $renderedBody = $this->renderBody($newsletter, $content);
+    $renderedStyles = $this->renderStyles($styles);
+    $customFontsLinks = StylesHelper::getCustomFontsLinks($styles);
 
-    $template = $this->injectContentIntoTemplate($this->template, [
-      htmlspecialchars($newsletter['subject']),
-      $rendered_styles,
-      $custom_fonts_links,
-      EHelper::escapeHtmlText($newsletter['preheader']),
-      $rendered_body,
-    ]);
-    $template_dom = $this->inlineCSSStyles($template);
-    $template = $this->postProcessTemplate($template_dom);
+    $template = $this->injectContentIntoTemplate(
+      (string)file_get_contents(dirname(__FILE__) . '/' . self::NEWSLETTER_TEMPLATE),
+      [
+        htmlspecialchars($newsletter->getSubject()),
+        $renderedStyles,
+        $customFontsLinks,
+        EHelper::escapeHtmlText($newsletter->getPreheader()),
+        $renderedBody,
+      ]
+    );
+    if ($template === null) {
+      $template = '';
+    }
+    $templateDom = $this->inlineCSSStyles($template);
+    $template = $this->postProcessTemplate($templateDom);
 
-    $rendered_newsletter = [
+    $renderedNewsletter = [
       'html' => $template,
       'text' => $this->renderTextVersion($template),
     ];
 
-    return ($type && !empty($rendered_newsletter[$type])) ?
-      $rendered_newsletter[$type] :
-      $rendered_newsletter;
+    return ($type && !empty($renderedNewsletter[$type])) ?
+      $renderedNewsletter[$type] :
+      $renderedNewsletter;
   }
 
   /**
-   * @param array $content
-   * @return array
-   */
-  private function preProcessALC(array $content) {
-    $blocks = [];
-    $content_blocks = (array_key_exists('blocks', $content))
-      ? $content['blocks']
-      : [];
-    foreach ($content_blocks as $block) {
-      if ($block['type'] === 'automatedLatestContentLayout') {
-        $blocks = array_merge(
-          $blocks,
-          $this->blocks_renderer->automatedLatestContentTransformedPosts($block)
-        );
-      } else {
-        $blocks[] = $block;
-      }
-    }
-
-    $content['blocks'] = $blocks;
-    return $content;
-  }
-
-  /**
+   * @param NewsletterEntity $newsletter
    * @param array $content
    * @return string
    */
-  private function renderBody($content) {
+  private function renderBody(NewsletterEntity $newsletter, array $content) {
     $blocks = (array_key_exists('blocks', $content))
       ? $content['blocks']
       : [];
 
-    $_this = $this;
-    $rendered_content = array_map(function($content_block) use($_this) {
+    $renderedContent = [];
+    foreach ($blocks as $contentBlock) {
+      $columnsData = $this->blocksRenderer->render($newsletter, $contentBlock);
 
-      $columns_data = $_this->blocks_renderer->render($content_block);
-
-      return $_this->columns_renderer->render(
-        $content_block,
-        $columns_data
+      $renderedContent[] = $this->columnsRenderer->render(
+        $contentBlock,
+        $columnsData
       );
-    }, $blocks);
-    return implode('', $rendered_content);
+    }
+    return implode('', $renderedContent);
   }
 
   /**
@@ -154,7 +183,7 @@ class Renderer {
   /**
    * @param string $template
    * @param string[] $content
-   * @return string|string[]|null
+   * @return string|null
    */
   private function injectContentIntoTemplate($template, $content) {
     return preg_replace_callback('/{{\w+}}/', function($matches) use (&$content) {
@@ -167,7 +196,7 @@ class Renderer {
    * @return DomNode
    */
   private function inlineCSSStyles($template) {
-    return $this->CSS_inliner->inlineCSS($template);
+    return $this->cSSInliner->inlineCSS($template);
   }
 
   /**
@@ -180,17 +209,17 @@ class Renderer {
   }
 
   /**
-   * @param DomNode $template_dom
+   * @param DomNode $templateDom
    * @return string
    */
-  private function postProcessTemplate(DomNode $template_dom) {
+  private function postProcessTemplate(DomNode $templateDom) {
     // replace spaces in image tag URLs
-    foreach ($template_dom->query('img') as $image) {
+    foreach ($templateDom->query('img') as $image) {
       $image->src = str_replace(' ', '%20', $image->src);
     }
     $template = WPFunctions::get()->applyFilters(
       self::FILTER_POST_PROCESS,
-      $template_dom->__toString()
+      $templateDom->__toString()
     );
     return $template;
   }
@@ -222,7 +251,7 @@ class Renderer {
             [
               'type' => 'image',
               'link' => 'http://www.mailpoet.com',
-              'src' => Env::$assets_url . '/img/mailpoet_logo_newsletter.png',
+              'src' => Env::$assetsUrl . '/img/mailpoet_logo_newsletter.png',
               'fullWidth' => false,
               'alt' => 'MailPoet',
               'width' => '108px',

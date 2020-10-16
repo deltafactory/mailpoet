@@ -1,24 +1,29 @@
+<% extends 'emails/statsNotificationLayout.txt' %>
+
+<% block content %>
 <%= __('Your stats are in!') %>
 
 <%= subject %>
 
-<%= __('open rate') %>: <%= number_format_i18n(opened) %>%
-<% if opened > 30 %>
-  <%= __('EXCELLENT') %>
-<% elseif opened > 10 %>
-  <%= __('GOOD') %>
+<% if subscribersLimitReached %>
+<%= __('Congratulations, you now have more than [subscribersLimit] subscribers!')|replace({'[subscribersLimit]': subscribersLimit}) %>
+
+<% if hasValidApiKey %>
+<%= __('Your plan is limited to [subscribersLimit] subscribers.')|replace({'[subscribersLimit]': subscribersLimit}) %>
 <% else %>
-  <%= __('BAD') %>
+<%= __('Our free version is limited to [subscribersLimit] subscribers.')|replace({'[subscribersLimit]': subscribersLimit}) %>
+<% endif %>
+<%= __('You need to upgrade now to be able to continue using MailPoet.') %>
+
+<%= __('Upgrade Now') %>
+  <%= upgradeNowLink %>
 <% endif %>
 
+<%= __('open rate') %>: <%= number_format_i18n(opened) %>%
+  <%= opened_stats_text(opened) %>
+
 <%= __('click rate') %>: <%= number_format_i18n(clicked) %>%
-<% if clicked > 3 %>
-  <%= __('EXCELLENT') %>
-<% elseif clicked > 1 %>
- <%= __('GOOD') %>
-<% else %>
- <%= __('BAD') %>
-<% endif %>
+  <%= clicked_stats_text(opened) %>
 
 <% if topLinkClicks > 0 %>
 <%= __('Most clicked link') %>
@@ -27,14 +32,7 @@
   <%= __('%s unique clicks')|replace({'%s': topLinkClicks}) %>
 <% endif %>
 
-<% if premiumPluginActive %>
 <%= __('View all stats') %>
   <%= linkStats %>
-<% else %>
-<%= __('See Premium features') %>
-  <%= premiumPage %>
-<% endif %>
 
-<%= __('How to improve my open rate?') %> https://www.mailpoet.com/how-to-improve-open-rates/
-<%= __('And my click rate?') %> https://www.mailpoet.com/how-to-improve-click-rates/
-<%= __('Disable these emails') %> <%= linkSettings %>
+<% endblock %>

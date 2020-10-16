@@ -1,6 +1,7 @@
 import React from 'react';
 import PropTypes from 'prop-types';
 
+import Grid from 'common/grid';
 import DateText from 'newsletters/send/date_text.jsx';
 import TimeSelect from 'newsletters/send/time_select.jsx';
 
@@ -13,8 +14,15 @@ class DateTime extends React.Component {
     this.state = this.buildStateFromProps(props);
   }
 
-  componentWillReceiveProps(nextProps) {
-    this.setState(this.buildStateFromProps(nextProps));
+  componentDidUpdate(prevProps) {
+    if (
+      this.props.value !== prevProps.value
+      || this.props.defaultDateTime !== prevProps.defaultDateTime
+    ) {
+      setImmediate(() => {
+        this.setState(this.buildStateFromProps(this.props));
+      });
+    }
   }
 
   getDateTime = () => [this.state.date, this.state.time].join(this.DATE_TIME_SEPARATOR);
@@ -48,7 +56,7 @@ class DateTime extends React.Component {
 
   render() {
     return (
-      <span>
+      <Grid.Column className="mailpoet-datetime-container">
         <DateText
           name="date"
           value={this.state.date}
@@ -66,12 +74,13 @@ class DateTime extends React.Component {
           validation={this.props.timeValidation}
           timeOfDayItems={this.props.timeOfDayItems}
         />
-      </span>
+      </Grid.Column>
     );
   }
 }
 
 DateTime.propTypes = {
+  value: PropTypes.string,
   defaultDateTime: PropTypes.string.isRequired,
   dateDisplayFormat: PropTypes.string.isRequired,
   dateStorageFormat: PropTypes.string.isRequired,
@@ -88,6 +97,7 @@ DateTime.defaultProps = {
   name: '',
   disabled: false,
   timeValidation: undefined,
+  value: undefined,
 };
 
 export default DateTime;

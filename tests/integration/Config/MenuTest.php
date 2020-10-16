@@ -5,23 +5,19 @@ namespace MailPoet\Test\Config;
 use Codeception\Util\Stub;
 use MailPoet\Config\AccessControl;
 use MailPoet\Config\Menu;
-use MailPoet\Config\Renderer;
 use MailPoet\Config\ServicesChecker;
-use MailPoet\Features\FeaturesController;
-use MailPoet\Settings\SettingsController;
-use MailPoet\Settings\UserFlagsController;
-use MailPoet\WooCommerce\Helper as WooCommerceHelper;
-use MailPoet\WP\Functions;
+use MailPoet\DI\ContainerWrapper;
+use MailPoet\WP\Functions as WPFunctions;
 
 class MenuTest extends \MailPoetTest {
-  function testItReturnsTrueIfCurrentPageBelongsToMailpoet() {
+  public function testItReturnsTrueIfCurrentPageBelongsToMailpoet() {
     $result = Menu::isOnMailPoetAdminPage(null, 'somepage');
     expect($result)->false();
     $result = Menu::isOnMailPoetAdminPage(null, 'mailpoet-newsletters');
     expect($result)->true();
   }
 
-  function testItRespectsExclusionsWhenCheckingMPPages() {
+  public function testItRespectsExclusionsWhenCheckingMPPages() {
     $exclude = ['mailpoet-welcome'];
     $result = Menu::isOnMailPoetAdminPage($exclude, 'mailpoet-welcome');
     expect($result)->false();
@@ -29,7 +25,7 @@ class MenuTest extends \MailPoetTest {
     expect($result)->true();
   }
 
-  function testItWorksWithRequestDataWhenCheckingMPPages() {
+  public function testItWorksWithRequestDataWhenCheckingMPPages() {
     $_REQUEST['page'] = 'mailpoet-newsletters';
     $result = Menu::isOnMailPoetAdminPage();
     expect($result)->true();
@@ -43,31 +39,8 @@ class MenuTest extends \MailPoetTest {
     expect($result)->false();
   }
 
-  function testItChecksMailpoetAPIKey() {
-    $renderer = Stub::make(new Renderer());
-    $menu = $this->getMenu($renderer);
-
-    $_REQUEST['page'] = 'mailpoet-newsletters';
-    $checker = Stub::make(
-      new ServicesChecker(),
-      ['isMailPoetAPIKeyValid' => true],
-      $this
-    );
-    $menu->checkMailPoetAPIKey($checker);
-    expect($menu->mp_api_key_valid)->true();
-
-    $checker = Stub::make(
-      new ServicesChecker(),
-      ['isMailPoetAPIKeyValid' => false],
-      $this
-    );
-    $menu->checkMailPoetAPIKey($checker);
-    expect($menu->mp_api_key_valid)->false();
-  }
-
-  function testItChecksPremiumKey() {
-    $renderer = Stub::make(new Renderer());
-    $menu = $this->getMenu($renderer);
+  public function testItChecksPremiumKey() {
+    $menu = $this->getMenu();
 
     $_REQUEST['page'] = 'mailpoet-newsletters';
     $checker = Stub::make(
@@ -76,7 +49,7 @@ class MenuTest extends \MailPoetTest {
       $this
     );
     $menu->checkPremiumKey($checker);
-    expect($menu->premium_key_valid)->true();
+    expect($menu->premiumKeyValid)->true();
 
     $checker = Stub::make(
       new ServicesChecker(),
@@ -84,19 +57,16 @@ class MenuTest extends \MailPoetTest {
       $this
     );
     $menu->checkPremiumKey($checker);
-    expect($menu->premium_key_valid)->false();
+    expect($menu->premiumKeyValid)->false();
   }
 
-  private function getMenu(Renderer $renderer) {
+  private function getMenu() {
+    $wp = new WPFunctions;
     return new Menu(
-      $renderer,
       new AccessControl(),
-      new SettingsController(),
-      new FeaturesController(),
-      new Functions(),
-      new WooCommerceHelper(new Functions()),
+      $wp,
       new ServicesChecker,
-      new UserFlagsController
+      ContainerWrapper::getInstance()
     );
   }
 }

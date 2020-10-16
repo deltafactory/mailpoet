@@ -1,98 +1,27 @@
 import jQuery from 'jquery';
 import React from 'react';
-import createReactClass from 'create-react-class';
 import _ from 'underscore';
 import classNames from 'classnames';
 import PropTypes from 'prop-types';
 import MailPoet from 'mailpoet';
-import ListingBulkActions from 'listing/bulk_actions.jsx';
+import Categories from 'common/categories/categories';
 import ListingHeader from 'listing/header.jsx';
 import ListingPages from 'listing/pages.jsx';
 import ListingSearch from 'listing/search.jsx';
-import ListingGroups from 'listing/groups.jsx';
 import ListingFilters from 'listing/filters.jsx';
 import ListingItems from 'listing/listing_items.jsx';
 import MailerError from 'listing/notices.jsx';
 import { withRouter } from 'react-router-dom';
+import { GlobalContext } from 'context/index.jsx';
 
-const Listing = createReactClass({ // eslint-disable-line react/prefer-es6-class
-  displayName: 'Listing',
+class Listing extends React.Component {
+  constructor(props) {
+    super(props);
+    this.formRef = React.createRef();
+    this.state = this.getEmptyState();
+  }
 
-  /* eslint-disable react/require-default-props */
-  propTypes: {
-    limit: PropTypes.number,
-    sort_by: PropTypes.string,
-    sort_order: PropTypes.string,
-    params: PropTypes.object.isRequired, // eslint-disable-line react/forbid-prop-types
-    auto_refresh: PropTypes.bool,
-    location: PropTypes.shape({
-      pathname: PropTypes.string,
-    }),
-    base_url: PropTypes.string,
-    type: PropTypes.string,
-    endpoint: PropTypes.string.isRequired,
-    afterGetItems: PropTypes.func,
-    messages: PropTypes.shape({
-      onRestore: PropTypes.func,
-      onTrash: PropTypes.func,
-      onDelete: PropTypes.func,
-    }),
-    onRenderItem: PropTypes.func.isRequired,
-    columns: PropTypes.arrayOf(PropTypes.object),
-    bulk_actions: PropTypes.arrayOf(PropTypes.object),
-    item_actions: PropTypes.arrayOf(PropTypes.object),
-    search: PropTypes.bool,
-    groups: PropTypes.bool,
-    renderExtraActions: PropTypes.func,
-    onBeforeSelectFilter: PropTypes.func,
-    getListingItemKey: PropTypes.func,
-    history: PropTypes.shape({
-      push: PropTypes.func.isRequired,
-    }).isRequired,
-  },
-  /* eslint-enable react/require-default-props */
-
-  getDefaultProps: () => ({
-    limit: 10,
-    sort_by: null,
-    sort_order: undefined,
-    auto_refresh: true,
-    location: undefined,
-    base_url: '',
-    type: undefined,
-    afterGetItems: undefined,
-    messages: undefined,
-    columns: [],
-    bulk_actions: [],
-    item_actions: [],
-    search: true,
-    groups: true,
-    renderExtraActions: undefined,
-    onBeforeSelectFilter: undefined,
-    getListingItemKey: undefined,
-  }),
-
-  getInitialState: function getInitialState() {
-    return {
-      loading: false,
-      search: '',
-      page: 1,
-      count: 0,
-      limit: 10,
-      sort_by: null,
-      sort_order: null,
-      items: [],
-      groups: [],
-      group: 'all',
-      filters: {},
-      filter: {},
-      selected_ids: [],
-      selection: false,
-      meta: {},
-    };
-  },
-
-  componentDidMount: function componentDidMount() {
+  componentDidMount() {
     this.isComponentMounted = true;
     const params = this.props.params || {};
     this.initWithParams(params);
@@ -102,21 +31,42 @@ const Listing = createReactClass({ // eslint-disable-line react/prefer-es6-class
         this.getItems();
       });
     }
-  },
+  }
 
-  componentWillReceiveProps: function componentWillReceiveProps(nextProps) {
-    const params = nextProps.params || {};
-    this.initWithParams(params);
-  },
+  componentDidUpdate(prevProps) {
+    const params = this.props.params || {};
+    const prevParams = prevProps.params || {};
+    if (!_.isEqual(params, prevParams)) {
+      this.initWithParams(params);
+    }
+  }
 
-  componentWillUnmount: function componentWillUnmount() {
+  componentWillUnmount() {
     this.isComponentMounted = false;
-  },
+  }
 
-  setParams: function setParams() {
+  getEmptyState = () => ({
+    loading: false,
+    search: '',
+    page: 1,
+    count: 0,
+    limit: 10,
+    sort_by: null,
+    sort_order: null,
+    items: [],
+    groups: [],
+    group: 'all',
+    filters: {},
+    filter: {},
+    selected_ids: [],
+    selection: false,
+    meta: {},
+  });
+
+  setParams = () => {
     if (this.props.location) {
       const params = Object.keys(this.state)
-        .filter(key => (
+        .filter((key) => (
           [
             'group',
             'filter',
@@ -149,9 +99,9 @@ const Listing = createReactClass({ // eslint-disable-line react/prefer-es6-class
         this.props.history.push(`${url}`);
       }
     }
-  },
+  };
 
-  getUrlWithParams: function getUrlWithParams(params) {
+  getUrlWithParams = (params) => {
     let baseUrl = (this.props.base_url !== undefined)
       ? this.props.base_url
       : null;
@@ -161,9 +111,9 @@ const Listing = createReactClass({ // eslint-disable-line react/prefer-es6-class
       return `/${baseUrl}/${params}`;
     }
     return `/${params}`;
-  },
+  };
 
-  setBaseUrlParams: function setBaseUrlParams(baseUrl) {
+  setBaseUrlParams = (baseUrl) => {
     let ret = baseUrl;
     if (ret.indexOf(':') !== -1) {
       const params = this.getParams();
@@ -175,9 +125,9 @@ const Listing = createReactClass({ // eslint-disable-line react/prefer-es6-class
     }
 
     return ret;
-  },
+  };
 
-  getParams: function getParams() {
+  getParams = () => {
     const params = _.omit(this.props.params, 'splat');
     // TODO:
     // find a way to set the "type" in the routes definition
@@ -186,16 +136,16 @@ const Listing = createReactClass({ // eslint-disable-line react/prefer-es6-class
       params.type = this.props.type;
     }
     return params;
-  },
+  };
 
-  getParam: function getParam(param) {
+  getParam = (param) => {
     const regex = /(.*)\[(.*)\]/;
     const matches = regex.exec(param);
     if (!matches) return null;
     return [matches[1], matches[2]];
-  },
+  };
 
-  getItems: function getItems() {
+  getItems = () => {
     if (!this.isComponentMounted) return;
 
     this.setState({ loading: true });
@@ -240,16 +190,16 @@ const Listing = createReactClass({ // eslint-disable-line react/prefer-es6-class
       });
     }).fail((response) => {
       if (response.errors.length > 0) {
-        MailPoet.Notice.error(
-          response.errors.map(error => error.message),
+        this.context.notices.error(
+          response.errors.map((error) => <p key={error.message}>{error.message}</p>),
           { scroll: true }
         );
       }
     });
-  },
+  };
 
-  initWithParams: function initWithParams(params) {
-    const state = this.getInitialState();
+  initWithParams = (params) => {
+    const state = this.getEmptyState();
     // check for url params
     _.mapObject(params, (param) => {
       if (!param) return;
@@ -292,9 +242,9 @@ const Listing = createReactClass({ // eslint-disable-line react/prefer-es6-class
     this.setState(state, () => {
       this.getItems();
     });
-  },
+  };
 
-  handleRestoreItem: function handleRestoreItem(id) {
+  handleRestoreItem = (id) => {
     this.setState({
       loading: true,
       page: 1,
@@ -316,14 +266,14 @@ const Listing = createReactClass({ // eslint-disable-line react/prefer-es6-class
       }
       this.getItems();
     }).fail((response) => {
-      MailPoet.Notice.error(
-        response.errors.map(error => error.message),
+      this.context.notices.error(
+        response.errors.map((error) => <p key={error.message}>{error.message}</p>),
         { scroll: true }
       );
     });
-  },
+  };
 
-  handleTrashItem: function handleTrashItem(id) {
+  handleTrashItem = (id) => {
     this.setState({
       loading: true,
       page: 1,
@@ -345,14 +295,14 @@ const Listing = createReactClass({ // eslint-disable-line react/prefer-es6-class
       }
       this.getItems();
     }).fail((response) => {
-      MailPoet.Notice.error(
-        response.errors.map(error => error.message),
+      this.context.notices.error(
+        response.errors.map((error) => <p key={error.message}>{error.message}</p>),
         { scroll: true }
       );
     });
-  },
+  };
 
-  handleDeleteItem: function handleDeleteItem(id) {
+  handleDeleteItem = (id) => {
     this.setState({
       loading: true,
       page: 1,
@@ -374,35 +324,33 @@ const Listing = createReactClass({ // eslint-disable-line react/prefer-es6-class
       }
       this.getItems();
     }).fail((response) => {
-      MailPoet.Notice.error(
-        response.errors.map(error => error.message),
+      this.context.notices.error(
+        response.errors.map((error) => <p key={error.message}>{error.message}</p>),
         { scroll: true }
       );
     });
-  },
+  };
 
-  handleEmptyTrash: function handleEmptyTrash() {
-    return this.handleBulkAction('all', {
-      action: 'delete',
-      group: 'trash',
-    }).done((response) => {
-      if (
-        this.props.messages !== undefined
+  handleEmptyTrash = () => this.handleBulkAction('all', {
+    action: 'delete',
+    group: 'trash',
+  }).done((response) => {
+    if (
+      this.props.messages !== undefined
         && this.props.messages.onDelete !== undefined
-      ) {
-        this.props.messages.onDelete(response);
-      }
-      // redirect to default group
-      this.handleGroup('all');
-    }).fail((response) => {
-      MailPoet.Notice.error(
-        response.errors.map(error => error.message),
-        { scroll: true }
-      );
-    });
-  },
+    ) {
+      this.props.messages.onDelete(response);
+    }
+    // redirect to default group
+    this.handleGroup('all');
+  }).fail((response) => {
+    this.context.notices.error(
+      response.errors.map((error) => <p key={error.message}>{error.message}</p>),
+      { scroll: true }
+    );
+  });
 
-  handleBulkAction: function handleBulkAction(selectedIds, params) {
+  handleBulkAction = (selectedIds, params) => {
     if (
       this.state.selection === false
       && this.state.selected_ids.length === 0
@@ -432,18 +380,22 @@ const Listing = createReactClass({ // eslint-disable-line react/prefer-es6-class
       action: 'bulkAction',
       data,
     }).done(() => {
-      this.getItems();
+      // Reload items after a bulk action except for empty trash action which redirects to All tab.
+      const isEmptyTrashAction = selectedIds === 'all' && params.group === 'trash' && params.action === 'delete';
+      if (!isEmptyTrashAction) {
+        this.getItems();
+      }
     }).fail((response) => {
       if (response.errors.length > 0) {
-        MailPoet.Notice.error(
-          response.errors.map(error => error.message),
+        this.context.notices.error(
+          response.errors.map((error) => <p key={error.message}>{error.message}</p>),
           { scroll: true }
         );
       }
     });
-  },
+  };
 
-  handleSearch: function handleSearch(search) {
+  handleSearch = (search) => {
     this.setState({
       search,
       page: 1,
@@ -452,18 +404,18 @@ const Listing = createReactClass({ // eslint-disable-line react/prefer-es6-class
     }, () => {
       this.setParams();
     });
-  },
+  };
 
-  handleSort: function handleSort(sortBy, sortOrder = 'asc') {
+  handleSort = (sortBy, sortOrder = 'asc') => {
     this.setState({
       sort_by: sortBy,
       sort_order: (sortOrder === 'asc') ? 'asc' : 'desc',
     }, () => {
       this.setParams();
     });
-  },
+  };
 
-  handleSelectItem: function handleSelectItem(id, isChecked) {
+  handleSelectItem = (id, isChecked) => {
     this.setState((prevState) => {
       let selectedIds = prevState.selected_ids;
       let selection = false;
@@ -472,7 +424,7 @@ const Listing = createReactClass({ // eslint-disable-line react/prefer-es6-class
         selectedIds = jQuery.merge(selectedIds, [id]);
         // check whether all items on the page are selected
         if (
-          jQuery('tbody .mailpoet-check-column :checkbox:not(:checked)').length === 0
+          jQuery('tbody .mailpoet-listing-check-column :checkbox:not(:checked)').length === 0
         ) {
           selection = 'page';
         }
@@ -485,14 +437,14 @@ const Listing = createReactClass({ // eslint-disable-line react/prefer-es6-class
         selected_ids: selectedIds,
       };
     });
-  },
+  };
 
-  handleSelectItems: function handleSelectItems(isChecked) {
+  handleSelectItems = (isChecked) => {
     if (isChecked === false) {
       this.clearSelection();
     } else {
       this.setState((prevState) => {
-        const selectedIds = prevState.items.map(item => Number(item.id));
+        const selectedIds = prevState.items.map((item) => Number(item.id));
 
         return {
           selected_ids: selectedIds,
@@ -500,9 +452,9 @@ const Listing = createReactClass({ // eslint-disable-line react/prefer-es6-class
         };
       });
     }
-  },
+  };
 
-  handleSelectAll: function handleSelectAll() {
+  handleSelectAll = () => {
     if (this.state.selection === 'all') {
       this.clearSelection();
     } else {
@@ -511,25 +463,25 @@ const Listing = createReactClass({ // eslint-disable-line react/prefer-es6-class
         selected_ids: [],
       });
     }
-  },
+  };
 
-  clearSelection: function clearSelection() {
+  clearSelection = () => {
     this.setState({
       selection: false,
       selected_ids: [],
     });
-  },
+  };
 
-  handleFilter: function handleFilter(filters) {
+  handleFilter = (filters) => {
     this.setState({
       filter: filters,
       page: 1,
     }, () => {
       this.setParams();
     });
-  },
+  };
 
-  handleGroup: function handleGroup(group) {
+  handleGroup = (group) => {
     // reset search
     jQuery('#search_input').val('');
 
@@ -541,9 +493,9 @@ const Listing = createReactClass({ // eslint-disable-line react/prefer-es6-class
     }, () => {
       this.setParams();
     });
-  },
+  };
 
-  handleSetPage: function handleSetPage(page) {
+  handleSetPage = (page) => {
     this.setState({
       page,
       selection: false,
@@ -551,18 +503,18 @@ const Listing = createReactClass({ // eslint-disable-line react/prefer-es6-class
     }, () => {
       this.setParams();
     });
-  },
+  };
 
-  handleRenderItem: function handleRenderItem(item, actions) {
+  handleRenderItem = (item, actions) => {
     const render = this.props.onRenderItem(item, actions, this.state.meta);
     return render.props.children;
-  },
+  };
 
-  handleRefreshItems: function handleRefreshItems() {
+  handleRefreshItems = () => {
     this.getItems();
-  },
+  };
 
-  render: function render() {
+  render() {
     const items = this.state.items;
     const sortBy = this.state.sort_by;
     const sortOrder = this.state.sort_order;
@@ -570,7 +522,7 @@ const Listing = createReactClass({ // eslint-disable-line react/prefer-es6-class
     // columns
     let columns = this.props.columns || [];
     columns = columns.filter(
-      column => (column.display === undefined || !!(column.display) === true)
+      (column) => (column.display === undefined || !!(column.display) === true)
     );
 
     // bulk actions
@@ -595,12 +547,14 @@ const Listing = createReactClass({ // eslint-disable-line react/prefer-es6-class
     const itemActions = this.props.item_actions || [];
 
     const tableClasses = classNames(
-      'mailpoet_listing_table',
+      'mailpoet-listing-table',
       'wp-list-table',
       'widefat',
       'fixed',
-      'striped',
-      { mailpoet_listing_loading: this.state.loading }
+      {
+        'mailpoet-listing-loading': this.state.loading,
+        striped: this.props.striped,
+      }
     );
 
     // search
@@ -614,12 +568,17 @@ const Listing = createReactClass({ // eslint-disable-line react/prefer-es6-class
       search = false;
     }
 
+    const categories = this.state.groups.map((group) => Object.assign(group, {
+      automationId: `filters_${group.label.replace(' ', '_').toLowerCase()}`,
+    }))
+      .filter((category) => !(category.name === 'trash' && category.count === 0));
+
     // groups
     let groups = (
-      <ListingGroups
-        groups={this.state.groups}
-        group={this.state.group}
-        onSelectGroup={this.handleGroup}
+      <Categories
+        categories={categories}
+        active={this.state.group}
+        onSelect={this.handleGroup}
       />
     );
     if (this.props.groups === false) {
@@ -638,33 +597,29 @@ const Listing = createReactClass({ // eslint-disable-line react/prefer-es6-class
 
     return (
       <>
+        {/* eslint-disable-next-line react/jsx-props-no-spreading */}
         { this.state.meta.mta_method && <MailerError {...this.state.meta} /> }
-        <div>
-          { groups }
-          { search }
-          <div className="tablenav top clearfix">
-            <ListingBulkActions
-              count={this.state.count}
-              bulk_actions={bulkActions}
-              selection={this.state.selection}
-              selected_ids={this.state.selected_ids}
-              onBulkAction={this.handleBulkAction}
-            />
-            <ListingFilters
-              filters={this.state.filters}
-              filter={this.state.filter}
-              group={this.state.group}
-              onBeforeSelectFilter={this.props.onBeforeSelectFilter || null}
-              onSelectFilter={this.handleFilter}
-              onEmptyTrash={this.handleEmptyTrash}
-            />
-            {extraActions}
-            <ListingPages
-              count={this.state.count}
-              page={this.state.page}
-              limit={this.state.limit}
-              onSetPage={this.handleSetPage}
-            />
+        <div className="mailpoet-listing">
+          <div className="mailpoet-listing-header">
+            { groups }
+            <div>
+              { search }
+              <ListingFilters
+                filters={this.state.filters}
+                filter={this.state.filter}
+                group={this.state.group}
+                onBeforeSelectFilter={this.props.onBeforeSelectFilter || null}
+                onSelectFilter={this.handleFilter}
+                onEmptyTrash={this.handleEmptyTrash}
+              />
+              {extraActions}
+              <ListingPages
+                count={this.state.count}
+                page={this.state.page}
+                limit={this.state.limit}
+                onSetPage={this.handleSetPage}
+              />
+            </div>
           </div>
           <table className={tableClasses}>
             <thead>
@@ -696,32 +651,17 @@ const Listing = createReactClass({ // eslint-disable-line react/prefer-es6-class
               group={this.state.group}
               count={this.state.count}
               limit={this.state.limit}
+              bulk_actions={bulkActions}
+              onBulkAction={this.handleBulkAction}
               item_actions={itemActions}
               messages={messages}
               items={items}
+              search={this.state.search}
+              location={this.props.location}
             />
-
-            <tfoot>
-              <ListingHeader
-                onSort={this.handleSort}
-                onSelectItems={this.handleSelectItems}
-                selection={this.state.selection}
-                sort_by={sortBy}
-                sort_order={sortOrder}
-                columns={columns}
-                is_selectable={bulkActions.length > 0}
-              />
-            </tfoot>
 
           </table>
-          <div className="tablenav bottom">
-            <ListingBulkActions
-              count={this.state.count}
-              bulk_actions={bulkActions}
-              selection={this.state.selection}
-              selected_ids={this.state.selected_ids}
-              onBulkAction={this.handleBulkAction}
-            />
+          <div className="mailpoet-listing-footer clearfix">
             <ListingPages
               count={this.state.count}
               page={this.state.page}
@@ -732,7 +672,65 @@ const Listing = createReactClass({ // eslint-disable-line react/prefer-es6-class
         </div>
       </>
     );
-  },
-});
+  }
+}
+
+Listing.contextType = GlobalContext;
+
+/* eslint-disable react/require-default-props */
+Listing.propTypes = {
+  limit: PropTypes.number,
+  sort_by: PropTypes.string,
+  sort_order: PropTypes.string,
+  params: PropTypes.object.isRequired, // eslint-disable-line react/forbid-prop-types
+  auto_refresh: PropTypes.bool,
+  striped: PropTypes.bool,
+  location: PropTypes.shape({
+    pathname: PropTypes.string,
+  }),
+  base_url: PropTypes.string,
+  type: PropTypes.string,
+  endpoint: PropTypes.string.isRequired,
+  afterGetItems: PropTypes.func,
+  messages: PropTypes.shape({
+    onRestore: PropTypes.func,
+    onTrash: PropTypes.func,
+    onDelete: PropTypes.func,
+  }),
+  onRenderItem: PropTypes.func.isRequired,
+  columns: PropTypes.arrayOf(PropTypes.object),
+  bulk_actions: PropTypes.arrayOf(PropTypes.object),
+  item_actions: PropTypes.arrayOf(PropTypes.object),
+  search: PropTypes.bool,
+  groups: PropTypes.bool,
+  renderExtraActions: PropTypes.func,
+  onBeforeSelectFilter: PropTypes.func,
+  getListingItemKey: PropTypes.func,
+  history: PropTypes.shape({
+    push: PropTypes.func.isRequired,
+  }).isRequired,
+};
+/* eslint-enable react/require-default-props */
+
+Listing.defaultProps = {
+  limit: 10,
+  sort_by: null,
+  sort_order: undefined,
+  auto_refresh: false,
+  striped: true,
+  location: undefined,
+  base_url: '',
+  type: undefined,
+  afterGetItems: undefined,
+  messages: undefined,
+  columns: [],
+  bulk_actions: [],
+  item_actions: [],
+  search: true,
+  groups: true,
+  renderExtraActions: undefined,
+  onBeforeSelectFilter: undefined,
+  getListingItemKey: undefined,
+};
 
 export default withRouter(Listing);
